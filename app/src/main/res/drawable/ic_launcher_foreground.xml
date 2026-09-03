@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Sleek Red Play Button -->
+    <path
+        android:pathData="M38,32 L38,76 C38,78.2 40.4,79.5 42.2,78.3 L78.2,56.3 C80,55.1 80,52.9 78.2,51.7 L42.2,29.7 C40.4,28.5 38,29.8 38,32 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="38"
+                android:startY="32"
+                android:endX="78.2"
+                android:endY="76"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF4D4D" /> <!-- Lighter Red -->
+                <item android:offset="1" android:color="#E50914" /> <!-- Netflix Red -->
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle White Sheen for 'Sleek' look -->
+    <path
+        android:pathData="M40,35 L40,45 L70,54 L40,35 Z"
+        android:fillAlpha="0.1"
+        android:fillColor="#FFFFFF" />
+
+</vector>

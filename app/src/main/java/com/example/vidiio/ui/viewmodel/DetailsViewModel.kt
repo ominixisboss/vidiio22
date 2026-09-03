@@ -1,0 +1,227 @@
+package com.example.vidiio.ui.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.vidiio.data.api.SubdlService
+import com.example.vidiio.data.model.Movie
+import com.example.vidiio.data.model.Episode
+import com.example.vidiio.data.model.StreamSource
+import com.example.vidiio.data.model.DownloadStatus
+import com.example.vidiio.data.model.subtitles.SubdlSubtitle
+import com.example.vidiio.data.model.toFavoriteMovie
+import com.example.vidiio.data.repository.FavoriteRepository
+import com.example.vidiio.data.repository.MovieRepository
+import com.example.vidiio.data.repository.SettingsRepository
+import com.example.vidiio.data.repository.DownloadRepository
+import com.example.vidiio.download.DownloadManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+
+sealed interface DetailsUiState {
+    data object Loading : DetailsUiState
+    data class Success(
+        val movie: Movie,
+        val streamSources: List<StreamSource>,
+        val subtitles: List<SubdlSubtitle> = emptyList(),
+        val isFavorite: Boolean = false,
+        val selectedEpisode: Episode? = null,
+        val isSearchingSources: Boolean = true
+    ) : DetailsUiState
+    data class Error(val message: String) : DetailsUiState
+}
+
+class DetailsViewModel(
+    private val movieRepository: MovieRepository,
+    private val favoriteRepository: FavoriteRepository,
+    private val downloadRepository: DownloadRepository,
+    private val downloadManager: DownloadManager,
+    private val subdlService: SubdlService,
+    private val settingsRepository: SettingsRepository,
+    private val movie: Movie,
+    private val initialEpisodeId: String? = null
+) : ViewModel() {
+
+    private val _movie = MutableStateFlow<Movie?>(null)
+    private val _allFoundSources = MutableStateFlow<List<StreamSource>>(emptyList())
+    private val _isSearchingSources = MutableStateFlow(true)
+    private val _selectedEpisode = MutableStateFlow<Episode?>(null)
+    private val _isFavorite = MutableStateFlow(false)
+    private val _subtitles = MutableStateFlow<List<SubdlSubtitle>>(emptyList())
+    private val _error = MutableStateFlow<String?>(null)
+
+    val enabledSources: StateFlow<Set<String>> = settingsRepository.sourcesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    private var scrapingJob: Job? = null
+
+    val uiState: StateFlow<DetailsUiState> = combine(
+        combine(_movie, _isFavorite, _subtitles, _error) { movie, favorite, subs, error ->
+            @Suppress("UNCHECKED_CAST")
+            Triple(movie, favorite, subs) to error
+        },
+        combine(_allFoundSources, _isSearchingSources, _selectedEpisode, settingsRepository.sourcesFlow) { sources, searching, episode, enabled ->
+            @Suppress("UNCHECKED_CAST")
+            Triple(sources, searching, episode) to enabled
+        }
+    ) { meta, sourcesData ->
+        val (movie, favorite, subs) = meta.first
+        val error = meta.second
+        val (sources, searching, episode) = sourcesData.first
+        val enabled = sourcesData.second
+
+        when {
+            error != null -> DetailsUiState.Error(error)
+            movie == null -> DetailsUiState.Loading
+            else -> {
+                val filteredSources = sources.filter { it.sourceId in enabled || it.sourceId == "stremio" }
+                    .distinctBy { it.url }
+                    .sortedWith(compareByDescending<StreamSource> { it.seeders ?: 0 }
+                        .thenBy { it.quality != "4K" }
+                        .thenBy { it.quality != "1080p" })
+                
+                DetailsUiState.Success(
+                    movie = movie,
+                    streamSources = filteredSources,
+                    subtitles = subs,
+                    isFavorite = favorite,
+                    selectedEpisode = episode,
+                    isSearchingSources = searching
+                )
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DetailsUiState.Loading)
+
+    init {
+        loadDetails()
+        observeSettings()
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            settingsRepository.sourcesFlow.collectLatest { enabled ->
+                val currentMovie = _movie.value
+                val currentEpisode = _selectedEpisode.value
+                if (currentMovie != null) {
+                    startScraping(currentMovie, currentEpisode)
+                }
+            }
+        }
+    }
+
+    private fun loadDetails() {
+        viewModelScope.launch {
+            try {
+                val fullMovie = movieRepository.getMovieDetails(movie)
+                _movie.value = fullMovie
+                
+                val allEpisodes = fullMovie.seasons.flatMap { it.episodes }
+                val selectedEpisode = if (initialEpisodeId != null) {
+                    allEpisodes.find { it.id == initialEpisodeId } ?: fullMovie.seasons.firstOrNull()?.episodes?.firstOrNull()
+                } else {
+                    fullMovie.seasons.firstOrNull()?.episodes?.firstOrNull()
+                }
+                _selectedEpisode.value = selectedEpisode
+                
+                val subtitles = getSubtitles(fullMovie)
+                _subtitles.value = subtitles
+
+                launch {
+                    favoriteRepository.isFavorite(fullMovie.id).collect { isFav ->
+                        _isFavorite.value = isFav
+                    }
+                }
+                
+                startScraping(fullMovie, selectedEpisode)
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Unknown error"
+            }
+        }
+    }
+
+    private fun startScraping(movie: Movie, episode: Episode?) {
+        scrapingJob?.cancel()
+        scrapingJob = viewModelScope.launch {
+            _isSearchingSources.value = true
+            val scrapingInnerJob = launch {
+                movieRepository.getStreamSources(movie, episode)
+                    .collect { source ->
+                        _allFoundSources.update { (it + source).distinctBy { s -> s.url } }
+                    }
+            }
+            delay(12000)
+            scrapingInnerJob.cancel()
+            _isSearchingSources.value = false
+        }
+    }
+
+    fun selectEpisode(episode: Episode) {
+        _selectedEpisode.value = episode
+        _allFoundSources.value = emptyList()
+        val currentMovie = _movie.value
+        if (currentMovie != null) {
+            startScraping(currentMovie, episode)
+        }
+    }
+
+    fun toggleFavorite() {
+        val currentMovie = _movie.value
+        val currentFavorite = _isFavorite.value
+        if (currentMovie != null) {
+            viewModelScope.launch {
+                if (currentFavorite) {
+                    favoriteRepository.removeFavorite(currentMovie.toFavoriteMovie())
+                } else {
+                    favoriteRepository.addFavorite(currentMovie.toFavoriteMovie())
+                }
+            }
+        }
+    }
+
+    fun toggleSource(sourceId: String) {
+        viewModelScope.launch {
+            val currentSources = settingsRepository.sourcesFlow.first().toMutableSet()
+            if (currentSources.contains(sourceId)) {
+                currentSources.remove(sourceId)
+            } else {
+                currentSources.add(sourceId)
+            }
+            settingsRepository.setSources(currentSources)
+        }
+    }
+
+    fun downloadSource(source: StreamSource) {
+        val movie = _movie.value ?: return
+        val selectedEpisode = _selectedEpisode.value
+        val title = if (selectedEpisode != null) {
+            "${movie.title} - S${selectedEpisode.seasonNumber}E${selectedEpisode.episodeNumber}"
+        } else {
+            movie.title
+        }
+        if (source.url.startsWith("magnet:")) {
+            downloadManager.enqueue(title, source.url)
+        }
+    }
+
+    fun getDownloadStatus(url: String): Flow<DownloadStatus?> {
+        return downloadRepository.getDownloadByUrlFlow(url).map { it?.status }
+    }
+
+    private suspend fun getSubtitles(movie: Movie): List<SubdlSubtitle> {
+        val apiKey = settingsRepository.subdlApiKeyFlow.first() ?: return emptyList()
+        return try {
+            val imdbId = if (movie.id.startsWith("tt")) movie.id else null
+            val tmdbId = movie.id.toIntOrNull()
+            
+            val response = subdlService.searchSubtitles(
+                apiKey = apiKey,
+                tmdbId = if (imdbId == null) tmdbId else null,
+                imdbId = imdbId,
+                languages = "en"
+            )
+            response.subtitles ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+}
