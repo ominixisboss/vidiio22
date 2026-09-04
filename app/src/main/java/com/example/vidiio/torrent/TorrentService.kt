@@ -7,6 +7,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import fi.iki.elonen.NanoHTTPD
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -74,8 +75,11 @@ class TorrentService : Service() {
                 streamServer?.stop()
                 streamServer = TorrentStreamServer(file, torrentManager)
                 try {
-                    streamServer?.start()
-                    val url = "http://127.0.0.1:8888/${file.name}"
+                    streamServer?.start(NanoHTTPD.SOCKET_READ_TIMEOUT, true)
+                    // The stream server ignores the path; encode the name so ExoPlayer can
+                    // still parse the URI even when the file name has spaces or unicode.
+                    val encodedName = java.net.URLEncoder.encode(file.name, "UTF-8").replace("+", "%20")
+                    val url = "http://127.0.0.1:8888/$encodedName"
                     Log.d("TorrentService", "Stream server started at: $url")
                     onReady(url)
                     startForeground(1, createNotification("Streaming torrent...", file.name))
