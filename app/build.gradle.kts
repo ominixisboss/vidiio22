@@ -1,3 +1,6 @@
+import java.net.URI
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -35,6 +38,9 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // The TorrServer engine ships as libtorrserver.so but is a Go executable,
+            // not a real shared object - never let AGP strip it.
+            keepDebugSymbols += "**/libtorrserver.so"
         }
     }
     compileOptions {
@@ -93,7 +99,6 @@ dependencies {
     implementation(libs.libtorrentarm64)
     implementation(libs.libtorrentx86)
     implementation(libs.libtorrentx8664)
-    implementation(libs.nanohttpd)
     implementation(libs.rive.android)
     implementation(libs.logging.interceptor)
     implementation(libs.material)
@@ -116,3 +121,109 @@ dependencies {
     "ksp"(libs.androidx.room.compiler)
     "ksp"(libs.moshi.kotlin.codegen)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TorrServer engine binary (movie/series torrent streaming, PlayTorrioV3 parity)
+//
+// PlayTorrioV3 streams via TorrServer, fetched from GitHub Releases at build time by
+// torrserver_flutter. This task does the same: it downloads the official TorrServer
+// Android binary for each wanted ABI and drops it into jniLibs as `libtorrserver.so`,
+// so it is packaged in the APK and executable from nativeLibraryDir at runtime.
+//
+// Pinned version and, when available, SHA-256 of each asset. Override the ABI set with
+//   ./gradlew assembleDebug -Ptorrserver.abis=arm64-v8a,armeabi-v7a,x86_64
+// or point at pre-downloaded binaries with the TORRSERVER_LOCAL_BINARIES env var
+// (a directory containing files named e.g. TorrServer-android-arm64).
+// ─────────────────────────────────────────────────────────────────────────────
+val torrServerVersion = "MatriX.144.1"
+val torrServerAssets = mapOf(
+    "arm64-v8a" to "TorrServer-android-arm64",
+    "armeabi-v7a" to "TorrServer-android-arm7",
+    "x86_64" to "TorrServer-android-amd64",
+    "x86" to "TorrServer-android-386",
+)
+// sha256 of each raw release asset for torrServerVersion (empty => integrity check skipped).
+val torrServerSha256 = mapOf(
+    "TorrServer-android-arm64" to "bb7e9b4d0dc894f8da3e32496e7487be93b8f8b04ada549396a7ab4dc85ea63b",
+    "TorrServer-android-arm7" to "dd6c9dcfa11a450bff6ebaa8992b1823c32e3b9417657f93c8852271ded3949e",
+    "TorrServer-android-amd64" to "58f3152471d01a86454b74f49029e62cdc2b3844451151d950cb40130a81ccb3",
+    "TorrServer-android-386" to "70373fd25e9aaa42d8904e296bb8dca24c2037afebd4d8771a1bc1f2bfdc47c9",
+)
+
+val downloadTorrServer = tasks.register("downloadTorrServer") {
+    group = "torrserver"
+    description = "Downloads the TorrServer engine binary into jniLibs/<abi>/libtorrserver.so"
+
+    val jniDir = layout.projectDirectory.dir("src/main/jniLibs").asFile
+    val versionMarker = File(jniDir, ".torrserver-version")
+    val wantedAbis = ((project.findProperty("torrserver.abis") as String?)
+        ?: "arm64-v8a,armeabi-v7a")
+        .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+    outputs.dir(jniDir)
+    outputs.upToDateWhen {
+        versionMarker.exists() && versionMarker.readText().trim() == torrServerVersion &&
+            wantedAbis.all { File(jniDir, "$it/libtorrserver.so").let { f -> f.exists() && f.length() > 1_000_000L } }
+    }
+
+    doLast {
+        if (versionMarker.exists() && versionMarker.readText().trim() != torrServerVersion) {
+            logger.lifecycle("TorrServer version changed -> cleaning stale jniLibs")
+            jniDir.deleteRecursively()
+        }
+
+        val localDir = System.getenv("TORRSERVER_LOCAL_BINARIES")?.let { File(it) }
+
+        for (abi in wantedAbis) {
+            val asset = torrServerAssets[abi] ?: run {
+                logger.warn("Unknown ABI '$abi' - skipping"); continue
+            }
+            val target = File(jniDir, "$abi/libtorrserver.so")
+            if (target.exists() && target.length() > 1_000_000L) continue
+            target.parentFile.mkdirs()
+
+            val local = localDir?.resolve(asset)
+            if (local != null && local.exists()) {
+                logger.lifecycle("Using local TorrServer binary for $abi: $local")
+                local.copyTo(target, overwrite = true)
+            } else {
+                val url = "https://github.com/YouROK/TorrServer/releases/download/$torrServerVersion/$asset"
+                logger.lifecycle("Downloading TorrServer $torrServerVersion for $abi ...")
+                val tmp = File.createTempFile("torrserver-", ".bin")
+                try {
+                    URI(url).toURL().openStream().use { input ->
+                        tmp.outputStream().use { output -> input.copyTo(output, 1 shl 16) }
+                    }
+                    val expected = torrServerSha256[asset].orEmpty()
+                    if (expected.isNotEmpty()) {
+                        val md = MessageDigest.getInstance("SHA-256")
+                        tmp.inputStream().use { s ->
+                            val buf = ByteArray(1 shl 16)
+                            while (true) {
+                                val n = s.read(buf); if (n < 0) break; md.update(buf, 0, n)
+                            }
+                        }
+                        val got = md.digest().joinToString("") { "%02x".format(it) }
+                        if (!got.equals(expected, ignoreCase = true)) {
+                            throw GradleException("SHA-256 mismatch for $asset: expected $expected, got $got")
+                        }
+                        logger.lifecycle("Verified SHA-256 for $asset")
+                    } else {
+                        logger.warn("No pinned SHA-256 for $asset - integrity check skipped")
+                    }
+                    tmp.copyTo(target, overwrite = true)
+                } finally {
+                    tmp.delete()
+                }
+            }
+            target.setReadable(true, false)
+            target.setExecutable(true, false)
+            logger.lifecycle("TorrServer ready: ${target.relativeTo(rootDir)} (${target.length()} bytes)")
+        }
+
+        versionMarker.parentFile.mkdirs()
+        versionMarker.writeText(torrServerVersion)
+    }
+}
+
+tasks.named("preBuild") { dependsOn(downloadTorrServer) }

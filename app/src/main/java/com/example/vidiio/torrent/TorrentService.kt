@@ -13,12 +13,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import android.os.Build
 
+/**
+ * Foreground service that owns the torrent streaming session. The actual BitTorrent work
+ * is done by the embedded TorrServer engine ([TorrServerEngine]); this service just keeps
+ * a notification up while playback is active and proxies calls to [TorrentManager].
+ */
 class TorrentService : Service() {
     private val binder = LocalBinder()
     lateinit var torrentManager: TorrentManager
         private set
-    private var streamServer: TorrentStreamServer? = null
-    
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     inner class LocalBinder : Binder() {
@@ -62,45 +66,32 @@ class TorrentService : Service() {
     fun startStreaming(fileIndex: Int = -1, season: Int? = null, episode: Int? = null, onReady: (String) -> Unit) {
         Log.d("TorrentService", "startStreaming requested: fileIndex=$fileIndex, S=$season, E=$episode")
         if (!torrentManager.isAvailable) {
-            Log.e("TorrentService", "Torrent engine not available")
+            Log.e("TorrentService", "Torrent engine not available (binary missing for this ABI)")
             onReady("")
             return
         }
         acquireWifiLock()
         scope.launch {
-            val file = torrentManager.startStreaming(fileIndex, season, episode)
-            if (file != null) {
-                Log.d("TorrentService", "File ready for streaming: ${file.absolutePath}")
-                streamServer?.stop()
-                streamServer = TorrentStreamServer(file, torrentManager)
-                try {
-                    streamServer?.start()
-                    val url = "http://127.0.0.1:8888/${file.name}"
-                    Log.d("TorrentService", "Stream server started at: $url")
-                    onReady(url)
-                    startForeground(1, createNotification("Streaming torrent...", file.name))
-                } catch (e: Exception) {
-                    Log.e("TorrentService", "Failed to start stream server", e)
-                    releaseWifiLock()
-                    onReady("")
-                }
+            val url = torrentManager.startStreaming(fileIndex, season, episode)
+            if (!url.isNullOrEmpty()) {
+                Log.d("TorrentService", "Stream ready: $url")
+                startForeground(1, createNotification("Streaming torrent...", "Playback in progress"))
+                onReady(url)
             } else {
-                Log.e("TorrentService", "Failed to get file from torrentManager")
+                Log.e("TorrentService", "Failed to start torrent stream")
                 releaseWifiLock()
                 onReady("")
             }
         }
     }
 
-
-
     fun stopStreaming() {
         releaseWifiLock()
-        streamServer?.stop()
         torrentManager.stop()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
+            @Suppress("DEPRECATION")
             stopForeground(true)
         }
         stopSelf()
@@ -113,7 +104,6 @@ class TorrentService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         releaseWifiLock()
-        streamServer?.stop()
         torrentManager.stop()
     }
 

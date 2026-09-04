@@ -10,6 +10,7 @@ import com.example.vidiio.data.repository.MovieRepository
 import com.example.vidiio.data.repository.SettingsRepository
 import com.example.vidiio.download.DownloadManager
 import com.example.vidiio.torrent.TorrentEngine
+import com.example.vidiio.torrent.TorrServerEngine
 import com.example.vidiio.data.scraper.CinejoyScraper
 import com.example.vidiio.data.scraper.MovyScraper
 import com.example.vidiio.data.scraper.A111477Scraper
@@ -57,6 +58,10 @@ class VidiioApplication : Application() {
     lateinit var torrentEngine: TorrentEngine
         private set
 
+    /** Embedded TorrServer engine used for movie/series torrent streaming (PlayTorrio-style). */
+    lateinit var torrServerEngine: TorrServerEngine
+        private set
+
     lateinit var addonManager: AddonManager
         private set
 
@@ -78,6 +83,7 @@ class VidiioApplication : Application() {
         downloadRepository = DownloadRepository(database.downloadDao())
         downloadManager = DownloadManager(this, downloadRepository)
         torrentEngine = TorrentEngine(this)
+        torrServerEngine = TorrServerEngine(this)
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
