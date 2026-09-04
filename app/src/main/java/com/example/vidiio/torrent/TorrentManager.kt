@@ -30,6 +30,11 @@ class TorrentManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    private companion object {
+        /** How many pieces past the current read position to keep prefetching while buffering. */
+        const val PREFETCH_PIECES = 24
+    }
+
     private val globalTrackers = listOf(
         "udp://tracker.opentrackr.org:1337/announce",
         "udp://open.stealth.si:80/announce",
@@ -260,38 +265,67 @@ class TorrentManager(private val context: Context) {
         setPriorityRange(startByte, 1024 * 1024) // Default 1MB window for updates
     }
 
-    fun waitForRange(startByte: Long, length: Long) {
-        val h = handle ?: return
-        val ti = h.torrentFile() ?: return
-        val files = ti.files()
-        if (selectedFileIndex == -1) return
+    /** Piece index of the selected file that contains [fileByte], or null if not ready. */
+    private fun pieceForFileByte(fileByte: Long): Int? {
+        val ti = handle?.torrentFile() ?: return null
+        if (selectedFileIndex == -1) return null
+        val fileOffset = ti.files().fileOffset(selectedFileIndex)
+        return ((fileOffset + fileByte) / ti.pieceLength()).toInt()
+    }
 
-        val fileOffset = files.fileOffset(selectedFileIndex)
-        val pieceSize = ti.pieceLength()
-        
-        val firstPiece = ((fileOffset + startByte) / pieceSize).toInt()
-        val lastPiece = ((fileOffset + startByte + length - 1) / pieceSize).toInt()
-        
-        for (i in firstPiece..lastPiece) {
-            if (i >= ti.numPieces()) break
-            
-            // If we don't have the piece, set a very short deadline and wait
-            if (!h.havePiece(i)) {
-                h.setPieceDeadline(i, 500)
-                var attempts = 0
-                while (!h.havePiece(i) && attempts < 150) { // Max 15 seconds per piece
-                    try {
-                        Thread.sleep(100)
-                    } catch (e: InterruptedException) {
-                        break
-                    }
-                    attempts++
-                    if (attempts % 10 == 0) {
-                        _status.value = _status.value?.copy(statusMessage = "Buffering...")
-                    }
+    /**
+     * Blocks until the piece containing [fileByte] is available on disk, re-asserting
+     * high priority + short deadlines on that piece and a look-ahead window while waiting.
+     * @return true once the data is available, false if it timed out.
+     */
+    fun awaitBytes(fileByte: Long, timeoutMs: Long = 120_000L): Boolean {
+        val h = handle ?: return false
+        val ti = h.torrentFile() ?: return false
+        val piece = pieceForFileByte(fileByte) ?: return false
+        if (h.havePiece(piece)) return true
+
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (h.havePiece(piece)) return true
+            for (i in 0..PREFETCH_PIECES) {
+                val p = piece + i
+                if (p in 0 until ti.numPieces()) {
+                    h.piecePriority(p, if (i == 0) Priority.SEVEN else Priority.SIX)
+                    h.setPieceDeadline(p, 200 + i * 400)
                 }
             }
+            _status.value = _status.value?.copy(statusMessage = "Buffering...")
+            try {
+                Thread.sleep(100)
+            } catch (e: InterruptedException) {
+                return h.havePiece(piece)
+            }
         }
+        return h.havePiece(piece)
+    }
+
+    /**
+     * Largest byte offset (file-relative, exclusive) that is contiguously present on disk
+     * starting at [fileByte]. Returns [fileByte] itself when that position is not downloaded.
+     */
+    fun contiguousAvailableEnd(fileByte: Long): Long {
+        val h = handle ?: return fileByte
+        val ti = h.torrentFile() ?: return fileByte
+        if (selectedFileIndex == -1) return fileByte
+        val fileOffset = ti.files().fileOffset(selectedFileIndex)
+        val pieceSize = ti.pieceLength().toLong()
+
+        var piece = ((fileOffset + fileByte) / pieceSize).toInt()
+        if (piece !in 0 until ti.numPieces() || !h.havePiece(piece)) return fileByte
+
+        var scanned = 0
+        while (piece + 1 < ti.numPieces() && h.havePiece(piece + 1) && scanned < 512) {
+            piece++
+            scanned++
+        }
+        val endAbs = (piece + 1).toLong() * pieceSize
+        val fileEndAbs = fileOffset + (if (targetFileSize > 0) targetFileSize else Long.MAX_VALUE / 2)
+        return minOf(endAbs, fileEndAbs) - fileOffset
     }
 
     private fun selectBestFile(ti: TorrentInfo, season: Int? = null, episode: Int? = null): Int {
