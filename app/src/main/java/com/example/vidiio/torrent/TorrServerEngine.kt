@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import java.io.File
+import java.io.IOException
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -40,6 +42,9 @@ class TorrServerEngine(private val context: Context) {
     private val binaryFile: File
         get() = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)
 
+    private val dataDir: File
+        get() = File(context.filesDir, "torrserver").apply { mkdirs() }
+
     /** True once the engine binary is present in the APK for this device's ABI. */
     val isInstalled: Boolean get() = binaryFile.exists()
 
@@ -59,21 +64,19 @@ class TorrServerEngine(private val context: Context) {
         }
         if (!bin.canExecute()) runCatching { bin.setExecutable(true, false) }
 
-        val dataDir = File(context.filesDir, "torrserver").apply { mkdirs() }
-        val chosenPort = findFreePort()
-
-        // Shut down any orphaned instance left over from a previous run / crash.
-        for (p in setOf(chosenPort, DEFAULT_PORT)) {
-            runCatching { TorrServerApi("http://127.0.0.1:$p").takeIf { it.echo(300) != null }?.shutdown() }
-        }
+        val dir = dataDir
+        // Shut down any TorrServer left behind by a previous run / crash so it can't hold
+        // the BoltDB lock on our data dir, then take the first free port in our range.
+        shutdownStaleInstances()
+        val chosenPort = pickPort()
 
         val proc = try {
             ProcessBuilder(
                 bin.absolutePath,
                 "-p", chosenPort.toString(),
-                "-d", dataDir.absolutePath,
+                "-d", dir.absolutePath,
             ).apply {
-                directory(dataDir)
+                directory(dir)
                 redirectErrorStream(true)
             }.start()
         } catch (e: Exception) {
@@ -117,6 +120,7 @@ class TorrServerEngine(private val context: Context) {
         process = null
         api = null
         isAvailable = false
+        port = 0
         if (proc != null) {
             runCatching { proc.destroy() }
             runCatching {
@@ -125,16 +129,38 @@ class TorrServerEngine(private val context: Context) {
         }
     }
 
-    private fun findFreePort(): Int = try {
-        ServerSocket(0).use { it.localPort }
-    } catch (e: Exception) {
-        DEFAULT_PORT
+    /** Asks any TorrServer answering in our port range to shut down (frees the DB lock). */
+    private fun shutdownStaleInstances() {
+        for (p in PORT_RANGE) {
+            runCatching {
+                TorrServerApi("http://127.0.0.1:$p").takeIf { it.echo(250) != null }?.let {
+                    Log.i(TAG, "Shutting down stale TorrServer on port $p")
+                    it.shutdown()
+                }
+            }
+        }
+        Thread.sleep(200)
+    }
+
+    private fun pickPort(): Int {
+        for (p in PORT_RANGE) if (isPortFree(p)) return p
+        return runCatching { ServerSocket(0).use { it.localPort } }.getOrDefault(PORT_RANGE.first)
+    }
+
+    private fun isPortFree(port: Int): Boolean = try {
+        ServerSocket().use {
+            it.reuseAddress = false
+            it.bind(InetSocketAddress("127.0.0.1", port))
+            true
+        }
+    } catch (e: IOException) {
+        false
     }
 
     companion object {
         private const val TAG = "TorrServerEngine"
         private const val BINARY_NAME = "libtorrserver.so"
-        private const val DEFAULT_PORT = 8090
+        private val PORT_RANGE = 8090..8099
         private const val STARTUP_TIMEOUT_MS = 20_000L
     }
 }

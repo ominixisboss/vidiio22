@@ -78,7 +78,7 @@ class TorrentManager(private val context: Context) {
         }
         hash = h
         Log.d(TAG, "Torrent added: $h. Waiting for metadata...")
-        _status.value = _status.value?.copy(statusMessage = "Finding peers for metadata...")
+        _status.value = _status.value?.copy(statusMessage = "Finding Peers for Metadata...")
         startPolling(h)
 
         val info = waitForMetadata(api, h)
@@ -169,7 +169,7 @@ class TorrentManager(private val context: Context) {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun startPolling(hash: String) {
-        if (pollJob?.isActive == true) return
+        pollJob?.cancel()
         pollJob = scope.launch {
             while (isActive) {
                 val api = engine.getApi()
@@ -205,10 +205,10 @@ class TorrentManager(private val context: Context) {
         ) return current
 
         return when {
-            !t.hasMetadata -> "Finding peers for metadata..."
-            t.activePeers == 0 && t.downloadSpeed == 0.0 -> "Connecting to peers..."
+            !t.hasMetadata -> "Finding Peers for Metadata..."
+            t.activePeers == 0 && t.downloadSpeed == 0.0 -> "Connecting to Peers..."
             t.preloadSize > 0 && t.preloadedBytes < t.preloadSize -> "Buffering..."
-            else -> "Ready to stream"
+            else -> "Ready to Stream"
         }
     }
 
@@ -223,11 +223,12 @@ class TorrentManager(private val context: Context) {
         hash = null
         selectedFile = null
         targetFileSize = 0L
-        if (h != null) {
-            // Fire-and-forget on a detached scope so cancellation below doesn't kill it.
-            CoroutineScope(Dispatchers.IO).launch {
-                runCatching { engine.getApi()?.dropTorrent(h) }
-            }
+        _status.value = null
+        // Fire-and-forget on a detached scope so cancellation below doesn't kill it.
+        // TorrServer is only used for streaming, so it's safe to shut down with the player.
+        CoroutineScope(Dispatchers.IO).launch {
+            if (h != null) runCatching { engine.getApi()?.dropTorrent(h) }
+            runCatching { engine.stop() }
         }
         scope.coroutineContext[Job]?.cancelChildren()
     }
@@ -249,8 +250,12 @@ class TorrentManager(private val context: Context) {
     }
 
     private fun extractHash(magnetOrHash: String): String? {
-        HASH_40.find(magnetOrHash)?.let { return it.value.lowercase() }
-        HASH_32.find(magnetOrHash)?.let { return base32ToHex(it.value) }
+        // Prefer the value right after btih: so a long dn= name can't be mistaken for a hash.
+        BTIH_40.find(magnetOrHash)?.let { return it.groupValues[1].lowercase() }
+        BTIH_32.find(magnetOrHash)?.let { return base32ToHex(it.groupValues[1]) }
+        val trimmed = magnetOrHash.trim()
+        if (trimmed.matches(HASH_40)) return trimmed.lowercase()
+        if (trimmed.matches(HASH_32)) return base32ToHex(trimmed)
         return null
     }
 
@@ -290,6 +295,8 @@ class TorrentManager(private val context: Context) {
         private const val TAG = "TorrentManager"
         private val HASH_40 = Regex("[0-9a-fA-F]{40}")
         private val HASH_32 = Regex("[A-Za-z2-7]{32}")
+        private val BTIH_40 = Regex("btih:([0-9a-fA-F]{40})", RegexOption.IGNORE_CASE)
+        private val BTIH_32 = Regex("btih:([A-Za-z2-7]{32})", RegexOption.IGNORE_CASE)
     }
 }
 

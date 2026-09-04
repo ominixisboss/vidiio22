@@ -43,6 +43,14 @@ class VidiioApplication : Application() {
     lateinit var okHttpClient: OkHttpClient
         private set
 
+    /**
+     * OkHttp client for media playback (ExoPlayer). Same config as [okHttpClient] but with
+     * no interceptors - a BODY-level logging interceptor buffers entire response bodies,
+     * which is fatal for streaming video.
+     */
+    lateinit var playbackHttpClient: OkHttpClient
+        private set
+
     lateinit var settingsRepository: SettingsRepository
         private set
 
@@ -113,6 +121,13 @@ class VidiioApplication : Application() {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(35, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
+
+        playbackHttpClient = okHttpClient.newBuilder()
+            .apply {
+                interceptors().clear()
+                networkInterceptors().clear()
+            }
             .build()
 
         val retrofit = Retrofit.Builder()

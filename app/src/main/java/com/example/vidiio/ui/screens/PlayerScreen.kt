@@ -168,7 +168,7 @@ fun PlayerScreen(
     // Media3 Player
     val exoPlayer = remember {
         val application = context.applicationContext as VidiioApplication
-        val dataSourceFactory = OkHttpDataSource.Factory(application.okHttpClient)
+        val dataSourceFactory = OkHttpDataSource.Factory(application.playbackHttpClient)
         
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
