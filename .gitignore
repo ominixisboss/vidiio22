@@ -15,3 +15,6 @@
 local.properties
 .artifacts/
 
+
+# TorrServer engine binaries fetched by the downloadTorrServer Gradle task
+/app/src/main/jniLibs/
