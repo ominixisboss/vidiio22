@@ -1,5 +1,8 @@
 package com.example.vidiio.ui.screens
 
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -34,6 +37,25 @@ fun DownloadsScreen(
     modifier: Modifier = Modifier
 ) {
     val downloads by viewModel.downloads.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.retryPendingExport()
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { msg ->
+            if (msg == "__NEEDS_STORAGE_PERMISSION__") {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }
+            } else {
+                snackbarHostState.showSnackbar(msg)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -45,6 +67,7 @@ fun DownloadsScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier
     ) { padding ->
@@ -101,6 +124,7 @@ fun DownloadsScreen(
                         onResume = { viewModel.resumeDownload(task.id) },
                         onCancel = { viewModel.cancelDownload(task.id) },
                         onDelete = { viewModel.deleteDownload(task.id) },
+                        onExport = { viewModel.exportDownload(task.id) },
                         onPlay = { 
                             task.filePath?.let { path ->
                                 // Create a dummy movie object for the player
@@ -128,6 +152,7 @@ fun DownloadItem(
     onResume: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
+    onExport: () -> Unit,
     onPlay: () -> Unit
 ) {
     GlassCard(
@@ -168,6 +193,9 @@ fun DownloadItem(
                     Row {
                         IconButton(onClick = onPlay) {
                             Icon(Icons.Rounded.PlayArrow, contentDescription = "Play", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        IconButton(onClick = onExport) {
+                            Icon(Icons.Rounded.SaveAlt, contentDescription = "Export to Downloads", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         IconButton(onClick = onDelete) {
                             Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))

@@ -61,7 +61,8 @@ class VidiioViewModelFactory(
             modelClass.isAssignableFrom(DownloadsViewModel::class.java) -> {
                 DownloadsViewModel(
                     downloadRepository ?: throw IllegalArgumentException("DownloadRepository is required"),
-                    downloadManager ?: throw IllegalArgumentException("DownloadManager is required")
+                    downloadManager ?: throw IllegalArgumentException("DownloadManager is required"),
+                    context?.applicationContext ?: throw IllegalArgumentException("Context is required")
                 ) as T
             }
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

@@ -129,7 +129,8 @@ fun VidiioApp() {
             val viewModel: com.example.vidiio.ui.viewmodel.DownloadsViewModel = viewModel(
                 factory = VidiioViewModelFactory(
                     downloadRepository = downloadRepository,
-                    downloadManager = downloadManager
+                    downloadManager = downloadManager,
+                    context = context
                 )
             )
             DownloadsScreen(
