@@ -76,6 +76,15 @@ class MovieRepository(
                 }
             }
 
+            // Bundled anime addons (e.g. One Pace) get their own row in the anime block.
+            val animeAddonCatalogs = async {
+                runCatching {
+                    addonManager.getAnimeCatalogs().map { (name, metas) ->
+                        Category(name, metas.map { it.toMovie(forceType = MovieType.TV_SHOW) })
+                    }
+                }.getOrDefault(emptyList())
+            }
+
             val genreShelves = async {
                 GENRE_SHELVES.map { (label, id) ->
                     async {
@@ -98,6 +107,7 @@ class MovieRepository(
                 Category("Top Rated Anime", topRatedAnime.await())
             )
 
+            categories.addAll(animeAddonCatalogs.await().filter { it.movies.isNotEmpty() })
             categories.addAll(genreShelves.await())
             categories.addAll(stremioCatalogs.await())
             categories
@@ -146,6 +156,42 @@ class MovieRepository(
     }
 
     suspend fun getMovieDetails(movie: Movie): Movie {
+        if (movie.source == "stremio") {
+            return try {
+                val stremioType = if (movie.type == MovieType.MOVIE) "movie" else "series"
+                val meta = withTimeoutOrNull(12_000) { addonManager.getMeta(stremioType, movie.id) }
+                    ?: return movie
+                val seasons = meta.videos.orEmpty()
+                    .groupBy { it.season ?: 1 }
+                    .toSortedMap()
+                    .map { (seasonNo, vids) ->
+                        Season(
+                            seasonNumber = seasonNo,
+                            episodes = vids.sortedBy { it.episode ?: 0 }.mapIndexed { i, v ->
+                                Episode(
+                                    id = v.id,
+                                    name = v.title ?: v.name ?: "Episode ${v.episode ?: i + 1}",
+                                    overview = v.overview,
+                                    episodeNumber = v.episode ?: (i + 1),
+                                    seasonNumber = seasonNo,
+                                    stillPath = v.thumbnail
+                                )
+                            }
+                        )
+                    }
+                movie.copy(
+                    title = meta.name,
+                    posterUrl = meta.poster ?: movie.posterUrl,
+                    backdropUrl = meta.background ?: movie.backdropUrl,
+                    synopsis = meta.description ?: movie.synopsis,
+                    seasons = seasons
+                )
+            } catch (e: Exception) {
+                Log.e("MovieRepository", "Stremio meta error", e)
+                movie
+            }
+        }
+
         if (movie.source != "tmdb") {
             val scraper = scrapers.find { it.sourceId == movie.source }
                 ?: scrapers.find { it.name.lowercase().contains(movie.source.lowercase()) }
@@ -215,21 +261,26 @@ class MovieRepository(
                 }
             }
 
-            // Stremio sources
+            // Stremio addon sources
             launch {
                 try {
-                    if (imdbId != null && imdbId.startsWith("tt")) {
-                        val stremioId = if (movie.type == MovieType.TV_SHOW && episode != null) {
-                            "$imdbId:${episode.seasonNumber}:${episode.episodeNumber}"
-                        } else {
-                            imdbId
-                        }
-                        
+                    val stremioType = if (movie.type == MovieType.MOVIE) "movie" else "series"
+                    // Addon-native id (e.g. One Pace uses "RO_1" per episode, "pp_onepace" per series).
+                    val nativeId: String? = when {
+                        movie.source != "stremio" -> null
+                        movie.type == MovieType.TV_SHOW && episode != null -> episode.id
+                        else -> movie.id
+                    }
+                    // IMDb-keyed id for the big torrent addons (Torrentio etc).
+                    val imdbStremioId: String? = imdbId?.takeIf { it.startsWith("tt") }?.let { tt ->
+                        if (movie.type == MovieType.TV_SHOW && episode != null)
+                            "$tt:${episode.seasonNumber}:${episode.episodeNumber}"
+                        else tt
+                    }
+
+                    listOfNotNull(nativeId, imdbStremioId).distinct().forEach { sid ->
                         withTimeoutOrNull(SCRAPER_TIMEOUT_MS) {
-                            addonManager.getStreams(
-                                if (movie.type == MovieType.MOVIE) "movie" else "series",
-                                stremioId
-                            ).forEach { stremioStream ->
+                            addonManager.getStreams(stremioType, sid).forEach { stremioStream ->
                                 stremioStream.toStreamSource()?.let { send(it) }
                             }
                         }
@@ -255,15 +306,16 @@ class MovieRepository(
         }
     }
 
-    private fun StremioMeta.toMovie(): Movie {
+    private fun StremioMeta.toMovie(forceType: MovieType? = null): Movie {
         return Movie(
             id = id,
             title = name,
             posterUrl = poster ?: "",
+            backdropUrl = background,
             synopsis = description,
             year = releaseInfo?.take(4)?.toIntOrNull(),
             rating = imdbRating?.toDoubleOrNull(),
-            type = if (type == "movie") MovieType.MOVIE else MovieType.TV_SHOW,
+            type = forceType ?: if (type == "movie") MovieType.MOVIE else MovieType.TV_SHOW,
             source = "stremio"
         )
     }
