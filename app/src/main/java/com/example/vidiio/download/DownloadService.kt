@@ -12,7 +12,6 @@ import com.example.vidiio.data.model.DownloadStatus
 import com.example.vidiio.data.model.DownloadTask
 import com.example.vidiio.data.model.DownloadType
 import com.example.vidiio.data.repository.DownloadRepository
-import com.frostwire.jlibtorrent.SessionManager
 import kotlinx.coroutines.*
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -24,8 +23,9 @@ class DownloadService : Service() {
     
     private lateinit var repository: DownloadRepository
     private lateinit var torrentDownloader: TorrentDownloader
+    private lateinit var httpDownloader: HttpDownloader
+    private lateinit var hlsDownloader: HlsDownloader
     private lateinit var notificationManager: NotificationManager
-    private lateinit var torrentSession: SessionManager
 
     companion object {
         private const val CHANNEL_ID = "downloads_channel"
@@ -38,20 +38,16 @@ class DownloadService : Service() {
         super.onCreate()
         val app = application as VidiioApplication
         repository = app.downloadRepository
-        torrentSession = app.torrentEngine.getSession() ?: SessionManager()
-        torrentDownloader = TorrentDownloader(torrentSession)
+        httpDownloader = HttpDownloader(app.playbackHttpClient)
+        hlsDownloader = HlsDownloader(app.playbackHttpClient)
+        torrentDownloader = TorrentDownloader(this, httpDownloader)
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_REMOVE) {
-            val url = intent.getStringExtra(EXTRA_URL)
-            if (url != null) {
-                torrentDownloader.remove(url)
-            }
-        }
-        
+        // ACTION_REMOVE is handled by cancelling the job in processQueue() once the row is gone.
+
         startForeground(NOTIFICATION_ID, createNotification("Starting downloads...", 0f))
         processQueue()
         return START_STICKY
@@ -94,17 +90,16 @@ class DownloadService : Service() {
     private fun startDownload(task: DownloadTask) {
         val job = scope.launch {
             repository.updateDownload(task.copy(status = DownloadStatus.DOWNLOADING))
-            
+
             val destDir = getDownloadDir()
-            val result = torrentDownloader.download(
-                task, destDir,
-                onProgress = { progress, downloaded, total ->
-                    scope.launch {
-                        updateProgress(task.id, task.title, progress, downloaded)
-                    }
-                },
-                isCancelled = { !isActive }
-            )
+            val onProgress: (Float, Long, Long) -> Unit = { progress, downloaded, _ ->
+                scope.launch { updateProgress(task.id, task.title, progress, downloaded) }
+            }
+            val result = when (task.type) {
+                DownloadType.HTTP -> httpDownloader.download(task, destDir, onProgress) { !isActive }
+                DownloadType.HLS -> hlsDownloader.download(task, destDir, onProgress) { !isActive }
+                DownloadType.TORRENT -> torrentDownloader.download(task, destDir, onProgress) { !isActive }
+            }
 
             handleResult(task.id, result)
             activeJobs.remove(task.id)
@@ -114,7 +109,10 @@ class DownloadService : Service() {
     }
 
     private fun getDownloadDir(): File {
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vidiio")
+        // App-scoped external dir: writable on all API levels without storage permission,
+        // visible to the user under Android/data/<pkg>/files/Download/Vidiio.
+        val base = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+        val dir = File(base, "Vidiio")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }

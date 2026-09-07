@@ -90,11 +90,10 @@ fun DetailsScreen(
                         onEpisodeSelected = { viewModel.selectEpisode(it) },
                         onPlayClick = { source -> onPlay(state.movie, state.selectedEpisode, source) },
                         onDownloadClick = { source ->
-                            if (permissionsState.allPermissionsGranted) {
-                                viewModel.downloadSource(source)
-                            } else {
+                            if (!permissionsState.allPermissionsGranted) {
                                 permissionsState.launchMultiplePermissionRequest()
                             }
+                            viewModel.downloadSource(source)
                         },
                         onToggleSourceSelector = { showSourceSelector = true }
                     )

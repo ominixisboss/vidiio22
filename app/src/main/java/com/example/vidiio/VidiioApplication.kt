@@ -8,8 +8,8 @@ import com.example.vidiio.data.repository.DownloadRepository
 import com.example.vidiio.data.repository.FavoriteRepository
 import com.example.vidiio.data.repository.MovieRepository
 import com.example.vidiio.data.repository.SettingsRepository
+import com.example.vidiio.data.repository.WatchProgressRepository
 import com.example.vidiio.download.DownloadManager
-import com.example.vidiio.torrent.TorrentEngine
 import com.example.vidiio.torrent.TorrServerEngine
 import com.example.vidiio.data.scraper.CinejoyScraper
 import com.example.vidiio.data.scraper.MovyScraper
@@ -63,8 +63,9 @@ class VidiioApplication : Application() {
     lateinit var downloadManager: DownloadManager
         private set
 
-    lateinit var torrentEngine: TorrentEngine
+    lateinit var watchProgressRepository: WatchProgressRepository
         private set
+
 
     /** Embedded TorrServer engine used for movie/series torrent streaming (PlayTorrio-style). */
     lateinit var torrServerEngine: TorrServerEngine
@@ -90,11 +91,14 @@ class VidiioApplication : Application() {
         favoriteRepository = FavoriteRepository(database.favoriteDao())
         downloadRepository = DownloadRepository(database.downloadDao())
         downloadManager = DownloadManager(this, downloadRepository)
-        torrentEngine = TorrentEngine(this)
+        watchProgressRepository = WatchProgressRepository(database.watchProgressDao())
         torrServerEngine = TorrServerEngine(this)
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // BODY buffers every full response into memory before returning it — with the
+            // HTML-scraping sources that means multi-MB pages copied + UTF-8 decoded on the
+            // hot path. HEADERS keeps the useful request/response lines without that cost.
+            level = HttpLoggingInterceptor.Level.HEADERS
         }
 
         val bootstrapClient = OkHttpClient.Builder()

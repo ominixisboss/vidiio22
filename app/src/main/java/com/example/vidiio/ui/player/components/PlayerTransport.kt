@@ -53,19 +53,47 @@ fun PlayerTransport(
             .padding(horizontal = 16.dp, vertical = 24.dp)
             .navigationBarsPadding()
     ) {
-        // Seek Bar
+        // Seek Bar - drag locally, commit on release so polling can't yank the thumb back.
+        var isScrubbing by remember { mutableStateOf(false) }
+        var scrubValue by remember { mutableFloatStateOf(0f) }
+        var settleUntil by remember { mutableLongStateOf(0L) }
+
+        val playbackFraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+        val bufferedFraction = if (duration > 0) (bufferedPosition.toFloat() / duration).coerceIn(0f, 1f) else 0f
+        val sliderValue = when {
+            isScrubbing -> scrubValue
+            System.currentTimeMillis() < settleUntil -> scrubValue
+            else -> playbackFraction
+        }
+
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Buffer indicator (manual drawing or overlay)
-            // For now, let's just use a standard slider. 
-            // In a real high-fidelity port, we'd draw the buffer range.
+            // Buffered range behind the active track.
+            LinearProgressIndicator(
+                progress = { bufferedFraction },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.Center)
+                    .padding(horizontal = 10.dp)
+                    .height(4.dp),
+                color = Color.White.copy(alpha = 0.35f),
+                trackColor = Color.White.copy(alpha = 0.15f),
+            )
             Slider(
-                value = if (duration > 0) position.toFloat() / duration else 0f,
-                onValueChange = { onSeek((it * duration).toLong()) },
+                value = sliderValue,
+                onValueChange = {
+                    isScrubbing = true
+                    scrubValue = it
+                },
+                onValueChangeFinished = {
+                    onSeek((scrubValue * duration).toLong())
+                    isScrubbing = false
+                    settleUntil = System.currentTimeMillis() + 700
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
                     activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                    inactiveTrackColor = Color.Transparent
                 )
             )
         }
@@ -76,7 +104,7 @@ fun PlayerTransport(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "${formatTime(position)} / ${formatTime(duration)}",
+                text = "${formatTime((sliderValue * duration).toLong())} / ${formatTime(duration)}",
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium

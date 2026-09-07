@@ -59,6 +59,43 @@ fun VolumeHud(
 }
 
 @Composable
+fun BrightnessHud(
+    brightness: Float,
+    visible: Boolean
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+        exit = fadeOut() + scaleOut(targetScale = 0.8f)
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(24.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.Black.copy(alpha = 0.8f))
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val icon = when {
+                    brightness < 0.34f -> Icons.Rounded.BrightnessLow
+                    brightness < 0.67f -> Icons.Rounded.BrightnessMedium
+                    else -> Icons.Rounded.BrightnessHigh
+                }
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "${(brightness * 100).toInt()}%",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun AudioHud(
     text: String,
     visible: Boolean

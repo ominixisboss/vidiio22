@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 
 enum class DownloadType {
-    TORRENT
+    TORRENT, HTTP, HLS
 }
 
 enum class DownloadStatus {
@@ -24,7 +24,9 @@ data class DownloadTask(
     val totalSize: Long = 0,
     val downloadedSize: Long = 0,
     val createdAt: Long = System.currentTimeMillis(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /** JSON map of HTTP request headers (Referer/UA) for HTTP downloads. */
+    val headersJson: String? = null
 )
 
 class DownloadConverters {

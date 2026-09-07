@@ -3,6 +3,8 @@ package com.example.vidiio.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -338,6 +340,7 @@ fun ColorThemeSelectionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -350,6 +353,10 @@ fun ColorThemeSelectionRow(
                 ColorTheme.PURPLE -> VidiioPurple
                 ColorTheme.ORANGE -> VidiioOrange
                 ColorTheme.TEAL -> VidiioTeal
+                ColorTheme.PINK -> VidiioPink
+                ColorTheme.INDIGO -> VidiioIndigo
+                ColorTheme.GOLD -> VidiioGold
+                ColorTheme.MONO -> VidiioMono
             }
             
             Box(

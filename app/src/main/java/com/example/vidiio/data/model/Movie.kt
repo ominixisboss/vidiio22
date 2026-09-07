@@ -7,12 +7,15 @@ data class Movie(
     val id: String,
     val title: String,
     val posterUrl: String,
+    val backdropUrl: String? = null,
     val synopsis: String? = null,
     val year: Int? = null,
     val rating: Double? = null,
     val type: MovieType = MovieType.MOVIE,
     val source: String, // e.g., tmdb, cinejoy, vidsrc
-    val seasons: List<Season> = emptyList()
+    val seasons: List<Season> = emptyList(),
+    /** Resolved IMDb id (tt…), filled in by MovieRepository before scraping. */
+    val imdbId: String? = null
 )
 
 @Serializable

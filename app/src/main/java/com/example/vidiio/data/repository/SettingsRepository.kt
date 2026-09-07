@@ -18,7 +18,7 @@ enum class AppTheme {
 }
 
 enum class ColorTheme {
-    RED, BLUE, GREEN, PURPLE, ORANGE, TEAL
+    RED, BLUE, GREEN, PURPLE, ORANGE, TEAL, PINK, INDIGO, GOLD, MONO
 }
 
 class SettingsRepository(private val context: Context) {

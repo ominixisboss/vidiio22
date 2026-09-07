@@ -72,6 +72,8 @@ fun PlayerScreen(
     
     // Core Playback State
     var selectedSource by remember { mutableStateOf(initialSource) }
+    val resumePositionMs by viewModel.resumePositionMs.collectAsState()
+    var didResume by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var isTorrentLoading by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -90,7 +92,9 @@ fun PlayerScreen(
     
     // HUDs & Gestures
     var showVolumeHud by remember { mutableStateOf(false) }
+    var showBrightnessHud by remember { mutableStateOf(false) }
     var volume by remember { mutableFloatStateOf(1.0f) }
+    var brightness by remember { mutableFloatStateOf(0.5f) }
     var isMuted by remember { mutableStateOf(false) }
     var audioHudText by remember { mutableStateOf("") }
     var showAudioHud by remember { mutableStateOf(false) }
@@ -130,7 +134,15 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) {
         activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() /
+            audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        // Seed brightness from the window override if set, else from the system setting.
+        val winB = activity?.window?.attributes?.screenBrightness ?: -1f
+        brightness = if (winB in 0f..1f) winB else runCatching {
+            android.provider.Settings.System.getInt(
+                context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS
+            ) / 255f
+        }.getOrDefault(0.5f)
     }
 
     DisposableEffect(Unit) {
@@ -166,10 +178,16 @@ fun PlayerScreen(
     val isDownloading = downloadStatus != null && downloadStatus != DownloadStatus.COMPLETED && downloadStatus != DownloadStatus.FAILED && downloadStatus != DownloadStatus.CANCELLED
 
     // Media3 Player
+    // OkHttp for http(s); DefaultDataSource delegates file:// / content:// (offline downloads)
+    // to FileDataSource / ContentDataSource.
+    val httpDataSourceFactory = remember {
+        OkHttpDataSource.Factory((context.applicationContext as VidiioApplication).playbackHttpClient)
+    }
+    val dataSourceFactory = remember {
+        androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
+    }
     val exoPlayer = remember {
-        val application = context.applicationContext as VidiioApplication
-        val dataSourceFactory = OkHttpDataSource.Factory(application.playbackHttpClient)
-        
+
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 60000, // minBufferMs
@@ -216,6 +234,9 @@ fun PlayerScreen(
 
     DisposableEffect(exoPlayer) {
         onDispose {
+            runCatching {
+                viewModel.saveWatchProgress(exoPlayer.currentPosition, exoPlayer.duration)
+            }
             exoPlayer.stop()
             exoPlayer.release()
         }
@@ -223,11 +244,25 @@ fun PlayerScreen(
 
     // Position Polling
     LaunchedEffect(exoPlayer, isPlaying) {
+        var tick = 0
         while (true) {
             currentPosition = exoPlayer.currentPosition
             duration = if (exoPlayer.duration > 0) exoPlayer.duration else 0L
             bufferedPosition = exoPlayer.bufferedPosition
-            
+
+            // Resume from saved Continue Watching position, once, when the media is ready.
+            if (!didResume && resumePositionMs > 3000L && duration > 0L &&
+                exoPlayer.playbackState == Player.STATE_READY
+            ) {
+                exoPlayer.seekTo(resumePositionMs)
+                didResume = true
+            }
+
+            // Persist progress every ~10s of playback.
+            if (isPlaying && duration > 0L && ++tick % 20 == 0) {
+                viewModel.saveWatchProgress(currentPosition, duration)
+            }
+
             // Skip & Auto-Next Logic
             if (duration > 0) {
                 val inIntroRange = currentPosition in 5000L..90000L
@@ -247,7 +282,7 @@ fun PlayerScreen(
                     showAutoNextOverlay = false
                 }
             }
-            delay(1000)
+            delay(500)
         }
     }
 
@@ -274,12 +309,21 @@ fun PlayerScreen(
     fun startPlayback(source: StreamSource) {
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        
+
+        // Many streaming hosts 403 without the scraper's Referer/Origin/UA headers.
+        // ExoPlayer carries these on the HTTP data source, not the MediaItem.
+        val requestHeaders = buildMap {
+            put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            source.headers?.let { putAll(it) }
+        }
+        httpDataSourceFactory.setDefaultRequestProperties(requestHeaders)
+
         val mediaItem = MediaItem.Builder()
             .setUri(source.url)
             .setMimeType(if (source.isM3u8) MimeTypes.APPLICATION_M3U8 else null)
             .build()
-            
+
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         exoPlayer.play()
@@ -356,29 +400,36 @@ fun PlayerScreen(
                 onDragStart = { offset ->
                     dragSide = if (offset.x < size.width / 2) 1 else 2
                 },
-                onVerticalDrag = { change, dragAmount ->
+                onVerticalDrag = { _, dragAmount ->
+                    // Drag up = increase. A full swipe over ~65% of the screen covers the whole range,
+                    // and we accumulate in a float so tiny drags still register.
+                    val deltaFraction = -dragAmount / (size.height * 0.65f)
                     if (dragSide == 2) {
+                        volume = (volume + deltaFraction).coerceIn(0f, 1f)
                         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                        val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                        val delta = (dragAmount / size.height) * maxVol
-                        val nextVol = (currentVol - delta.toInt()).coerceIn(0, maxVol)
-                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
-                        volume = nextVol.toFloat() / maxVol
+                        audioManager.setStreamVolume(
+                            AudioManager.STREAM_MUSIC,
+                            kotlin.math.round(volume * maxVol).toInt(),
+                            0
+                        )
+                        isMuted = volume <= 0f
                         showVolumeHud = true
-                    } else if (dragSide == 1) {
-                        val lp = activity?.window?.attributes
-                        val currentBrightness = lp?.screenBrightness ?: 0.5f
-                        val delta = dragAmount / size.height
-                        val nextBrightness = (currentBrightness - delta).coerceIn(0f, 1f)
-                        lp?.screenBrightness = nextBrightness
-                        activity?.window?.attributes = lp
-                        // Reuse volume HUD for brightness as a simple port
-                        volume = nextBrightness
-                        showVolumeHud = true
+                        showBrightnessHud = false
+                    } else {
+                        brightness = (brightness + deltaFraction).coerceIn(0.02f, 1f)
+                        activity?.window?.let { w ->
+                            w.attributes = w.attributes.apply { screenBrightness = brightness }
+                        }
+                        showBrightnessHud = true
+                        showVolumeHud = false
                     }
                 },
                 onDragEnd = {
-                    scope.launch { delay(2000); showVolumeHud = false }
+                    scope.launch {
+                        delay(1200)
+                        showVolumeHud = false
+                        showBrightnessHud = false
+                    }
                 }
             )
         }
@@ -444,11 +495,12 @@ fun PlayerScreen(
                     onBack = onBack,
                     onDownload = {
                         selectedSource?.let { source ->
-                            if (permissionsState.allPermissionsGranted) {
-                                viewModel.downloadSource(source)
-                            } else {
+                            // Downloads go to app-scoped storage - no permission needed.
+                            // Still ask for POST_NOTIFICATIONS so progress shows, but don't block on it.
+                            if (!permissionsState.allPermissionsGranted) {
                                 permissionsState.launchMultiplePermissionRequest()
                             }
+                            viewModel.downloadSource(source)
                         }
                     },
                     onToggleEpisodes = { showEpisodesSidebar = !showEpisodesSidebar }
@@ -473,8 +525,13 @@ fun PlayerScreen(
                     onToggleAudio = { showAudioMenu = true },
                     onToggleSpeed = { showSpeedMenu = true },
                     onToggleAspect = { showAspectMenu = true },
-                    onToggleFullscreen = { 
-                        // Already immersive by default in this port
+                    onToggleFullscreen = {
+                        // The player is always immersive; use this as a quick fill/fit toggle.
+                        resizeMode = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        } else {
+                            AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        }
                     },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
@@ -558,8 +615,13 @@ fun PlayerScreen(
         }
 
 
-        VolumeHud(volume = volume, isMuted = isMuted, visible = showVolumeHud)
-        
+        Box(modifier = Modifier.align(Alignment.Center)) {
+            VolumeHud(volume = volume, isMuted = isMuted, visible = showVolumeHud)
+        }
+        Box(modifier = Modifier.align(Alignment.Center)) {
+            BrightnessHud(brightness = brightness, visible = showBrightnessHud)
+        }
+
         if (showAudioHud) {
             Box(modifier = Modifier.align(Alignment.Center)) {
                 AudioHud(text = audioHudText, visible = showAudioHud)

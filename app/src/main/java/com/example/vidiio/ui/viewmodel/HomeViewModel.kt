@@ -3,10 +3,14 @@ package com.example.vidiio.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vidiio.data.model.Category
+import com.example.vidiio.data.model.WatchProgress
 import com.example.vidiio.data.repository.MovieRepository
+import com.example.vidiio.data.repository.WatchProgressRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed interface HomeUiState {
@@ -15,10 +19,17 @@ sealed interface HomeUiState {
     data class Error(val message: String) : HomeUiState
 }
 
-class HomeViewModel(private val movieRepository: MovieRepository) : ViewModel() {
+class HomeViewModel(
+    private val movieRepository: MovieRepository,
+    private val watchProgressRepository: WatchProgressRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    val continueWatching: StateFlow<List<WatchProgress>> =
+        watchProgressRepository.continueWatching
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         refresh()
@@ -34,5 +45,9 @@ class HomeViewModel(private val movieRepository: MovieRepository) : ViewModel() 
                 _uiState.value = HomeUiState.Error(e.message ?: "Unknown error")
             }
         }
+    }
+
+    fun removeContinueWatching(id: String) {
+        viewModelScope.launch { watchProgressRepository.remove(id) }
     }
 }

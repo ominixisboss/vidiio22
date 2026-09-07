@@ -43,13 +43,13 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
     override suspend fun search(query: String): List<Movie> = emptyList()
     override suspend fun getMovieDetails(movie: Movie): Movie = movie
 
-    override suspend fun getStreamSources(movie: Movie, episode: Episode?): List<StreamSource> = coroutineScope {
+    override suspend fun getStreamSources(movie: Movie, episode: Episode?): List<StreamSource> = withContext(Dispatchers.IO) {
         val sources = mutableListOf<StreamSource>()
-        val tmdbId = movie.id.toIntOrNull() ?: return@coroutineScope emptyList()
+        val tmdbId = movie.id.toIntOrNull() ?: return@withContext emptyList()
         val isTv = movie.type == MovieType.TV_SHOW
 
         try {
-            val seed = fetchSeed(tmdbId) ?: return@coroutineScope emptyList()
+            val seed = fetchSeed(tmdbId) ?: return@withContext emptyList()
             
             val params = mutableMapOf(
                 "title" to movie.title,
@@ -59,20 +59,21 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
                 "seed" to seed
             )
             movie.year?.let { params["year"] = it.toString() }
+            movie.imdbId?.takeIf { it.startsWith("tt") }?.let { params["imdbId"] = it }
             if (isTv && episode != null) {
                 params["seasonId"] = episode.seasonNumber.toString()
                 params["episodeId"] = episode.episodeNumber.toString()
             }
 
             val deferredSources = providers.map { provider ->
+                val label = provider["label"] ?: ""
                 async {
                     try {
                         val path = provider["path"] ?: ""
-                        val label = provider["label"] ?: ""
-                        
+
                         val urlBuilder = StringBuilder("$baseUrl$path?")
                         params.forEach { (k, v) -> urlBuilder.append("$k=${v.replace(" ", "%20")}&") }
-                        
+
                         val request = Request.Builder()
                             .url(urlBuilder.toString().removeSuffix("&"))
                             .header("User-Agent", userAgent)
@@ -80,11 +81,20 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
                             .header("Origin", origin)
                             .build()
 
-                        client.newCall(request).execute().use { response ->
+                        (withTimeoutOrNull(12_000L) {
+                            client.newCall(request).execute()
+                        } ?: run {
+                            Log.w("VidEasyScraper", "$label: timed out")
+                            return@async null
+                        }).use { response ->
                             if (response.isSuccessful) {
                                 var body = response.body?.string()?.trim() ?: ""
                                 if (body.startsWith("\"") && body.endsWith("\"")) {
                                     body = body.substring(1, body.length - 1)
+                                }
+                                if (body.isEmpty() || body.startsWith("<")) {
+                                    Log.w("VidEasyScraper", "$label: empty/non-JSON body")
+                                    return@use null
                                 }
                                 val decryptedJson = decryptPayload(body, seed, tmdbId)
                                 val data = JSONObject(decryptedJson)
@@ -107,9 +117,13 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
                                     }
                                 }
                                 result
-                            } else null
+                            } else {
+                                Log.w("VidEasyScraper", "$label: HTTP ${response.code}")
+                                null
+                            }
                         }
                     } catch (e: Exception) {
+                        Log.w("VidEasyScraper", "$label: ${e.message}")
                         null
                     }
                 }

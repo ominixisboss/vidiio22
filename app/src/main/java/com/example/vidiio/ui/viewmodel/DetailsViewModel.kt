@@ -13,6 +13,7 @@ import com.example.vidiio.data.repository.FavoriteRepository
 import com.example.vidiio.data.repository.MovieRepository
 import com.example.vidiio.data.repository.SettingsRepository
 import com.example.vidiio.data.repository.DownloadRepository
+import com.example.vidiio.data.repository.WatchProgressRepository
 import com.example.vidiio.download.DownloadManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.*
@@ -38,9 +39,14 @@ class DetailsViewModel(
     private val downloadManager: DownloadManager,
     private val subdlService: SubdlService,
     private val settingsRepository: SettingsRepository,
+    private val watchProgressRepository: WatchProgressRepository,
     private val movie: Movie,
     private val initialEpisodeId: String? = null
 ) : ViewModel() {
+
+    /** Position (ms) to resume playback from, resolved from saved Continue Watching progress. */
+    private val _resumePositionMs = MutableStateFlow(0L)
+    val resumePositionMs: StateFlow<Long> = _resumePositionMs.asStateFlow()
 
     private val _movie = MutableStateFlow<Movie?>(null)
     private val _allFoundSources = MutableStateFlow<List<StreamSource>>(emptyList())
@@ -54,6 +60,11 @@ class DetailsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     private var scrapingJob: Job? = null
+
+    private companion object {
+        /** Overall wall-clock budget for one source search across all scrapers + Stremio. */
+        const val SCRAPE_TIMEOUT_MS = 45_000L
+    }
 
     val uiState: StateFlow<DetailsUiState> = combine(
         combine(_movie, _isFavorite, _subtitles, _error) { movie, favorite, subs, error ->
@@ -99,13 +110,19 @@ class DetailsViewModel(
 
     private fun observeSettings() {
         viewModelScope.launch {
-            settingsRepository.sourcesFlow.collectLatest { enabled ->
-                val currentMovie = _movie.value
-                val currentEpisode = _selectedEpisode.value
-                if (currentMovie != null) {
-                    startScraping(currentMovie, currentEpisode)
+            // Single scrape trigger: (re)scrape when the movie first loads, the selected
+            // episode changes, or the enabled-source set changes - and nothing else.
+            // DataStore re-emits the same value on startup, so distinctUntilChanged is what
+            // stops startScraping from cancelling itself in a loop.
+            combine(
+                _movie.filterNotNull(),
+                _selectedEpisode,
+                settingsRepository.sourcesFlow,
+            ) { movie, episode, enabled -> Triple(movie, episode, enabled) }
+                .distinctUntilChanged()
+                .collectLatest { (movie, episode, _) ->
+                    startScraping(movie, episode)
                 }
-            }
         }
     }
 
@@ -123,6 +140,15 @@ class DetailsViewModel(
                 }
                 _selectedEpisode.value = selectedEpisode
                 
+                // Resume point for Continue Watching: only when the saved episode matches
+                // (or it's a movie).
+                runCatching {
+                    val saved = watchProgressRepository.get(fullMovie.id)
+                    if (saved != null && (saved.episodeId == null || saved.episodeId == selectedEpisode?.id)) {
+                        _resumePositionMs.value = saved.positionMs
+                    }
+                }
+
                 val subtitles = getSubtitles(fullMovie)
                 _subtitles.value = subtitles
 
@@ -131,8 +157,7 @@ class DetailsViewModel(
                         _isFavorite.value = isFav
                     }
                 }
-                
-                startScraping(fullMovie, selectedEpisode)
+                // Scraping is kicked off by observeSettings() once _movie is set.
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             }
@@ -143,25 +168,26 @@ class DetailsViewModel(
         scrapingJob?.cancel()
         scrapingJob = viewModelScope.launch {
             _isSearchingSources.value = true
-            val scrapingInnerJob = launch {
-                movieRepository.getStreamSources(movie, episode)
-                    .collect { source ->
-                        _allFoundSources.update { (it + source).distinctBy { s -> s.url } }
-                    }
+            try {
+                // Collect until every scraper has finished or the overall budget is hit.
+                // The per-scraper timeout lives in MovieRepository; don't cut them off early
+                // here — the crypto-heavy providers (Cinejoy, VidSrc, Stremio) need >12s.
+                withTimeoutOrNull(SCRAPE_TIMEOUT_MS) {
+                    movieRepository.getStreamSources(movie, episode)
+                        .collect { source ->
+                            _allFoundSources.update { (it + source).distinctBy { s -> s.url } }
+                        }
+                }
+            } finally {
+                _isSearchingSources.value = false
             }
-            delay(12000)
-            scrapingInnerJob.cancel()
-            _isSearchingSources.value = false
         }
     }
 
     fun selectEpisode(episode: Episode) {
-        _selectedEpisode.value = episode
         _allFoundSources.value = emptyList()
-        val currentMovie = _movie.value
-        if (currentMovie != null) {
-            startScraping(currentMovie, episode)
-        }
+        _selectedEpisode.value = episode
+        // observeSettings() re-scrapes on the episode change.
     }
 
     fun toggleFavorite() {
@@ -198,8 +224,16 @@ class DetailsViewModel(
         } else {
             movie.title
         }
-        if (source.url.startsWith("magnet:")) {
-            downloadManager.enqueue(title, source.url)
+        downloadManager.enqueue(title, source.url, source.headers)
+    }
+
+    /** Called periodically by the player to persist the Continue Watching position. */
+    fun saveWatchProgress(positionMs: Long, durationMs: Long) {
+        val current = _movie.value ?: return
+        viewModelScope.launch {
+            runCatching {
+                watchProgressRepository.save(current, _selectedEpisode.value, positionMs, durationMs)
+            }
         }
     }
 
