@@ -163,6 +163,7 @@ fun MovieDetailContent(
                     muted = false,
                     controls = true,
                     interactive = true,
+                    startMuted = false,
                     modifier = Modifier.fillMaxSize(),
                     onUnavailable = { trailerFailed = true; trailerFullscreen = false }
                 )

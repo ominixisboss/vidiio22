@@ -34,9 +34,12 @@ fun TrailerPlayer(
     modifier: Modifier = Modifier,
     controls: Boolean = false,
     interactive: Boolean = false,
+    startMuted: Boolean = true,
     onUnavailable: () -> Unit = {}
 ) {
-    val html = remember(videoId, controls, interactive) { buildHtml(videoId, controls, interactive) }
+    val html = remember(videoId, controls, interactive, startMuted) {
+        buildHtml(videoId, controls, interactive, startMuted)
+    }
     val currentOnUnavailable by rememberUpdatedState(onUnavailable)
 
     Box(modifier = modifier) {
@@ -90,9 +93,11 @@ fun TrailerPlayer(
     }
 }
 
-private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean): String {
+private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean, startMuted: Boolean): String {
     val pe = if (interactive) "auto" else "none"
     val ctl = if (controls) 1 else 0
+    val mute0 = if (startMuted) 1 else 0
+    val wantMutedInit = if (startMuted) "true" else "false"
     return """
 <!DOCTYPE html>
 <html>
@@ -110,16 +115,16 @@ private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean):
 <div id="wrap"><div id="player"></div></div>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-  var player, ready=false, wantMuted=true, wantPlaying=true, failed=false;
+  var player, ready=false, wantMuted=$wantMutedInit, wantPlaying=true, failed=false;
   function fail(){ if(failed)return; failed=true; try{ AndroidTrailer.onUnavailable(); }catch(e){} }
   function onYouTubeIframeAPIReady(){
     player=new YT.Player('player',{
       host:'https://www.youtube-nocookie.com',
       videoId:'$videoId',
-      playerVars:{autoplay:1,controls:$ctl,mute:1,loop:1,playlist:'$videoId',
+      playerVars:{autoplay:1,controls:$ctl,mute:$mute0,loop:1,playlist:'$videoId',
                   playsinline:1,modestbranding:1,rel:0,fs:1,disablekb:1,iv_load_policy:3},
       events:{
-        onReady:function(e){ ready=true; e.target.mute(); apply(); },
+        onReady:function(e){ ready=true; apply(); },
         onError:function(){ fail(); },
         onStateChange:function(e){ if(e.data===YT.PlayerState.ENDED){ e.target.seekTo(0); e.target.playVideo(); } }
       }
