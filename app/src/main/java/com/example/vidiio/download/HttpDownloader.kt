@@ -43,7 +43,11 @@ class HttpDownloader(private val okHttpClient: OkHttpClient) {
                 body.contentType()?.subtype == "x-matroska" -> "mkv"
                 else -> "mp4"
             }
-            val safeTitle = task.title.replace(Regex("[^a-zA-Z0-9.\\- ]"), "_").trim().ifEmpty { "video" }
+            val safeTitle = task.title
+                .replace(Regex("\\.(mp4|mkv|webm|avi|mov|m4v)$", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("[^a-zA-Z0-9.\\- ]"), "_")
+                .trim()
+                .ifEmpty { "video" }
             val file = File(destDir, "$safeTitle.$ext")
             val outputStream = FileOutputStream(file)
 
