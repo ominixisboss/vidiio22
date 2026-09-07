@@ -8,6 +8,7 @@ import com.example.vidiio.data.repository.DownloadRepository
 import com.example.vidiio.data.repository.FavoriteRepository
 import com.example.vidiio.data.repository.MovieRepository
 import com.example.vidiio.data.repository.SettingsRepository
+import com.example.vidiio.data.repository.WatchProgressRepository
 import com.example.vidiio.download.DownloadManager
 import com.example.vidiio.torrent.TorrServerEngine
 import com.example.vidiio.data.scraper.CinejoyScraper
@@ -62,6 +63,9 @@ class VidiioApplication : Application() {
     lateinit var downloadManager: DownloadManager
         private set
 
+    lateinit var watchProgressRepository: WatchProgressRepository
+        private set
+
 
     /** Embedded TorrServer engine used for movie/series torrent streaming (PlayTorrio-style). */
     lateinit var torrServerEngine: TorrServerEngine
@@ -87,6 +91,7 @@ class VidiioApplication : Application() {
         favoriteRepository = FavoriteRepository(database.favoriteDao())
         downloadRepository = DownloadRepository(database.downloadDao())
         downloadManager = DownloadManager(this, downloadRepository)
+        watchProgressRepository = WatchProgressRepository(database.watchProgressDao())
         torrServerEngine = TorrServerEngine(this)
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {

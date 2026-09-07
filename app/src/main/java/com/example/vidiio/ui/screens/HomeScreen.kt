@@ -1,8 +1,10 @@
 package com.example.vidiio.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -14,8 +16,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlayCircleFilled
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.vidiio.data.model.Movie
 import com.example.vidiio.data.model.TOP10_LABEL
+import com.example.vidiio.data.model.WatchProgress
 import com.example.vidiio.ui.components.MovieItem
 import com.example.vidiio.ui.components.RiveLoader
 import com.example.vidiio.ui.viewmodel.HomeUiState
@@ -43,9 +48,11 @@ import kotlinx.coroutines.delay
 fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToDetails: (Movie) -> Unit,
+    onResumeWatching: (WatchProgress) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val continueWatching by viewModel.continueWatching.collectAsState()
     val scrollState = rememberLazyListState()
 
     val topBarAlpha by remember {
@@ -82,6 +89,16 @@ fun HomeScreen(
                     if (heroMovies.isNotEmpty()) {
                         item {
                             HeroCarousel(movies = heroMovies, onMovieClick = onNavigateToDetails)
+                        }
+                    }
+                    if (continueWatching.isNotEmpty()) {
+                        item {
+                            ContinueWatchingRow(
+                                entries = continueWatching,
+                                onResume = onResumeWatching,
+                                onRemove = { viewModel.removeContinueWatching(it) },
+                                modifier = Modifier.padding(top = 16.dp)
+                            )
                         }
                     }
                     items(rows) { category ->
@@ -249,6 +266,102 @@ fun HeroCarousel(
                             else Color.White.copy(alpha = 0.4f)
                         )
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ContinueWatchingRow(
+    entries: List<WatchProgress>,
+    onResume: (WatchProgress) -> Unit,
+    onRemove: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = "Continue Watching",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(entries) { entry ->
+                val shape = RoundedCornerShape(16.dp)
+                Column(modifier = Modifier.width(240.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(135.dp)
+                            .clip(shape)
+                            .border(0.5.dp, Color.White.copy(alpha = 0.15f), shape)
+                            .combinedClickable(
+                                onClick = { onResume(entry) },
+                                onLongClick = { onRemove(entry.id) }
+                            )
+                    ) {
+                        AsyncImage(
+                            model = entry.backdropUrl ?: entry.posterUrl,
+                            contentDescription = entry.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.25f))
+                        )
+                        Icon(
+                            Icons.Rounded.PlayCircleFilled,
+                            contentDescription = "Resume",
+                            tint = Color.White,
+                            modifier = Modifier.align(Alignment.Center).size(44.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .clickable { onRemove(entry.id) }
+                                .padding(3.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = "Remove",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { entry.progressFraction },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(3.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = Color.White.copy(alpha = 0.25f)
+                        )
+                    }
+                    Text(
+                        text = entry.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                    entry.episodeLabel?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }

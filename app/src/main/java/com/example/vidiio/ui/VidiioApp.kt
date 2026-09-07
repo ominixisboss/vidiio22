@@ -29,6 +29,7 @@ import com.example.vidiio.navigation.Navigator
 import com.example.vidiio.navigation.VidiioRoute
 import com.example.vidiio.navigation.rememberNavigationState
 import com.example.vidiio.navigation.toEntries
+import com.example.vidiio.data.model.toMovie
 import com.example.vidiio.ui.screens.*
 import com.example.vidiio.ui.viewmodel.VidiioViewModelFactory
 
@@ -50,6 +51,7 @@ fun VidiioApp() {
     val downloadRepository = application.downloadRepository
     val downloadManager = application.downloadManager
     val subdlService = application.subdlService
+    val watchProgressRepository = application.watchProgressRepository
 
     val entryProvider = entryProvider<NavKey> {
         entry<VidiioRoute.Splash> {
@@ -68,11 +70,17 @@ fun VidiioApp() {
             }
         ) {
             val viewModel: com.example.vidiio.ui.viewmodel.HomeViewModel = viewModel(
-                factory = VidiioViewModelFactory(movieRepository = repository)
+                factory = VidiioViewModelFactory(
+                    movieRepository = repository,
+                    watchProgressRepository = watchProgressRepository
+                )
             )
             HomeScreen(
                 viewModel = viewModel,
                 onNavigateToDetails = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                onResumeWatching = { wp ->
+                    navigator.navigate(VidiioRoute.Player(wp.toMovie(), wp.episodeId, null))
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -169,6 +177,7 @@ fun VidiioApp() {
                     downloadRepository = downloadRepository,
                     downloadManager = downloadManager,
                     subdlService = subdlService,
+                    watchProgressRepository = watchProgressRepository,
                     settingsRepository = settingsRepository,
                     movie = key.movie
                 )
@@ -198,6 +207,7 @@ fun VidiioApp() {
                     downloadRepository = downloadRepository,
                     downloadManager = downloadManager,
                     subdlService = subdlService,
+                    watchProgressRepository = watchProgressRepository,
                     settingsRepository = settingsRepository,
                     movie = key.movie,
                     initialEpisodeId = key.episodeId

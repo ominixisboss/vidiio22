@@ -72,6 +72,8 @@ fun PlayerScreen(
     
     // Core Playback State
     var selectedSource by remember { mutableStateOf(initialSource) }
+    val resumePositionMs by viewModel.resumePositionMs.collectAsState()
+    var didResume by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var isTorrentLoading by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -232,6 +234,9 @@ fun PlayerScreen(
 
     DisposableEffect(exoPlayer) {
         onDispose {
+            runCatching {
+                viewModel.saveWatchProgress(exoPlayer.currentPosition, exoPlayer.duration)
+            }
             exoPlayer.stop()
             exoPlayer.release()
         }
@@ -239,11 +244,25 @@ fun PlayerScreen(
 
     // Position Polling
     LaunchedEffect(exoPlayer, isPlaying) {
+        var tick = 0
         while (true) {
             currentPosition = exoPlayer.currentPosition
             duration = if (exoPlayer.duration > 0) exoPlayer.duration else 0L
             bufferedPosition = exoPlayer.bufferedPosition
-            
+
+            // Resume from saved Continue Watching position, once, when the media is ready.
+            if (!didResume && resumePositionMs > 3000L && duration > 0L &&
+                exoPlayer.playbackState == Player.STATE_READY
+            ) {
+                exoPlayer.seekTo(resumePositionMs)
+                didResume = true
+            }
+
+            // Persist progress every ~10s of playback.
+            if (isPlaying && duration > 0L && ++tick % 20 == 0) {
+                viewModel.saveWatchProgress(currentPosition, duration)
+            }
+
             // Skip & Auto-Next Logic
             if (duration > 0) {
                 val inIntroRange = currentPosition in 5000L..90000L

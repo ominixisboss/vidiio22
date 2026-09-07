@@ -13,6 +13,7 @@ import com.example.vidiio.data.repository.FavoriteRepository
 import com.example.vidiio.data.repository.MovieRepository
 import com.example.vidiio.data.repository.SettingsRepository
 import com.example.vidiio.data.repository.DownloadRepository
+import com.example.vidiio.data.repository.WatchProgressRepository
 import com.example.vidiio.download.DownloadManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.*
@@ -38,9 +39,14 @@ class DetailsViewModel(
     private val downloadManager: DownloadManager,
     private val subdlService: SubdlService,
     private val settingsRepository: SettingsRepository,
+    private val watchProgressRepository: WatchProgressRepository,
     private val movie: Movie,
     private val initialEpisodeId: String? = null
 ) : ViewModel() {
+
+    /** Position (ms) to resume playback from, resolved from saved Continue Watching progress. */
+    private val _resumePositionMs = MutableStateFlow(0L)
+    val resumePositionMs: StateFlow<Long> = _resumePositionMs.asStateFlow()
 
     private val _movie = MutableStateFlow<Movie?>(null)
     private val _allFoundSources = MutableStateFlow<List<StreamSource>>(emptyList())
@@ -134,6 +140,15 @@ class DetailsViewModel(
                 }
                 _selectedEpisode.value = selectedEpisode
                 
+                // Resume point for Continue Watching: only when the saved episode matches
+                // (or it's a movie).
+                runCatching {
+                    val saved = watchProgressRepository.get(fullMovie.id)
+                    if (saved != null && (saved.episodeId == null || saved.episodeId == selectedEpisode?.id)) {
+                        _resumePositionMs.value = saved.positionMs
+                    }
+                }
+
                 val subtitles = getSubtitles(fullMovie)
                 _subtitles.value = subtitles
 
@@ -210,6 +225,16 @@ class DetailsViewModel(
             movie.title
         }
         downloadManager.enqueue(title, source.url, source.headers)
+    }
+
+    /** Called periodically by the player to persist the Continue Watching position. */
+    fun saveWatchProgress(positionMs: Long, durationMs: Long) {
+        val current = _movie.value ?: return
+        viewModelScope.launch {
+            runCatching {
+                watchProgressRepository.save(current, _selectedEpisode.value, positionMs, durationMs)
+            }
+        }
     }
 
     fun getDownloadStatus(url: String): Flow<DownloadStatus?> {
