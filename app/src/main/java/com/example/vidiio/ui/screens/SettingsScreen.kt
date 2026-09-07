@@ -173,8 +173,8 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         SwitchPreferenceItem(
-                            title = "Avoid camera cutout",
-                            summary = "Inset the video player around the front camera",
+                            title = "Keep camera hole clear",
+                            summary = "Player fills the screen but stops short of the front camera",
                             icon = Icons.Rounded.AspectRatio,
                             checked = avoidCameraCutout,
                             onCheckedChange = { viewModel.setAvoidCameraCutout(it) }

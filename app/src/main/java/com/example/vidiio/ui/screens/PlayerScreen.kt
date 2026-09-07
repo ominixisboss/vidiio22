@@ -135,16 +135,24 @@ fun PlayerScreen(
     val settingsRepo = remember {
         (context.applicationContext as VidiioApplication).settingsRepository
     }
-    val avoidCutout by settingsRepo.avoidCameraCutoutFlow.collectAsState(initial = false)
+    val avoidCutoutSetting by settingsRepo.avoidCameraCutoutFlow.collectAsState(initial = false)
+    // Player-session copy so the Aspect menu can flip it live; seeded from the setting.
+    var notchSafe by remember { mutableStateOf(false) }
+    var notchSafeInit by remember { mutableStateOf(false) }
+    LaunchedEffect(avoidCutoutSetting) {
+        if (!notchSafeInit) { notchSafe = avoidCutoutSetting; notchSafeInit = true }
+    }
 
-    // Keep the picture clear of the front-camera cutout when the user asks for it.
-    DisposableEffect(avoidCutout) {
+    // "Fill, keep camera clear": NEVER lets Android letterbox the window just enough to
+    // clear the camera hole; otherwise SHORT_EDGES fills into it. Belt-and-braces, the
+    // video surface is also inset by the cutout below.
+    DisposableEffect(notchSafe) {
         val window = activity?.window
         val original = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
             window?.attributes?.layoutInDisplayCutoutMode else null
         if (window != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (avoidCutout)
+                layoutInDisplayCutoutMode = if (notchSafe)
                     android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
                 else
                     android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
@@ -154,9 +162,7 @@ fun PlayerScreen(
             if (window != null && original != null &&
                 android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P
             ) {
-                window.attributes = window.attributes.apply {
-                    layoutInDisplayCutoutMode = original
-                }
+                window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = original }
             }
         }
     }
@@ -200,6 +206,12 @@ fun PlayerScreen(
     val torrentStatus by (torrentService?.torrentManager?.status?.collectAsState() ?: remember { mutableStateOf(null) })
     var torrentFiles by remember { mutableStateOf<List<TorrentFileInfo>?>(null) }
     var showTorrentFileSheet by remember { mutableStateOf(false) }
+    // Once the user (or the addon) picks a file from a multi-file torrent, keep it so a
+    // Retry re-uses the same file instead of re-opening the picker.
+    var pickedTorrentFileIndex by remember(selectedSource) { mutableStateOf<Int?>(null) }
+    var torrentPrepareRetries by remember(selectedSource) { mutableIntStateOf(0) }
+    var isTorrentStream by remember { mutableStateOf(false) }
+    var retryTrigger by remember { mutableIntStateOf(0) }
 
     val downloadStatus by remember(selectedSource) {
         selectedSource?.let { viewModel.getDownloadStatus(it.url) } ?: flowOf(null)
@@ -232,7 +244,16 @@ fun PlayerScreen(
             .build().apply {
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
-                        errorMessage = "Playback Error: ${error.localizedMessage}"
+                        // A fresh torrent often 'Source error's for the first 10-30s while
+                        // TorrServer finds peers and buffers. Silently re-kick the stream a
+                        // couple of times (the picked file is remembered) before giving up.
+                        if (isTorrentStream && torrentPrepareRetries < 3) {
+                            torrentPrepareRetries++
+                            isTorrentLoading = true
+                            scope.launch { delay(4000); retryTrigger++ }
+                        } else {
+                            errorMessage = "Playback Error: ${error.localizedMessage}"
+                        }
                     }
                     override fun onTracksChanged(tracks: Tracks) {
                         val tracksList = mutableListOf<AudioTrackInfo>()
@@ -332,8 +353,6 @@ fun PlayerScreen(
         }
     }
 
-    var retryTrigger by remember { mutableIntStateOf(0) }
-
     // Playback Logic
     fun startPlayback(source: StreamSource) {
         exoPlayer.stop()
@@ -373,16 +392,22 @@ fun PlayerScreen(
                 service.getMetadata(source.url) { files ->
                     timeoutJob.cancel()
                     if (files != null) {
-                        // Skip the picker when the addon already told us which file to use.
+                        val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
+                        // Show the picker only for a genuinely ambiguous multi-file torrent that
+                        // nobody has resolved yet: not an addon pick, not an already-picked file,
+                        // and more than one *video* file (subtitles/samples don't count).
                         val addonPicked = source.fileName != null || source.fileIndex != null
-                        if (files.size > 1 && !addonPicked) {
-                            torrentFiles = files
+                        val videoFiles = files.filter { it.isMedia }
+                        val needsPicker = pickedTorrentFileIndex == null && !addonPicked &&
+                            selectedEpisode == null && videoFiles.size > 1
+                        if (needsPicker) {
+                            torrentFiles = (videoFiles.ifEmpty { files }).sortedByDescending { it.size }
                             showTorrentFileSheet = true
                             isTorrentLoading = false
                         } else {
-                            val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
+                            isTorrentStream = true
                             service.startStreaming(
-                                fileIndex = -1,
+                                fileIndex = pickedTorrentFileIndex ?: -1,
                                 season = selectedEpisode?.seasonNumber,
                                 episode = selectedEpisode?.episodeNumber,
                                 fileName = source.fileName
@@ -401,6 +426,7 @@ fun PlayerScreen(
                     }
                 }
             } else if (!source.url.contains("embed")) {
+                isTorrentStream = false
                 startPlayback(source)
             }
         }
@@ -508,7 +534,12 @@ fun PlayerScreen(
                 update = { view ->
                     view.resizeMode = resizeMode
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (notchSafe) Modifier.windowInsetsPadding(WindowInsets.displayCutout)
+                        else Modifier
+                    )
             )
         }
 
@@ -784,8 +815,11 @@ fun PlayerScreen(
             AspectMenu(
                 currentMode = resizeMode,
                 onModeSelect = { resizeMode = it },
-                avoidCutout = avoidCutout,
-                onToggleAvoidCutout = { scope.launch { settingsRepo.setAvoidCameraCutout(it) } },
+                avoidCutout = notchSafe,
+                onToggleAvoidCutout = {
+                    notchSafe = it
+                    scope.launch { settingsRepo.setAvoidCameraCutout(it) }
+                },
                 onDismiss = { showAspectMenu = false }
             )
         }
@@ -796,7 +830,9 @@ fun PlayerScreen(
                 files = torrentFiles!!,
                 onFileSelect = { file ->
                     isTorrentLoading = true
-                    torrentService?.startStreaming(file.index, null, null) { streamUrl ->
+                    pickedTorrentFileIndex = file.index
+                    isTorrentStream = true
+                    torrentService?.startStreaming(fileIndex = file.index) { streamUrl ->
                         isTorrentLoading = false
                         if (streamUrl.isNotEmpty()) {
                             startPlayback(StreamSource(serverName = file.name, url = streamUrl, isM3u8 = false))
