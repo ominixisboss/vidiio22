@@ -15,6 +15,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.window.core.layout.WindowSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -53,6 +54,9 @@ fun VidiioApp() {
     val subdlService = application.subdlService
     val watchProgressRepository = application.watchProgressRepository
 
+    val homeStyle by settingsRepository.homeStyleFlow
+        .collectAsState(initial = com.example.vidiio.data.repository.HomeStyle.VIDIIO)
+
     val entryProvider = entryProvider<NavKey> {
         entry<VidiioRoute.Splash> {
             SplashScreen(
@@ -63,10 +67,7 @@ fun VidiioApp() {
         }
         entry<VidiioRoute.Home>(
             metadata = metadata {
-                put(NavDisplay.TransitionKey) {
-                    fadeIn(tween(400)) + scaleIn(initialScale = 0.92f, animationSpec = tween(400)) togetherWith
-                    fadeOut(tween(400)) + scaleOut(targetScale = 0.92f, animationSpec = tween(400))
-                }
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
             }
         ) {
             val viewModel: com.example.vidiio.ui.viewmodel.HomeViewModel = viewModel(
@@ -87,10 +88,7 @@ fun VidiioApp() {
         }
         entry<VidiioRoute.Search>(
             metadata = metadata {
-                put(NavDisplay.TransitionKey) {
-                    fadeIn(tween(400)) + scaleIn(initialScale = 0.92f, animationSpec = tween(400)) togetherWith
-                    fadeOut(tween(400)) + scaleOut(targetScale = 0.92f, animationSpec = tween(400))
-                }
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
             }
         ) {
             val viewModel: com.example.vidiio.ui.viewmodel.SearchViewModel = viewModel(
@@ -104,10 +102,7 @@ fun VidiioApp() {
         }
         entry<VidiioRoute.Favorites>(
             metadata = metadata {
-                put(NavDisplay.TransitionKey) {
-                    fadeIn(tween(400)) + scaleIn(initialScale = 0.92f, animationSpec = tween(400)) togetherWith
-                    fadeOut(tween(400)) + scaleOut(targetScale = 0.92f, animationSpec = tween(400))
-                }
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
             }
         ) {
             val viewModel: com.example.vidiio.ui.viewmodel.FavoritesViewModel = viewModel(
@@ -121,10 +116,7 @@ fun VidiioApp() {
         }
         entry<VidiioRoute.Downloads>(
             metadata = metadata {
-                put(NavDisplay.TransitionKey) {
-                    fadeIn(tween(400)) + scaleIn(initialScale = 0.92f, animationSpec = tween(400)) togetherWith
-                    fadeOut(tween(400)) + scaleOut(targetScale = 0.92f, animationSpec = tween(400))
-                }
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
             }
         ) {
             val viewModel: com.example.vidiio.ui.viewmodel.DownloadsViewModel = viewModel(
@@ -145,10 +137,7 @@ fun VidiioApp() {
         }
         entry<VidiioRoute.Settings>(
             metadata = metadata {
-                put(NavDisplay.TransitionKey) {
-                    fadeIn(tween(400)) + scaleIn(initialScale = 0.92f, animationSpec = tween(400)) togetherWith
-                    fadeOut(tween(400)) + scaleOut(targetScale = 0.92f, animationSpec = tween(400))
-                }
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
             }
         ) {
             val viewModel: com.example.vidiio.ui.viewmodel.SettingsViewModel = viewModel(
@@ -165,10 +154,7 @@ fun VidiioApp() {
         }
         entry<VidiioRoute.Details>(
             metadata = metadata {
-                put(NavDisplay.TransitionKey) {
-                    slideInHorizontally(tween(400)) { it } + fadeIn(tween(400)) togetherWith
-                    slideOutHorizontally(tween(400)) { -it } + fadeOut(tween(400))
-                }
+                put(NavDisplay.TransitionKey) { homeStyle.detailTransition() }
             }
         ) { key ->
             val viewModel: com.example.vidiio.ui.viewmodel.DetailsViewModel = viewModel(

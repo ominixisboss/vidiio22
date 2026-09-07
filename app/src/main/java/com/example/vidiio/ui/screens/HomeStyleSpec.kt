@@ -1,5 +1,18 @@
 package com.example.vidiio.ui.screens
 
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -40,10 +53,57 @@ data class HomeStyleSpec(
     val rowHeaderSize: TextUnit,
     val rowHeaderWeight: FontWeight,
     val uppercaseHeaders: Boolean,
-    val showTop10: Boolean
+    val showTop10: Boolean,
+    // --- motion ---
+    /** Slow zoom/pan on the hero image (Netflix / Disney+ feel). */
+    val kenBurns: Boolean = false,
+    /** Scale a card shrinks to while pressed. 1f = no reaction. */
+    val cardPressScale: Float = 0.95f,
+    /** Overshooting spring on card press + row entrance (Disney+ feel). */
+    val bouncyCards: Boolean = false,
+    /** Fade/slide row cards in as they first appear. */
+    val staggerIn: Boolean = false
 ) {
     val cardHeight: Dp
         get() = if (card == CardKind.PORTRAIT) cardWidth * 3f / 2f else cardWidth * 9f / 16f
+}
+
+/** Navigation transition for switching between the top-level tabs. */
+fun HomeStyle.topLevelTransition(): ContentTransform = when (this) {
+    HomeStyle.VIDIIO ->
+        fadeIn(tween(400)) + scaleIn(initialScale = 0.92f, animationSpec = tween(400)) togetherWith
+            fadeOut(tween(400)) + scaleOut(targetScale = 0.92f, animationSpec = tween(400))
+    HomeStyle.NETFLIX ->
+        fadeIn(tween(350)) togetherWith fadeOut(tween(350))
+    HomeStyle.HULU ->
+        fadeIn(tween(180)) togetherWith fadeOut(tween(180))
+    HomeStyle.PRIME ->
+        fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it / 12 } togetherWith
+            fadeOut(tween(300)) + slideOutHorizontally(tween(300)) { -it / 12 }
+    HomeStyle.DISNEY ->
+        fadeIn(tween(400)) + scaleIn(
+            initialScale = 0.85f,
+            animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow)
+        ) togetherWith fadeOut(tween(300)) + scaleOut(targetScale = 1.08f, animationSpec = tween(300))
+}
+
+/** Navigation transition for opening a Details screen. */
+fun HomeStyle.detailTransition(): ContentTransform = when (this) {
+    HomeStyle.VIDIIO ->
+        slideInHorizontally(tween(400)) { it } + fadeIn(tween(400)) togetherWith
+            slideOutHorizontally(tween(400)) { -it } + fadeOut(tween(400))
+    HomeStyle.NETFLIX ->
+        fadeIn(tween(320)) + scaleIn(initialScale = 1.08f, animationSpec = tween(320)) togetherWith
+            fadeOut(tween(320)) + scaleOut(targetScale = 1.08f, animationSpec = tween(320))
+    HomeStyle.HULU ->
+        fadeIn(tween(180)) togetherWith fadeOut(tween(180))
+    HomeStyle.PRIME ->
+        slideInVertically(tween(320)) { it / 6 } + fadeIn(tween(320)) togetherWith fadeOut(tween(240))
+    HomeStyle.DISNEY ->
+        scaleIn(
+            initialScale = 0.8f,
+            animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow)
+        ) + fadeIn(tween(300)) togetherWith fadeOut(tween(260)) + scaleOut(targetScale = 0.92f)
 }
 
 /**
@@ -67,7 +127,8 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         rowHeaderSize = 22.sp,
         rowHeaderWeight = FontWeight.Bold,
         uppercaseHeaders = false,
-        showTop10 = true
+        showTop10 = true,
+        cardPressScale = 0.95f
     )
     HomeStyle.NETFLIX -> HomeStyleSpec(
         label = "Netflix",
@@ -85,7 +146,9 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         rowHeaderSize = 19.sp,
         rowHeaderWeight = FontWeight.Bold,
         uppercaseHeaders = false,
-        showTop10 = true
+        showTop10 = true,
+        kenBurns = true,
+        cardPressScale = 0.93f
     )
     HomeStyle.HULU -> HomeStyleSpec(
         label = "Hulu",
@@ -103,7 +166,8 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         rowHeaderSize = 16.sp,
         rowHeaderWeight = FontWeight.SemiBold,
         uppercaseHeaders = true,
-        showTop10 = false
+        showTop10 = false,
+        cardPressScale = 1f
     )
     HomeStyle.PRIME -> HomeStyleSpec(
         label = "Prime",
@@ -121,7 +185,8 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         rowHeaderSize = 20.sp,
         rowHeaderWeight = FontWeight.Bold,
         uppercaseHeaders = false,
-        showTop10 = false
+        showTop10 = false,
+        cardPressScale = 0.96f
     )
     HomeStyle.DISNEY -> HomeStyleSpec(
         label = "Disney+",
@@ -139,6 +204,10 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         rowHeaderSize = 22.sp,
         rowHeaderWeight = FontWeight.ExtraBold,
         uppercaseHeaders = false,
-        showTop10 = true
+        showTop10 = true,
+        kenBurns = true,
+        cardPressScale = 0.9f,
+        bouncyCards = true,
+        staggerIn = true
     )
 }

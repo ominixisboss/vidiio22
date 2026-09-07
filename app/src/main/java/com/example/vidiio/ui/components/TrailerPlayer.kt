@@ -15,22 +15,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 
 /**
- * Muted, auto-playing, looping YouTube trailer rendered full-bleed (CSS "cover" crop)
- * via the YouTube IFrame API in a WebView. Autoplay only works while muted, so [muted]
- * starts true and the caller supplies an unmute control.
+ * Looping YouTube trailer rendered full-bleed (CSS "cover" crop) via the YouTube
+ * IFrame API in a WebView, on the youtube-nocookie host (avoids the common
+ * "embedding disabled" 152 error).
  *
- * Many studio trailers block embedding; [onUnavailable] fires so the caller can fall
- * back to artwork.
+ * @param playing  drives play/pause (e.g. pause when scrolled out of view).
+ * @param muted    autoplay only works while muted, so callers start muted.
+ * @param controls show native YouTube controls (used in the fullscreen view).
+ * @param interactive let touches reach the player (fullscreen) vs. pass through (inline background).
+ * @param onUnavailable fires when the video blocks embedding or never starts.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun TrailerPlayer(
     videoId: String,
+    playing: Boolean,
     muted: Boolean,
     modifier: Modifier = Modifier,
+    controls: Boolean = false,
+    interactive: Boolean = false,
     onUnavailable: () -> Unit = {}
 ) {
-    val html = remember(videoId) { buildHtml(videoId) }
+    val html = remember(videoId, controls, interactive) { buildHtml(videoId, controls, interactive) }
     val currentOnUnavailable by rememberUpdatedState(onUnavailable)
 
     Box(modifier = modifier) {
@@ -72,6 +78,7 @@ fun TrailerPlayer(
             },
             update = { wv ->
                 wv.evaluateJavascript("window.setMuted && setMuted(${muted});", null)
+                wv.evaluateJavascript("window.setPlaying && setPlaying(${playing});", null)
             },
             onRelease = { wv ->
                 wv.loadUrl("about:blank")
@@ -83,7 +90,10 @@ fun TrailerPlayer(
     }
 }
 
-private fun buildHtml(videoId: String): String = """
+private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean): String {
+    val pe = if (interactive) "auto" else "none"
+    val ctl = if (controls) 1 else 0
+    return """
 <!DOCTYPE html>
 <html>
 <head>
@@ -91,7 +101,7 @@ private fun buildHtml(videoId: String): String = """
 <style>
   html,body{margin:0;padding:0;background:#000;overflow:hidden;height:100%}
   #wrap{position:fixed;inset:0;overflow:hidden}
-  #wrap,#wrap *{pointer-events:none !important}
+  #wrap,#wrap *{pointer-events:$pe !important}
   #player{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
           width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh}
 </style>
@@ -100,25 +110,31 @@ private fun buildHtml(videoId: String): String = """
 <div id="wrap"><div id="player"></div></div>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-  var player, ready=false, wantMuted=true, failed=false;
+  var player, ready=false, wantMuted=true, wantPlaying=true, failed=false;
   function fail(){ if(failed)return; failed=true; try{ AndroidTrailer.onUnavailable(); }catch(e){} }
   function onYouTubeIframeAPIReady(){
     player=new YT.Player('player',{
       host:'https://www.youtube-nocookie.com',
       videoId:'$videoId',
-      playerVars:{autoplay:1,controls:0,mute:1,loop:1,playlist:'$videoId',
-                  playsinline:1,modestbranding:1,rel:0,fs:0,disablekb:1,iv_load_policy:3},
+      playerVars:{autoplay:1,controls:$ctl,mute:1,loop:1,playlist:'$videoId',
+                  playsinline:1,modestbranding:1,rel:0,fs:1,disablekb:1,iv_load_policy:3},
       events:{
-        onReady:function(e){ ready=true; e.target.mute(); e.target.playVideo(); applyMute(); },
+        onReady:function(e){ ready=true; e.target.mute(); apply(); },
         onError:function(){ fail(); },
         onStateChange:function(e){ if(e.data===YT.PlayerState.ENDED){ e.target.seekTo(0); e.target.playVideo(); } }
       }
     });
   }
-  function applyMute(){ if(!ready)return; if(wantMuted){player.mute();}else{player.unMute();player.setVolume(100);} }
-  window.setMuted=function(m){ wantMuted=m; applyMute(); };
+  function apply(){
+    if(!ready)return;
+    if(wantMuted){player.mute();}else{player.unMute();player.setVolume(100);}
+    if(wantPlaying){player.playVideo();}else{player.pauseVideo();}
+  }
+  window.setMuted=function(m){ wantMuted=m; apply(); };
+  window.setPlaying=function(p){ wantPlaying=p; apply(); };
   setTimeout(function(){ if(!ready) fail(); }, 6000);
 </script>
 </body>
 </html>
 """.trimIndent()
+}
