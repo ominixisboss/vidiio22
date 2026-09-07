@@ -200,6 +200,12 @@ fun PlayerScreen(
     val torrentStatus by (torrentService?.torrentManager?.status?.collectAsState() ?: remember { mutableStateOf(null) })
     var torrentFiles by remember { mutableStateOf<List<TorrentFileInfo>?>(null) }
     var showTorrentFileSheet by remember { mutableStateOf(false) }
+    // Once the user (or the addon) picks a file from a multi-file torrent, keep it so a
+    // Retry re-uses the same file instead of re-opening the picker.
+    var pickedTorrentFileIndex by remember(selectedSource) { mutableStateOf<Int?>(null) }
+    var torrentPrepareRetries by remember(selectedSource) { mutableIntStateOf(0) }
+    var isTorrentStream by remember { mutableStateOf(false) }
+    var retryTrigger by remember { mutableIntStateOf(0) }
 
     val downloadStatus by remember(selectedSource) {
         selectedSource?.let { viewModel.getDownloadStatus(it.url) } ?: flowOf(null)
@@ -232,7 +238,16 @@ fun PlayerScreen(
             .build().apply {
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
-                        errorMessage = "Playback Error: ${error.localizedMessage}"
+                        // A fresh torrent often 'Source error's for the first 10-30s while
+                        // TorrServer finds peers and buffers. Silently re-kick the stream a
+                        // couple of times (the picked file is remembered) before giving up.
+                        if (isTorrentStream && torrentPrepareRetries < 3) {
+                            torrentPrepareRetries++
+                            isTorrentLoading = true
+                            scope.launch { delay(4000); retryTrigger++ }
+                        } else {
+                            errorMessage = "Playback Error: ${error.localizedMessage}"
+                        }
                     }
                     override fun onTracksChanged(tracks: Tracks) {
                         val tracksList = mutableListOf<AudioTrackInfo>()
@@ -332,8 +347,6 @@ fun PlayerScreen(
         }
     }
 
-    var retryTrigger by remember { mutableIntStateOf(0) }
-
     // Playback Logic
     fun startPlayback(source: StreamSource) {
         exoPlayer.stop()
@@ -373,16 +386,22 @@ fun PlayerScreen(
                 service.getMetadata(source.url) { files ->
                     timeoutJob.cancel()
                     if (files != null) {
-                        // Skip the picker when the addon already told us which file to use.
+                        val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
+                        // Show the picker only for a genuinely ambiguous multi-file torrent that
+                        // nobody has resolved yet: not an addon pick, not an already-picked file,
+                        // and more than one *video* file (subtitles/samples don't count).
                         val addonPicked = source.fileName != null || source.fileIndex != null
-                        if (files.size > 1 && !addonPicked) {
-                            torrentFiles = files
+                        val videoFiles = files.filter { it.isMedia }
+                        val needsPicker = pickedTorrentFileIndex == null && !addonPicked &&
+                            selectedEpisode == null && videoFiles.size > 1
+                        if (needsPicker) {
+                            torrentFiles = (videoFiles.ifEmpty { files }).sortedByDescending { it.size }
                             showTorrentFileSheet = true
                             isTorrentLoading = false
                         } else {
-                            val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
+                            isTorrentStream = true
                             service.startStreaming(
-                                fileIndex = -1,
+                                fileIndex = pickedTorrentFileIndex ?: -1,
                                 season = selectedEpisode?.seasonNumber,
                                 episode = selectedEpisode?.episodeNumber,
                                 fileName = source.fileName
@@ -401,6 +420,7 @@ fun PlayerScreen(
                     }
                 }
             } else if (!source.url.contains("embed")) {
+                isTorrentStream = false
                 startPlayback(source)
             }
         }
@@ -796,7 +816,9 @@ fun PlayerScreen(
                 files = torrentFiles!!,
                 onFileSelect = { file ->
                     isTorrentLoading = true
-                    torrentService?.startStreaming(file.index, null, null) { streamUrl ->
+                    pickedTorrentFileIndex = file.index
+                    isTorrentStream = true
+                    torrentService?.startStreaming(fileIndex = file.index) { streamUrl ->
                         isTorrentLoading = false
                         if (streamUrl.isNotEmpty()) {
                             startPlayback(StreamSource(serverName = file.name, url = streamUrl, isM3u8 = false))
