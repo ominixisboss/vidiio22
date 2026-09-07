@@ -12,7 +12,6 @@ import com.example.vidiio.data.model.DownloadStatus
 import com.example.vidiio.data.model.DownloadTask
 import com.example.vidiio.data.model.DownloadType
 import com.example.vidiio.data.repository.DownloadRepository
-import com.frostwire.jlibtorrent.SessionManager
 import kotlinx.coroutines.*
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -26,7 +25,6 @@ class DownloadService : Service() {
     private lateinit var torrentDownloader: TorrentDownloader
     private lateinit var httpDownloader: HttpDownloader
     private lateinit var notificationManager: NotificationManager
-    private lateinit var torrentSession: SessionManager
 
     companion object {
         private const val CHANNEL_ID = "downloads_channel"
@@ -39,21 +37,15 @@ class DownloadService : Service() {
         super.onCreate()
         val app = application as VidiioApplication
         repository = app.downloadRepository
-        torrentSession = app.torrentEngine.getSession() ?: SessionManager()
-        torrentDownloader = TorrentDownloader(torrentSession)
         httpDownloader = HttpDownloader(app.playbackHttpClient)
+        torrentDownloader = TorrentDownloader(this, httpDownloader)
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_REMOVE) {
-            val url = intent.getStringExtra(EXTRA_URL)
-            if (url != null) {
-                torrentDownloader.remove(url)
-            }
-        }
-        
+        // ACTION_REMOVE is handled by cancelling the job in processQueue() once the row is gone.
+
         startForeground(NOTIFICATION_ID, createNotification("Starting downloads...", 0f))
         processQueue()
         return START_STICKY

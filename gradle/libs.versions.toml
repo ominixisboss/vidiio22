@@ -45,7 +45,6 @@ datastorePreferences = "1.2.1"
 material = "1.14.0"
 jsoup = "1.23.2"
 media3 = "1.11.0"
-jlibtorrent = "1.2.0.18"
 riveAndroid = "11.11.0"
 
 [libraries]
@@ -108,11 +107,6 @@ media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "medi
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 media3-cast = { group = "androidx.media3", name = "media3-cast", version.ref = "media3" }
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version = "22.3.1" }
-libtorrentjava = { group = "com.frostwire", name = "jlibtorrent", version.ref = "jlibtorrent" }
-libtorrentarm = { group = "com.frostwire", name = "jlibtorrent-android-arm", version.ref = "jlibtorrent" }
-libtorrentarm64 = { group = "com.frostwire", name = "jlibtorrent-android-arm64", version.ref = "jlibtorrent" }
-libtorrentx86 = { group = "com.frostwire", name = "jlibtorrent-android-x86", version.ref = "jlibtorrent" }
-libtorrentx8664 = { group = "com.frostwire", name = "jlibtorrent-android-x86_64", version.ref = "jlibtorrent" }
 rive-android = { group = "app.rive", name = "rive-android", version.ref = "riveAndroid" }
 
 [plugins]
