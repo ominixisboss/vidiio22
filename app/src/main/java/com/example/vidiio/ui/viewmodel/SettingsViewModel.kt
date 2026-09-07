@@ -7,6 +7,7 @@ import coil.annotation.ExperimentalCoilApi
 import coil.imageLoader
 import com.example.vidiio.data.repository.AppTheme
 import com.example.vidiio.data.repository.ColorTheme
+import com.example.vidiio.data.repository.HomeStyle
 import com.example.vidiio.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +30,9 @@ class SettingsViewModel(
 
     val dynamicColorEnabled: StateFlow<Boolean> = settingsRepository.dynamicColorFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val homeStyle: StateFlow<HomeStyle> = settingsRepository.homeStyleFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeStyle.VIDIIO)
 
     val selectedSources: StateFlow<Set<String>> = settingsRepository.sourcesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf("vidsrc", "videasy", "vadapav", "vuflix", "cinejoy", "movy", "a111477", "knaben", "tg"))
@@ -54,6 +58,12 @@ class SettingsViewModel(
     fun setColorTheme(theme: ColorTheme) {
         viewModelScope.launch {
             settingsRepository.setColorTheme(theme)
+        }
+    }
+
+    fun setHomeStyle(style: HomeStyle) {
+        viewModelScope.launch {
+            settingsRepository.setHomeStyle(style)
         }
     }
 

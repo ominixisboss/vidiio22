@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vidiio.data.repository.AppTheme
 import com.example.vidiio.data.repository.ColorTheme
+import com.example.vidiio.data.repository.HomeStyle
 import com.example.vidiio.ui.theme.*
 import com.example.vidiio.ui.components.GlassCard
 import com.example.vidiio.ui.viewmodel.SettingsViewModel
@@ -40,6 +41,7 @@ fun SettingsScreen(
     val theme by viewModel.theme.collectAsState()
     val colorTheme by viewModel.colorTheme.collectAsState()
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsState()
+    val homeStyle by viewModel.homeStyle.collectAsState()
     val selectedSources by viewModel.selectedSources.collectAsState()
     val stremioAddons by viewModel.stremioAddons.collectAsState()
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
@@ -110,6 +112,18 @@ fun SettingsScreen(
                         ColorThemeSelectionRow(
                             currentColorTheme = colorTheme,
                             onColorThemeSelected = { viewModel.setColorTheme(it) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        PreferenceItem(
+                            title = "Home Layout",
+                            summary = homeStyle.spec(MaterialTheme.colorScheme.primary).label +
+                                " — restyles the Home tab",
+                            icon = Icons.Rounded.Dashboard,
+                            onClick = { }
+                        )
+                        HomeStyleSelectionRow(
+                            current = homeStyle,
+                            onSelected = { viewModel.setHomeStyle(it) }
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         SwitchPreferenceItem(
@@ -329,6 +343,30 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeStyleSelectionRow(
+    current: HomeStyle,
+    onSelected: (HomeStyle) -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        HomeStyle.entries.forEach { style ->
+            FilterChip(
+                selected = current == style,
+                onClick = { onSelected(style) },
+                label = { Text(style.spec(accent).label) }
+            )
+        }
     }
 }
 
