@@ -176,8 +176,13 @@ fun PlayerScreen(
     val isDownloading = downloadStatus != null && downloadStatus != DownloadStatus.COMPLETED && downloadStatus != DownloadStatus.FAILED && downloadStatus != DownloadStatus.CANCELLED
 
     // Media3 Player
-    val dataSourceFactory = remember {
+    // OkHttp for http(s); DefaultDataSource delegates file:// / content:// (offline downloads)
+    // to FileDataSource / ContentDataSource.
+    val httpDataSourceFactory = remember {
         OkHttpDataSource.Factory((context.applicationContext as VidiioApplication).playbackHttpClient)
+    }
+    val dataSourceFactory = remember {
+        androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
     }
     val exoPlayer = remember {
 
@@ -293,7 +298,7 @@ fun PlayerScreen(
                 "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
             source.headers?.let { putAll(it) }
         }
-        dataSourceFactory.setDefaultRequestProperties(requestHeaders)
+        httpDataSourceFactory.setDefaultRequestProperties(requestHeaders)
 
         val mediaItem = MediaItem.Builder()
             .setUri(source.url)

@@ -20,19 +20,19 @@ class DownloadManager(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun enqueue(title: String, url: String, headers: Map<String, String>? = null) {
-        val isMagnet = url.startsWith("magnet:")
-        // Progressive HTTP files only. Embed pages and HLS playlists aren't a single file.
-        val isPlainHttp = url.startsWith("http") &&
-            !url.contains(".m3u8") &&
-            !url.contains("embed") &&
-            !url.contains("vidsrc")
-        if (!isMagnet && !isPlainHttp) return
-
+        val type = when {
+            url.startsWith("magnet:") -> DownloadType.TORRENT
+            !url.startsWith("http") -> return
+            // Embed/webview pages have no direct media URL to save.
+            url.contains("embed") || url.contains("vidsrc") -> return
+            url.contains(".m3u8") -> DownloadType.HLS
+            else -> DownloadType.HTTP
+        }
         scope.launch {
             val task = DownloadTask(
                 title = title,
                 url = url,
-                type = if (isMagnet) DownloadType.TORRENT else DownloadType.HTTP,
+                type = type,
                 status = DownloadStatus.QUEUED,
                 headersJson = headers?.takeIf { it.isNotEmpty() }?.let { org.json.JSONObject(it).toString() }
             )

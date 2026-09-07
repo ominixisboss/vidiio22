@@ -24,6 +24,7 @@ class DownloadService : Service() {
     private lateinit var repository: DownloadRepository
     private lateinit var torrentDownloader: TorrentDownloader
     private lateinit var httpDownloader: HttpDownloader
+    private lateinit var hlsDownloader: HlsDownloader
     private lateinit var notificationManager: NotificationManager
 
     companion object {
@@ -38,6 +39,7 @@ class DownloadService : Service() {
         val app = application as VidiioApplication
         repository = app.downloadRepository
         httpDownloader = HttpDownloader(app.playbackHttpClient)
+        hlsDownloader = HlsDownloader(app.playbackHttpClient)
         torrentDownloader = TorrentDownloader(this, httpDownloader)
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
@@ -95,6 +97,7 @@ class DownloadService : Service() {
             }
             val result = when (task.type) {
                 DownloadType.HTTP -> httpDownloader.download(task, destDir, onProgress) { !isActive }
+                DownloadType.HLS -> hlsDownloader.download(task, destDir, onProgress) { !isActive }
                 DownloadType.TORRENT -> torrentDownloader.download(task, destDir, onProgress) { !isActive }
             }
 

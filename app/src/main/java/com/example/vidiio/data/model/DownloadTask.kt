@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 
 enum class DownloadType {
-    TORRENT, HTTP
+    TORRENT, HTTP, HLS
 }
 
 enum class DownloadStatus {
