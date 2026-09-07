@@ -34,6 +34,7 @@ class SettingsRepository(private val context: Context) {
         val COLOR_THEME = stringPreferencesKey("color_theme")
         val HOME_STYLE = stringPreferencesKey("home_style")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+        val AVOID_CAMERA_CUTOUT = booleanPreferencesKey("avoid_camera_cutout")
         val SOURCES = stringSetPreferencesKey("sources")
         val STREMIO_ADDONS = stringSetPreferencesKey("stremio_addons")
         val SUBDL_API_KEY = stringPreferencesKey("subdl_api_key")
@@ -68,6 +69,11 @@ class SettingsRepository(private val context: Context) {
 
     val dynamicColorFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[PreferencesKeys.DYNAMIC_COLOR] ?: true
+    }
+
+    /** When true, the video player is inset so the front-camera cutout never covers the picture. */
+    val avoidCameraCutoutFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.AVOID_CAMERA_CUTOUT] ?: false
     }
 
     val sourcesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
@@ -109,6 +115,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDynamicColor(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.DYNAMIC_COLOR] = enabled
+        }
+    }
+
+    suspend fun setAvoidCameraCutout(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AVOID_CAMERA_CUTOUT] = enabled
         }
     }
 

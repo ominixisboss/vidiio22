@@ -14,6 +14,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 
+enum class TrailerFit { COVER, CONTAIN }
+
 /**
  * Looping YouTube trailer rendered full-bleed (CSS "cover" crop) via the YouTube
  * IFrame API in a WebView, on the youtube-nocookie host (avoids the common
@@ -35,10 +37,11 @@ fun TrailerPlayer(
     controls: Boolean = false,
     interactive: Boolean = false,
     startMuted: Boolean = true,
+    fit: TrailerFit = TrailerFit.COVER,
     onUnavailable: () -> Unit = {}
 ) {
-    val html = remember(videoId, controls, interactive, startMuted) {
-        buildHtml(videoId, controls, interactive, startMuted)
+    val html = remember(videoId, controls, interactive, startMuted, fit) {
+        buildHtml(videoId, controls, interactive, startMuted, fit)
     }
     val currentOnUnavailable by rememberUpdatedState(onUnavailable)
 
@@ -93,11 +96,22 @@ fun TrailerPlayer(
     }
 }
 
-private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean, startMuted: Boolean): String {
+private fun buildHtml(
+    videoId: String,
+    controls: Boolean,
+    interactive: Boolean,
+    startMuted: Boolean,
+    fit: TrailerFit
+): String {
     val pe = if (interactive) "auto" else "none"
     val ctl = if (controls) 1 else 0
     val mute0 = if (startMuted) 1 else 0
     val wantMutedInit = if (startMuted) "true" else "false"
+    // COVER fills the box (crops); CONTAIN fits the whole 16:9 frame (letterboxes).
+    val sizing = if (fit == TrailerFit.COVER)
+        "width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh"
+    else
+        "width:100vw;height:56.25vw;max-height:100vh;max-width:177.78vh"
     return """
 <!DOCTYPE html>
 <html>
@@ -107,8 +121,7 @@ private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean, 
   html,body{margin:0;padding:0;background:#000;overflow:hidden;height:100%}
   #wrap{position:fixed;inset:0;overflow:hidden}
   #wrap,#wrap *{pointer-events:$pe !important}
-  #player{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-          width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh}
+  #player{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);$sizing}
 </style>
 </head>
 <body>

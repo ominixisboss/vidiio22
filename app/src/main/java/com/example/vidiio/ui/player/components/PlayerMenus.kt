@@ -131,6 +131,8 @@ fun SpeedMenu(
 fun AspectMenu(
     currentMode: Int,
     onModeSelect: (Int) -> Unit,
+    avoidCutout: Boolean,
+    onToggleAvoidCutout: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     // Media3 AspectRatioFrameLayout resize modes
@@ -141,21 +143,30 @@ fun AspectMenu(
         1 to "Fixed Width",
         2 to "Fixed Height"
     )
-    
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Aspect Ratio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
 
-            LazyColumn {
-                items(modes) { (mode, label) ->
-                    ListItem(
-                        headlineContent = { Text(label) },
-                        leadingContent = { RadioButton(selected = mode == currentMode, onClick = null) },
-                        modifier = Modifier.clickable { onModeSelect(mode); onDismiss() }
-                    )
-                }
+            modes.forEach { (mode, label) ->
+                ListItem(
+                    headlineContent = { Text(label) },
+                    leadingContent = { RadioButton(selected = mode == currentMode, onClick = null) },
+                    modifier = Modifier.clickable { onModeSelect(mode); onDismiss() }
+                )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            ListItem(
+                headlineContent = { Text("Avoid camera cutout") },
+                supportingContent = { Text("Inset the picture around the front camera") },
+                trailingContent = {
+                    Switch(checked = avoidCutout, onCheckedChange = onToggleAvoidCutout)
+                },
+                modifier = Modifier.clickable { onToggleAvoidCutout(!avoidCutout) }
+            )
         }
     }
 }

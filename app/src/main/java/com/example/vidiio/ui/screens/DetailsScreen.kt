@@ -164,6 +164,7 @@ fun MovieDetailContent(
                     controls = true,
                     interactive = true,
                     startMuted = false,
+                    fit = com.example.vidiio.ui.components.TrailerFit.CONTAIN,
                     modifier = Modifier.fillMaxSize(),
                     onUnavailable = { trailerFailed = true; trailerFullscreen = false }
                 )

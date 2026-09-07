@@ -34,6 +34,9 @@ class SettingsViewModel(
     val homeStyle: StateFlow<HomeStyle> = settingsRepository.homeStyleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeStyle.VIDIIO)
 
+    val avoidCameraCutout: StateFlow<Boolean> = settingsRepository.avoidCameraCutoutFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     val selectedSources: StateFlow<Set<String>> = settingsRepository.sourcesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf("vidsrc", "videasy", "vadapav", "vuflix", "cinejoy", "movy", "a111477", "knaben", "tg"))
 
@@ -70,6 +73,12 @@ class SettingsViewModel(
     fun setDynamicColor(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setDynamicColor(enabled)
+        }
+    }
+
+    fun setAvoidCameraCutout(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAvoidCameraCutout(enabled)
         }
     }
 

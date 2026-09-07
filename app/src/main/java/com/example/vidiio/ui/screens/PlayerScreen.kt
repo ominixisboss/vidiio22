@@ -132,6 +132,35 @@ fun PlayerScreen(
     val activity = context as? Activity
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
+    val settingsRepo = remember {
+        (context.applicationContext as VidiioApplication).settingsRepository
+    }
+    val avoidCutout by settingsRepo.avoidCameraCutoutFlow.collectAsState(initial = false)
+
+    // Keep the picture clear of the front-camera cutout when the user asks for it.
+    DisposableEffect(avoidCutout) {
+        val window = activity?.window
+        val original = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
+            window?.attributes?.layoutInDisplayCutoutMode else null
+        if (window != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = if (avoidCutout)
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+                else
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        onDispose {
+            if (window != null && original != null &&
+                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P
+            ) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = original
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() /
@@ -748,6 +777,8 @@ fun PlayerScreen(
             AspectMenu(
                 currentMode = resizeMode,
                 onModeSelect = { resizeMode = it },
+                avoidCutout = avoidCutout,
+                onToggleAvoidCutout = { scope.launch { settingsRepo.setAvoidCameraCutout(it) } },
                 onDismiss = { showAspectMenu = false }
             )
         }
