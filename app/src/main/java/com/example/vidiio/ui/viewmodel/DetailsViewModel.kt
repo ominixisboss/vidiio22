@@ -224,7 +224,13 @@ class DetailsViewModel(
         } else {
             movie.title
         }
-        downloadManager.enqueue(title, source.url, source.headers)
+        downloadManager.enqueue(
+            title = title,
+            url = source.url,
+            headers = source.headers,
+            torrentFileIndex = source.fileIndex,
+            torrentFileName = source.fileName
+        )
     }
 
     /** Called periodically by the player to persist the Continue Watching position. */

@@ -373,13 +373,20 @@ fun PlayerScreen(
                 service.getMetadata(source.url) { files ->
                     timeoutJob.cancel()
                     if (files != null) {
-                        if (files.size > 1) {
+                        // Skip the picker when the addon already told us which file to use.
+                        val addonPicked = source.fileName != null || source.fileIndex != null
+                        if (files.size > 1 && !addonPicked) {
                             torrentFiles = files
                             showTorrentFileSheet = true
                             isTorrentLoading = false
                         } else {
                             val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
-                            service.startStreaming(-1, selectedEpisode?.seasonNumber, selectedEpisode?.episodeNumber) { streamUrl ->
+                            service.startStreaming(
+                                fileIndex = -1,
+                                season = selectedEpisode?.seasonNumber,
+                                episode = selectedEpisode?.episodeNumber,
+                                fileName = source.fileName
+                            ) { streamUrl ->
                                 isTorrentLoading = false
                                 if (streamUrl.isNotEmpty()) {
                                     startPlayback(StreamSource(serverName = source.serverName, url = streamUrl, isM3u8 = false))

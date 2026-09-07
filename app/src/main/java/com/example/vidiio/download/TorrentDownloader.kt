@@ -55,7 +55,17 @@ class TorrentDownloader(
                 return@withContext DownloadResult.Error("Metadata timed out")
             }
 
-            val file = MediaFileSelector.select(files, null, null, null)
+            // Prefer the exact file the Stremio addon chose (by name, then index),
+            // falling back to the media-file heuristic.
+            val wantedName = task.torrentFileName?.substringAfterLast('/')?.trim()
+            val file = files.firstOrNull { fs ->
+                    wantedName != null && (
+                        fs.path.substringAfterLast('/').equals(wantedName, ignoreCase = true) ||
+                        fs.path.endsWith(wantedName, ignoreCase = true)
+                    )
+                }
+                ?: task.torrentFileIndex?.let { idx -> files.getOrNull(idx) ?: files.firstOrNull { it.id - 1 == idx } }
+                ?: MediaFileSelector.select(files, null, null, null)
                 ?: return@withContext DownloadResult.Error("No media file in torrent").also { api.dropTorrent(hash) }
 
             val streamUrl = api.streamUrl(hash, file.id, file.path)

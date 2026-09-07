@@ -19,13 +19,19 @@ class DownloadManager(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    fun enqueue(title: String, url: String, headers: Map<String, String>? = null) {
+    fun enqueue(
+        title: String,
+        url: String,
+        headers: Map<String, String>? = null,
+        torrentFileIndex: Int? = null,
+        torrentFileName: String? = null
+    ) {
         val type = when {
             url.startsWith("magnet:") -> DownloadType.TORRENT
             !url.startsWith("http") -> return
             // Embed/webview pages have no direct media URL to save.
             url.contains("embed") || url.contains("vidsrc") -> return
-            url.contains(".m3u8") -> DownloadType.HLS
+            url.substringBefore('?').endsWith(".m3u8", true) -> DownloadType.HLS
             else -> DownloadType.HTTP
         }
         scope.launch {
@@ -34,7 +40,9 @@ class DownloadManager(
                 url = url,
                 type = type,
                 status = DownloadStatus.QUEUED,
-                headersJson = headers?.takeIf { it.isNotEmpty() }?.let { org.json.JSONObject(it).toString() }
+                headersJson = headers?.takeIf { it.isNotEmpty() }?.let { org.json.JSONObject(it).toString() },
+                torrentFileIndex = torrentFileIndex,
+                torrentFileName = torrentFileName
             )
             repository.insertDownload(task)
             startService()

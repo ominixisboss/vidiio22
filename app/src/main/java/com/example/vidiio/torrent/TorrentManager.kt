@@ -133,6 +133,7 @@ class TorrentManager(private val context: Context) {
         fileIndex: Int = -1,
         season: Int? = null,
         episode: Int? = null,
+        fileName: String? = null,
     ): String? = withContext(Dispatchers.IO) {
         val h = hash ?: return@withContext null
         val api = engine.getApi() ?: return@withContext null
@@ -143,12 +144,20 @@ class TorrentManager(private val context: Context) {
             null
         } ?: return@withContext null
 
-        val file = MediaFileSelector.select(
-            files = info.fileStats,
-            season = season,
-            episode = episode,
-            preferredId = fileIndex.takeIf { it >= 1 },
-        )
+        // An addon-supplied filename is the most reliable selector for season packs.
+        val wantedName = fileName?.substringAfterLast('/')?.trim()
+        val file = wantedName?.let { n ->
+            info.fileStats.firstOrNull { fs ->
+                fs.path.substringAfterLast('/').equals(n, ignoreCase = true) ||
+                    fs.path.endsWith(n, ignoreCase = true)
+            }
+        }
+            ?: MediaFileSelector.select(
+                files = info.fileStats,
+                season = season,
+                episode = episode,
+                preferredId = fileIndex.takeIf { it >= 1 },
+            )
         if (file == null) {
             _status.value = _status.value?.copy(statusMessage = "No playable file in torrent")
             return@withContext null

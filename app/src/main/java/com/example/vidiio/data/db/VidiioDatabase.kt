@@ -8,7 +8,7 @@ import com.example.vidiio.data.model.DownloadTask
 import com.example.vidiio.data.model.FavoriteMovie
 import com.example.vidiio.data.model.WatchProgress
 
-@Database(entities = [FavoriteMovie::class, DownloadTask::class, WatchProgress::class], version = 4, exportSchema = false)
+@Database(entities = [FavoriteMovie::class, DownloadTask::class, WatchProgress::class], version = 5, exportSchema = false)
 @TypeConverters(DownloadConverters::class)
 abstract class VidiioDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
