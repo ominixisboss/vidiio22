@@ -64,6 +64,38 @@ data class StremioMeta(
 )
 
 @JsonClass(generateAdapter = true)
+data class MetaResponse(
+    val meta: StremioMetaDetail
+)
+
+@JsonClass(generateAdapter = true)
+data class StremioMetaDetail(
+    val id: String,
+    val type: String,
+    val name: String,
+    val poster: String? = null,
+    val background: String? = null,
+    val logo: String? = null,
+    val description: String? = null,
+    val releaseInfo: String? = null,
+    val imdbRating: String? = null,
+    val genres: List<String>? = null,
+    val videos: List<StremioVideo>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class StremioVideo(
+    val id: String,
+    val title: String? = null,
+    val name: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val overview: String? = null,
+    val thumbnail: String? = null,
+    val released: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class StremioStream(
     val name: String? = null,
     val title: String? = null,
