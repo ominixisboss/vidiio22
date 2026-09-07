@@ -42,6 +42,20 @@ class MovieRepository(
          */
         const val SCRAPER_TIMEOUT_MS = 25_000L
 
+        /** One Pace video-id prefix → arc name, for nicer season labels. */
+        val ONE_PACE_ARCS = mapOf(
+            "RO" to "Romance Dawn", "OR" to "Orange Town", "SY" to "Syrup Village",
+            "GA" to "Gaimon", "BA" to "Baratie", "AR" to "Arlong Park", "LO" to "Loguetown",
+            "RM" to "Reverse Mountain", "WH" to "Whisky Peak", "LI" to "Little Garden",
+            "DI" to "Drum Island", "AL" to "Arabasta", "JA" to "Jaya", "SK" to "Skypiea",
+            "LR" to "Long Ring Long Land", "WS" to "Water Seven", "EN" to "Enies Lobby",
+            "PEN" to "Post-Enies Lobby", "TB" to "Thriller Bark", "SAB" to "Sabaody Archipelago",
+            "AM" to "Amazon Lily", "IM" to "Impel Down", "MA" to "Marineford", "PW" to "Post-War",
+            "RTS" to "Return to Sabaody", "FI" to "Fish-Man Island", "PH" to "Punk Hazard",
+            "DR" to "Dressrosa", "ZO" to "Zou", "WC" to "Whole Cake Island", "REV" to "Reverie",
+            "WA" to "Wano", "EH" to "Egghead",
+        )
+
         /** Home-screen genre shelves: label to TMDB genre id. */
         val GENRE_SHELVES = listOf(
             "Action" to 28,
@@ -161,20 +175,25 @@ class MovieRepository(
                 val stremioType = if (movie.type == MovieType.MOVIE) "movie" else "series"
                 val meta = withTimeoutOrNull(12_000) { addonManager.getMeta(stremioType, movie.id) }
                     ?: return movie
+                val fallbackStill = meta.background ?: meta.poster
                 val seasons = meta.videos.orEmpty()
                     .groupBy { it.season ?: 1 }
                     .toSortedMap()
                     .map { (seasonNo, vids) ->
+                        val sorted = vids.sortedBy { it.episode ?: 0 }
+                        val arc = sorted.firstOrNull()?.id?.substringBefore('_')
+                            ?.let { ONE_PACE_ARCS[it] }
                         Season(
                             seasonNumber = seasonNo,
-                            episodes = vids.sortedBy { it.episode ?: 0 }.mapIndexed { i, v ->
+                            name = arc,
+                            episodes = sorted.mapIndexed { i, v ->
                                 Episode(
                                     id = v.id,
                                     name = v.title ?: v.name ?: "Episode ${v.episode ?: i + 1}",
                                     overview = v.overview,
                                     episodeNumber = v.episode ?: (i + 1),
                                     seasonNumber = seasonNo,
-                                    stillPath = v.thumbnail
+                                    stillPath = v.thumbnail ?: fallbackStill
                                 )
                             }
                         )

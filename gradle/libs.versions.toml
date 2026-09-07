@@ -44,7 +44,8 @@ material3AdaptiveNavigationSuite = "1.4.0"
 datastorePreferences = "1.2.1"
 material = "1.14.0"
 jsoup = "1.23.2"
-media3 = "1.11.0"
+media3 = "1.8.0"
+assMedia = "0.5.1"
 riveAndroid = "11.11.0"
 
 [libraries]
@@ -106,6 +107,7 @@ media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasourc
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 media3-cast = { group = "androidx.media3", name = "media3-cast", version.ref = "media3" }
+ass-media = { group = "io.github.peerless2012", name = "ass-media", version.ref = "assMedia" }
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version = "22.3.1" }
 rive-android = { group = "app.rive", name = "rive-android", version.ref = "riveAndroid" }
 

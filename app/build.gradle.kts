@@ -41,6 +41,8 @@ android {
             // The TorrServer engine ships as libtorrserver.so but is a Go executable,
             // not a real shared object - never let AGP strip it.
             keepDebugSymbols += "**/libtorrserver.so"
+            // rive-android and ass-kt both bundle libc++_shared.so - take one.
+            pickFirsts += "**/libc++_shared.so"
         }
     }
     compileOptions {
@@ -93,6 +95,7 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
     implementation(libs.media3.cast)
+    implementation(libs.ass.media)
     implementation(libs.play.services.cast.framework)
     implementation(libs.rive.android)
     implementation(libs.logging.interceptor)
