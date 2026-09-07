@@ -22,8 +22,10 @@ fun SubtitleMenu(
     subtitles: List<SubdlSubtitle>,
     selectedUrl: String?,
     offsetMs: Long,
+    subtitlesEnabled: Boolean = true,
     onOffsetChange: (Long) -> Unit,
     onSubtitleSelect: (SubdlSubtitle) -> Unit,
+    onUseEmbedded: () -> Unit = {},
     onDisable: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -55,16 +57,27 @@ fun SubtitleMenu(
             LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
                 item {
                     ListItem(
-                        headlineContent = { Text("None") },
-                        leadingContent = { RadioButton(selected = selectedUrl == null, onClick = null) },
+                        headlineContent = { Text("Off") },
+                        supportingContent = { Text("Hide all subtitles, including the video's own") },
+                        leadingContent = { RadioButton(selected = !subtitlesEnabled, onClick = null) },
                         modifier = Modifier.clickable { onDisable(); onDismiss() }
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("Video default") },
+                        supportingContent = { Text("Use the subtitles built into this file") },
+                        leadingContent = {
+                            RadioButton(selected = subtitlesEnabled && selectedUrl == null, onClick = null)
+                        },
+                        modifier = Modifier.clickable { onUseEmbedded(); onDismiss() }
                     )
                 }
                 items(subtitles) { sub ->
                     ListItem(
                         headlineContent = { Text(sub.releaseName ?: sub.language) },
                         supportingContent = { Text(sub.language) },
-                        leadingContent = { RadioButton(selected = sub.url == selectedUrl, onClick = null) },
+                        leadingContent = { RadioButton(selected = subtitlesEnabled && sub.url == selectedUrl, onClick = null) },
                         modifier = Modifier.clickable { onSubtitleSelect(sub); onDismiss() }
                     )
                 }

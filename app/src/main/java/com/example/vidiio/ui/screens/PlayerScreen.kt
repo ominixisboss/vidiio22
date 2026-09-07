@@ -83,6 +83,8 @@ fun PlayerScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var bufferedPosition by remember { mutableLongStateOf(0L) }
     var selectedSubtitleUrl by remember { mutableStateOf<String?>(null) }
+    // Player-session wide: matches the persistent text-track-disabled flag on exoPlayer.
+    var subtitlesEnabled by remember { mutableStateOf(true) }
     
     // UI State
     var showControls by remember { mutableStateOf(true) }
@@ -586,7 +588,7 @@ fun PlayerScreen(
                     position = currentPosition,
                     duration = duration,
                     bufferedPosition = bufferedPosition,
-                    isSubtitlesActive = selectedSubtitleUrl != null, 
+                    isSubtitlesActive = subtitlesEnabled, 
                     isAudioActive = selectedAudioTrack != null,
                     isSpeedActive = playbackSpeed != 1.0f,
                     isAspectActive = resizeMode != AspectRatioFrameLayout.RESIZE_MODE_FIT,
@@ -755,15 +757,31 @@ fun PlayerScreen(
                 selectedUrl = selectedSubtitleUrl, 
                 offsetMs = subtitleOffsetMs,
                 onOffsetChange = { subtitleOffsetMs = it },
+                subtitlesEnabled = subtitlesEnabled,
+                onUseEmbedded = {
+                    selectedSubtitleUrl = null
+                    subtitlesEnabled = true
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                        .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+                    exoPlayer.currentMediaItem?.let { item ->
+                        exoPlayer.setMediaItem(
+                            item.buildUpon().setSubtitleConfigurations(emptyList()).build(),
+                            exoPlayer.currentPosition
+                        )
+                    }
+                },
                 onSubtitleSelect = { sub ->
                     selectedSubtitleUrl = sub.url
+                    subtitlesEnabled = true
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                        .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
                     sub.url?.let { url ->
                         val subConfig = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(url))
                             .setMimeType(MimeTypes.TEXT_VTT)
                             .setLanguage(sub.language)
                             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                             .build()
-                        
+
                         val currentMediaItem = exoPlayer.currentMediaItem
                         if (currentMediaItem != null) {
                             val updatedItem = currentMediaItem.buildUpon()
@@ -773,8 +791,13 @@ fun PlayerScreen(
                         }
                     }
                 },
-                onDisable = { 
+                onDisable = {
+                    // Turn off every subtitle track - the file's own (embedded ASS/SRT) and
+                    // any external one we added.
                     selectedSubtitleUrl = null
+                    subtitlesEnabled = false
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                        .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
                     val currentMediaItem = exoPlayer.currentMediaItem
                     if (currentMediaItem != null) {
                         val updatedItem = currentMediaItem.buildUpon()
