@@ -24,6 +24,16 @@ private fun getColorScheme(
         ColorTheme.PURPLE -> VidiioPurple
         ColorTheme.ORANGE -> VidiioOrange
         ColorTheme.TEAL -> VidiioTeal
+        ColorTheme.PINK -> VidiioPink
+        ColorTheme.INDIGO -> VidiioIndigo
+        ColorTheme.GOLD -> VidiioGold
+        ColorTheme.MONO -> VidiioMono
+    }
+
+    // Light accent colors need dark text/icons on top of them for contrast.
+    val onPrimaryColor = when (colorTheme) {
+        ColorTheme.GOLD, ColorTheme.MONO, ColorTheme.ORANGE -> Color.Black
+        else -> Color.White
     }
 
     return if (darkTheme) {
@@ -34,7 +44,7 @@ private fun getColorScheme(
             background = DeepBlack,
             surface = SurfaceDark,
             surfaceVariant = Color(0xFF1E1E1E),
-            onPrimary = Color.White,
+            onPrimary = onPrimaryColor,
             onSecondary = Color.White,
             onTertiary = Color.White,
             onBackground = Color.White,
@@ -49,7 +59,7 @@ private fun getColorScheme(
             background = Color(0xFFF8F8F8),
             surface = Color.White,
             surfaceVariant = Color(0xFFE0E0E0),
-            onPrimary = Color.White,
+            onPrimary = onPrimaryColor,
             onSecondary = Color.White,
             onTertiary = Color.White,
             onBackground = Color.Black,

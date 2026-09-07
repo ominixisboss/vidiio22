@@ -9,6 +9,10 @@ val VidiioGreen = Color(0xFF4CAF50)
 val VidiioPurple = Color(0xFF9C27B0)
 val VidiioOrange = Color(0xFFFF9800)
 val VidiioTeal = Color(0xFF009688)
+val VidiioPink = Color(0xFFEC407A)
+val VidiioIndigo = Color(0xFF5C6BC0)
+val VidiioGold = Color(0xFFD4AF37)
+val VidiioMono = Color(0xFFF5F5F5)
 
 // Legacy / Netflix-inspired colors
 val NetflixRed = VidiioRed

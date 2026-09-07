@@ -2,6 +2,7 @@ package com.example.vidiio.data.repository
 
 import com.example.vidiio.data.api.TMDBService
 import com.example.vidiio.data.model.Category
+import com.example.vidiio.data.model.TOP10_LABEL
 import com.example.vidiio.data.model.Movie
 import com.example.vidiio.data.model.MovieType
 import com.example.vidiio.data.model.Season
@@ -38,6 +39,17 @@ class MovieRepository(
          * chains resolvers) reliably need more than the old 10s.
          */
         const val SCRAPER_TIMEOUT_MS = 25_000L
+
+        /** Home-screen genre shelves: label to TMDB genre id. */
+        val GENRE_SHELVES = listOf(
+            "Action" to 28,
+            "Comedy" to 35,
+            "Horror" to 27,
+            "Sci-Fi" to 878,
+            "Animation" to 16,
+            "Thriller" to 53,
+            "Romance" to 10749,
+        )
     }
 
     private suspend fun getEnabledScrapers(): List<Scraper> {
@@ -62,8 +74,20 @@ class MovieRepository(
                 }
             }
 
+            val genreShelves = async {
+                GENRE_SHELVES.map { (label, id) ->
+                    async {
+                        val movies = runCatching {
+                            tmdbService.discoverMovies(withGenres = id.toString()).results.map { it.toMovie(MovieType.MOVIE) }
+                        }.getOrDefault(emptyList())
+                        Category(label, movies)
+                    }
+                }.map { it.await() }.filter { it.movies.isNotEmpty() }
+            }
+
             val categories = mutableListOf(
                 Category("Trending Movies", trendingMovies.await()),
+                Category(TOP10_LABEL, trendingMovies.await().take(10)),
                 Category("Trending Anime", trendingAnime.await()),
                 Category("Popular Movies", popularMovies.await()),
                 Category("Popular TV Shows", popularTV.await()),
@@ -71,7 +95,8 @@ class MovieRepository(
                 Category("Popular Anime", popularAnime.await()),
                 Category("Top Rated Anime", topRatedAnime.await())
             )
-            
+
+            categories.addAll(genreShelves.await())
             categories.addAll(stremioCatalogs.await())
             categories
         } catch (e: Exception) {
@@ -254,6 +279,8 @@ class MovieRepository(
             id = id.toString(),
             title = title ?: name ?: "Unknown",
             posterUrl = posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: "",
+            backdropUrl = backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
+                ?: posterPath?.let { "https://image.tmdb.org/t/p/w780$it" },
             synopsis = overview,
             year = (releaseDate ?: firstAirDate)?.take(4)?.toIntOrNull(),
             rating = voteAverage,

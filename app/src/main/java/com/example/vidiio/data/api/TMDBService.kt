@@ -60,6 +60,14 @@ interface TMDBService {
         @Query("api_key") apiKey: String = "13385ad4858c3f8568ce182c7287d9a9"
     ): TMDBSeason
 
+    @GET("discover/movie")
+    suspend fun discoverMovies(
+        @Query("with_genres") withGenres: String? = null,
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("vote_count.gte") voteCountGte: Int = 200,
+        @Query("api_key") apiKey: String = "13385ad4858c3f8568ce182c7287d9a9"
+    ): TMDBResponse<TMDBMovie>
+
     @GET("discover/tv")
     suspend fun discoverTV(
         @Query("with_genres") withGenres: String? = null,

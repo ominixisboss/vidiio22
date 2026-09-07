@@ -7,6 +7,7 @@ data class Movie(
     val id: String,
     val title: String,
     val posterUrl: String,
+    val backdropUrl: String? = null,
     val synopsis: String? = null,
     val year: Int? = null,
     val rating: Double? = null,
