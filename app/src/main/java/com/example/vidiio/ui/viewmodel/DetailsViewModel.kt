@@ -55,6 +55,11 @@ class DetailsViewModel(
 
     private var scrapingJob: Job? = null
 
+    private companion object {
+        /** Overall wall-clock budget for one source search across all scrapers + Stremio. */
+        const val SCRAPE_TIMEOUT_MS = 45_000L
+    }
+
     val uiState: StateFlow<DetailsUiState> = combine(
         combine(_movie, _isFavorite, _subtitles, _error) { movie, favorite, subs, error ->
             @Suppress("UNCHECKED_CAST")
@@ -143,15 +148,19 @@ class DetailsViewModel(
         scrapingJob?.cancel()
         scrapingJob = viewModelScope.launch {
             _isSearchingSources.value = true
-            val scrapingInnerJob = launch {
-                movieRepository.getStreamSources(movie, episode)
-                    .collect { source ->
-                        _allFoundSources.update { (it + source).distinctBy { s -> s.url } }
-                    }
+            try {
+                // Collect until every scraper has finished or the overall budget is hit.
+                // The per-scraper timeout lives in MovieRepository; don't cut them off early
+                // here — the crypto-heavy providers (Cinejoy, VidSrc, Stremio) need >12s.
+                withTimeoutOrNull(SCRAPE_TIMEOUT_MS) {
+                    movieRepository.getStreamSources(movie, episode)
+                        .collect { source ->
+                            _allFoundSources.update { (it + source).distinctBy { s -> s.url } }
+                        }
+                }
+            } finally {
+                _isSearchingSources.value = false
             }
-            delay(12000)
-            scrapingInnerJob.cancel()
-            _isSearchingSources.value = false
         }
     }
 

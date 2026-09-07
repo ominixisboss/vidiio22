@@ -31,6 +31,15 @@ class MovieRepository(
     private val addonManager: AddonManager
 ) {
 
+    private companion object {
+        /**
+         * Per-scraper budget. Must exceed the OkHttp connect timeout (15s) plus a couple of
+         * round-trips — the crypto/multi-request providers (Cinejoy queries 5 servers, VidSrc
+         * chains resolvers) reliably need more than the old 10s.
+         */
+        const val SCRAPER_TIMEOUT_MS = 25_000L
+    }
+
     private suspend fun getEnabledScrapers(): List<Scraper> {
         val enabledSources = settingsRepository.sourcesFlow.first()
         return scrapers.filter { it.sourceId in enabledSources }
@@ -153,7 +162,7 @@ class MovieRepository(
             enabledScrapers.forEach { scraper ->
                 launch {
                     try {
-                        val sources = withTimeoutOrNull(10000) {
+                        val sources = withTimeoutOrNull(SCRAPER_TIMEOUT_MS) {
                             if (movie.type == MovieType.TV_SHOW && episode != null) {
                                 scraper.getStreamSources(movie, episode)
                             } else {
@@ -187,7 +196,7 @@ class MovieRepository(
                             imdbId
                         }
                         
-                        withTimeoutOrNull(10000) {
+                        withTimeoutOrNull(SCRAPER_TIMEOUT_MS) {
                             addonManager.getStreams(
                                 if (movie.type == MovieType.MOVIE) "movie" else "series",
                                 stremioId

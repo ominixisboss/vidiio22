@@ -94,7 +94,10 @@ class VidiioApplication : Application() {
         torrServerEngine = TorrServerEngine(this)
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // BODY buffers every full response into memory before returning it — with the
+            // HTML-scraping sources that means multi-MB pages copied + UTF-8 decoded on the
+            // hot path. HEADERS keeps the useful request/response lines without that cost.
+            level = HttpLoggingInterceptor.Level.HEADERS
         }
 
         val bootstrapClient = OkHttpClient.Builder()
