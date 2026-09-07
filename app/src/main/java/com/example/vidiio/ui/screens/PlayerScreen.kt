@@ -90,7 +90,9 @@ fun PlayerScreen(
     
     // HUDs & Gestures
     var showVolumeHud by remember { mutableStateOf(false) }
+    var showBrightnessHud by remember { mutableStateOf(false) }
     var volume by remember { mutableFloatStateOf(1.0f) }
+    var brightness by remember { mutableFloatStateOf(0.5f) }
     var isMuted by remember { mutableStateOf(false) }
     var audioHudText by remember { mutableStateOf("") }
     var showAudioHud by remember { mutableStateOf(false) }
@@ -130,7 +132,15 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) {
         activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() /
+            audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        // Seed brightness from the window override if set, else from the system setting.
+        val winB = activity?.window?.attributes?.screenBrightness ?: -1f
+        brightness = if (winB in 0f..1f) winB else runCatching {
+            android.provider.Settings.System.getInt(
+                context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS
+            ) / 255f
+        }.getOrDefault(0.5f)
     }
 
     DisposableEffect(Unit) {
@@ -366,29 +376,36 @@ fun PlayerScreen(
                 onDragStart = { offset ->
                     dragSide = if (offset.x < size.width / 2) 1 else 2
                 },
-                onVerticalDrag = { change, dragAmount ->
+                onVerticalDrag = { _, dragAmount ->
+                    // Drag up = increase. A full swipe over ~65% of the screen covers the whole range,
+                    // and we accumulate in a float so tiny drags still register.
+                    val deltaFraction = -dragAmount / (size.height * 0.65f)
                     if (dragSide == 2) {
+                        volume = (volume + deltaFraction).coerceIn(0f, 1f)
                         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                        val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                        val delta = (dragAmount / size.height) * maxVol
-                        val nextVol = (currentVol - delta.toInt()).coerceIn(0, maxVol)
-                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
-                        volume = nextVol.toFloat() / maxVol
+                        audioManager.setStreamVolume(
+                            AudioManager.STREAM_MUSIC,
+                            kotlin.math.round(volume * maxVol).toInt(),
+                            0
+                        )
+                        isMuted = volume <= 0f
                         showVolumeHud = true
-                    } else if (dragSide == 1) {
-                        val lp = activity?.window?.attributes
-                        val currentBrightness = lp?.screenBrightness ?: 0.5f
-                        val delta = dragAmount / size.height
-                        val nextBrightness = (currentBrightness - delta).coerceIn(0f, 1f)
-                        lp?.screenBrightness = nextBrightness
-                        activity?.window?.attributes = lp
-                        // Reuse volume HUD for brightness as a simple port
-                        volume = nextBrightness
-                        showVolumeHud = true
+                        showBrightnessHud = false
+                    } else {
+                        brightness = (brightness + deltaFraction).coerceIn(0.02f, 1f)
+                        activity?.window?.let { w ->
+                            w.attributes = w.attributes.apply { screenBrightness = brightness }
+                        }
+                        showBrightnessHud = true
+                        showVolumeHud = false
                     }
                 },
                 onDragEnd = {
-                    scope.launch { delay(2000); showVolumeHud = false }
+                    scope.launch {
+                        delay(1200)
+                        showVolumeHud = false
+                        showBrightnessHud = false
+                    }
                 }
             )
         }
@@ -574,8 +591,13 @@ fun PlayerScreen(
         }
 
 
-        VolumeHud(volume = volume, isMuted = isMuted, visible = showVolumeHud)
-        
+        Box(modifier = Modifier.align(Alignment.Center)) {
+            VolumeHud(volume = volume, isMuted = isMuted, visible = showVolumeHud)
+        }
+        Box(modifier = Modifier.align(Alignment.Center)) {
+            BrightnessHud(brightness = brightness, visible = showBrightnessHud)
+        }
+
         if (showAudioHud) {
             Box(modifier = Modifier.align(Alignment.Center)) {
                 AudioHud(text = audioHudText, visible = showAudioHud)
