@@ -53,7 +53,7 @@ class VuflixScraper(private val client: OkHttpClient) : Scraper {
     override suspend fun search(query: String): List<Movie> = emptyList()
     override suspend fun getMovieDetails(movie: Movie): Movie = movie
 
-    override suspend fun getStreamSources(movie: Movie, episode: Episode?): List<StreamSource> = coroutineScope {
+    override suspend fun getStreamSources(movie: Movie, episode: Episode?): List<StreamSource> = withContext(Dispatchers.IO) {
         val tmdbId = movie.id
         val isTv = movie.type == MovieType.TV_SHOW
         val type = if (isTv) "tv" else "movie"
@@ -76,9 +76,15 @@ class VuflixScraper(private val client: OkHttpClient) : Scraper {
                         .build()
 
                     client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Log.w("VuflixScraper", "${provider.id}: HTTP ${response.code}")
+                        }
                         if (response.isSuccessful) {
                             val body = response.body?.string() ?: ""
                             val json = JSONObject(body)
+                            if (!json.optBoolean("ok")) {
+                                Log.w("VuflixScraper", "${provider.id}: ok=false ${body.take(150)}")
+                            }
                             if (json.optBoolean("ok") && json.has("sources")) {
                                 val sourcesList = json.getJSONArray("sources")
                                 val providerSources = mutableListOf<StreamSource>()

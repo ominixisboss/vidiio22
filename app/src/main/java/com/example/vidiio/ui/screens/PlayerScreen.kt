@@ -248,7 +248,7 @@ fun PlayerScreen(
                     showAutoNextOverlay = false
                 }
             }
-            delay(1000)
+            delay(500)
         }
     }
 
@@ -483,8 +483,13 @@ fun PlayerScreen(
                     onToggleAudio = { showAudioMenu = true },
                     onToggleSpeed = { showSpeedMenu = true },
                     onToggleAspect = { showAspectMenu = true },
-                    onToggleFullscreen = { 
-                        // Already immersive by default in this port
+                    onToggleFullscreen = {
+                        // The player is always immersive; use this as a quick fill/fit toggle.
+                        resizeMode = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        } else {
+                            AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        }
                     },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )

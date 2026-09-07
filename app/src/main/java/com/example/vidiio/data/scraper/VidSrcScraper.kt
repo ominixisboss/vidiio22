@@ -48,9 +48,16 @@ class VidSrcScraper(private val client: OkHttpClient) : Scraper {
                 if (response.isSuccessful) {
                     val body = response.body?.string() ?: ""
                     val json = JSONObject(body)
-                    if (json.optString("status_code") == "200") {
+                    val statusCode = json.optString("status_code")
+                    if (statusCode != "200") {
+                        Log.w("VidSrcScraper", "api.php status_code=$statusCode body=${body.take(200)}")
+                    }
+                    if (statusCode == "200") {
                         val data = json.optJSONObject("data")
                         val streamUrls = data?.optJSONArray("stream_urls")
+                        if (streamUrls == null || streamUrls.length() == 0) {
+                            Log.w("VidSrcScraper", "api.php ok but stream_urls empty: ${body.take(200)}")
+                        }
                         if (streamUrls != null) {
                             for (i in 0 until streamUrls.length()) {
                                 val streamUrl = streamUrls.getString(i).trim()
@@ -106,7 +113,7 @@ class VidSrcScraper(private val client: OkHttpClient) : Scraper {
         } catch (e: Exception) {
             Log.e("VidSrcScraper", "Error: ${e.message}")
         }
-        
+        if (sources.isEmpty()) Log.w("VidSrcScraper", "no sources for tmdb=$tmdbId")
         sources.distinctBy { it.url }
     }
 }

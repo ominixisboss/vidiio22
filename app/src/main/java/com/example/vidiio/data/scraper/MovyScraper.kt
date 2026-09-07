@@ -84,6 +84,7 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
             qBuilder.append("&episodeId=${episode?.episodeNumber ?: 1}")
         }
         qBuilder.append("&tmdbId=$tmdbId")
+        movie.imdbId?.takeIf { it.startsWith("tt") }?.let { qBuilder.append("&imdbId=$it") }
         qBuilder.append("&enc=2&seed=$seed")
 
         val baseQuery = qBuilder.toString()
@@ -109,7 +110,9 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
                         val encText = res.body?.string()?.trim() ?: return@async emptyList<StreamSource>()
                         if (encText.isNotEmpty() && !encText.startsWith("<")) {
                             val decJsonStr = decrypt(encText, seed, tmdbId)
-                            if (decJsonStr != null) {
+                            if (decJsonStr == null) {
+                                Log.w("MovyScraper", "$serverName: decrypt failed (${encText.length} bytes)")
+                            } else {
                                 val json = JSONObject(decJsonStr)
                                 val sourcesList = json.optJSONArray("sources")
                                 if (sourcesList != null) {
@@ -126,16 +129,19 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
                                             url = streamUrl,
                                             sourceName = name,
                                             quality = cleanQuality,
-                                            isM3u8 = true
+                                            isM3u8 = true,
+                                            headers = mapOf("User-Agent" to ua, "Referer" to referer)
                                         ))
                                     }
                                     return@async serverSources
                                 }
                             }
                         }
+                    } else {
+                        Log.w("MovyScraper", "$serverName: HTTP ${res.code}")
                     }
                 } catch (e: Exception) {
-                    // Ignore
+                    Log.w("MovyScraper", "$serverName: ${e.message}")
                 }
                 emptyList<StreamSource>()
             }
@@ -226,7 +232,7 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
         var r = l(fnv1a(seed) xor l((tmdbId.toLong() and 0xFFFFFFFFL).toInt() xor 0x9e3779b9.toInt()))
 
         for (e in 0 until 8) {
-            val t = (r.toLong() and 0xFFFFFFFFL % 61).toInt()
+            val t = ((r.toLong() and 0xFFFFFFFFL) % 61).toInt()
             r = u((r + 0x9e3779b9.toInt()), 7 + (7 and e))
             s[t] = (r xor l(r))
             isSet[t] = true
@@ -238,7 +244,7 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
     }
 
     private fun nextKeystreamWord(state: KeyState, t: Int): Int {
-        val i = (state.acc.toLong() and 0xFFFFFFFFL % 61).toInt()
+        val i = ((state.acc.toLong() and 0xFFFFFFFFL) % 61).toInt()
         val oVal = if (state.isSet[i]) -1 else 0
         val d = if (state.isSet[i]) state.s[i] else 0
         val c = ((t + 1).toLong() * 0x9e3779b9L).toInt()

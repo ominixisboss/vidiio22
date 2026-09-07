@@ -38,9 +38,6 @@ class MovieRepository(
          * chains resolvers) reliably need more than the old 10s.
          */
         const val SCRAPER_TIMEOUT_MS = 25_000L
-
-        /** Scrapers that consume a Stremio addon endpoint and therefore need an IMDb id. */
-        val STREMIO_PROTOCOL_SCRAPERS = setOf("vadapav")
     }
 
     private suspend fun getEnabledScrapers(): List<Scraper> {
@@ -160,19 +157,15 @@ class MovieRepository(
     fun getStreamSources(movie: Movie, episode: Episode? = null): Flow<StreamSource> = channelFlow {
         val enabledScrapers = getEnabledScrapers()
 
-        // Stremio-protocol addons key on an IMDb id, not the TMDB numeric id. Resolve once.
+        // Several scrapers need the IMDb id (Stremio addons) or match better with it.
+        // Resolve once and hand every scraper a Movie that carries it.
         val imdbId = if (movie.source == "tmdb") getImdbId(movie) else movie.id.takeIf { it.startsWith("tt") }
+        val target = if (imdbId != null) movie.copy(imdbId = imdbId) else movie
 
         supervisorScope {
             // Scraper sources
             enabledScrapers.forEach { scraper ->
                 launch {
-                    // Scrapers that speak the Stremio addon protocol need the IMDb id.
-                    val target = if (scraper.sourceId in STREMIO_PROTOCOL_SCRAPERS && imdbId != null) {
-                        movie.copy(id = imdbId)
-                    } else {
-                        movie
-                    }
                     try {
                         val sources = withTimeoutOrNull(SCRAPER_TIMEOUT_MS) {
                             if (target.type == MovieType.TV_SHOW && episode != null) {
