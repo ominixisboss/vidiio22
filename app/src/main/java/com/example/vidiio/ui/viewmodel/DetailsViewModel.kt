@@ -209,9 +209,7 @@ class DetailsViewModel(
         } else {
             movie.title
         }
-        if (source.url.startsWith("magnet:")) {
-            downloadManager.enqueue(title, source.url)
-        }
+        downloadManager.enqueue(title, source.url, source.headers)
     }
 
     fun getDownloadStatus(url: String): Flow<DownloadStatus?> {

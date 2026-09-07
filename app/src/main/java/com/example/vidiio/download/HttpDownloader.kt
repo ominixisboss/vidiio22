@@ -1,9 +1,9 @@
 package com.example.vidiio.download
 
-import com.example.vidiio.data.model.DownloadStatus
 import com.example.vidiio.data.model.DownloadTask
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -19,8 +19,15 @@ class HttpDownloader(private val okHttpClient: OkHttpClient) {
         isCancelled: () -> Boolean
     ): DownloadResult = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder().url(task.url).build()
-            val response = okHttpClient.newCall(request).execute()
+            val builder = Request.Builder().url(task.url)
+            builder.header("User-Agent", DEFAULT_UA)
+            task.headersJson?.let { json ->
+                runCatching {
+                    val obj = JSONObject(json)
+                    obj.keys().forEach { k -> builder.header(k, obj.getString(k)) }
+                }
+            }
+            val response = okHttpClient.newCall(builder.build()).execute()
 
             if (!response.isSuccessful) {
                 return@withContext DownloadResult.Error("Failed to connect: ${response.code}")
@@ -29,9 +36,15 @@ class HttpDownloader(private val okHttpClient: OkHttpClient) {
             val body = response.body ?: return@withContext DownloadResult.Error("Empty response body")
             val totalSize = body.contentLength()
             val inputStream: InputStream = body.byteStream()
-            
-            val fileName = task.title.replace(Regex("[^a-zA-Z0-9.\\-]"), "_") + ".mp4"
-            val file = File(destDir, fileName)
+
+            val ext = when {
+                task.url.substringBefore('?').endsWith(".mkv", true) -> "mkv"
+                task.url.substringBefore('?').endsWith(".webm", true) -> "webm"
+                body.contentType()?.subtype == "x-matroska" -> "mkv"
+                else -> "mp4"
+            }
+            val safeTitle = task.title.replace(Regex("[^a-zA-Z0-9.\\- ]"), "_").trim().ifEmpty { "video" }
+            val file = File(destDir, "$safeTitle.$ext")
             val outputStream = FileOutputStream(file)
 
             val buffer = ByteArray(8192)
@@ -58,6 +71,11 @@ class HttpDownloader(private val okHttpClient: OkHttpClient) {
         } catch (e: Exception) {
             DownloadResult.Error(e.message ?: "Unknown error")
         }
+    }
+
+    private companion object {
+        const val DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 }
 

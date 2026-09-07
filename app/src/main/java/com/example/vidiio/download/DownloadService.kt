@@ -24,6 +24,7 @@ class DownloadService : Service() {
     
     private lateinit var repository: DownloadRepository
     private lateinit var torrentDownloader: TorrentDownloader
+    private lateinit var httpDownloader: HttpDownloader
     private lateinit var notificationManager: NotificationManager
     private lateinit var torrentSession: SessionManager
 
@@ -40,6 +41,7 @@ class DownloadService : Service() {
         repository = app.downloadRepository
         torrentSession = app.torrentEngine.getSession() ?: SessionManager()
         torrentDownloader = TorrentDownloader(torrentSession)
+        httpDownloader = HttpDownloader(app.playbackHttpClient)
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
     }
@@ -94,17 +96,15 @@ class DownloadService : Service() {
     private fun startDownload(task: DownloadTask) {
         val job = scope.launch {
             repository.updateDownload(task.copy(status = DownloadStatus.DOWNLOADING))
-            
+
             val destDir = getDownloadDir()
-            val result = torrentDownloader.download(
-                task, destDir,
-                onProgress = { progress, downloaded, total ->
-                    scope.launch {
-                        updateProgress(task.id, task.title, progress, downloaded)
-                    }
-                },
-                isCancelled = { !isActive }
-            )
+            val onProgress: (Float, Long, Long) -> Unit = { progress, downloaded, _ ->
+                scope.launch { updateProgress(task.id, task.title, progress, downloaded) }
+            }
+            val result = when (task.type) {
+                DownloadType.HTTP -> httpDownloader.download(task, destDir, onProgress) { !isActive }
+                DownloadType.TORRENT -> torrentDownloader.download(task, destDir, onProgress) { !isActive }
+            }
 
             handleResult(task.id, result)
             activeJobs.remove(task.id)
@@ -114,7 +114,10 @@ class DownloadService : Service() {
     }
 
     private fun getDownloadDir(): File {
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vidiio")
+        // App-scoped external dir: writable on all API levels without storage permission,
+        // visible to the user under Android/data/<pkg>/files/Download/Vidiio.
+        val base = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+        val dir = File(base, "Vidiio")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }

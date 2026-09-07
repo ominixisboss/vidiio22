@@ -454,11 +454,12 @@ fun PlayerScreen(
                     onBack = onBack,
                     onDownload = {
                         selectedSource?.let { source ->
-                            if (permissionsState.allPermissionsGranted) {
-                                viewModel.downloadSource(source)
-                            } else {
+                            // Downloads go to app-scoped storage - no permission needed.
+                            // Still ask for POST_NOTIFICATIONS so progress shows, but don't block on it.
+                            if (!permissionsState.allPermissionsGranted) {
                                 permissionsState.launchMultiplePermissionRequest()
                             }
+                            viewModel.downloadSource(source)
                         }
                     },
                     onToggleEpisodes = { showEpisodesSidebar = !showEpisodesSidebar }
