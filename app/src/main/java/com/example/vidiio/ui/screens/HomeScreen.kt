@@ -1,6 +1,14 @@
 package com.example.vidiio.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -193,6 +201,31 @@ private fun HeroButtons(movie: Movie, spec: HomeStyleSpec, center: Boolean, onCl
     }
 }
 
+/** Backdrop image with a slow, looping zoom + pan (Ken Burns). */
+@Composable
+fun KenBurnsImage(model: Any?, modifier: Modifier = Modifier) {
+    val t = rememberInfiniteTransition(label = "kenburns")
+    val scale by t.animateFloat(
+        initialValue = 1f, targetValue = 1.16f,
+        animationSpec = infiniteRepeatable(tween(22000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "kbScale"
+    )
+    val pan by t.animateFloat(
+        initialValue = -0.035f, targetValue = 0.035f,
+        animationSpec = infiniteRepeatable(tween(30000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "kbPan"
+    )
+    AsyncImage(
+        model = model,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale; scaleY = scale
+            translationX = size.width * pan
+        }
+    )
+}
+
 @Composable
 private fun heroScrim(bottom: Color) = Brush.verticalGradient(
     colors = listOf(
@@ -219,12 +252,16 @@ fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie)
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val movie = movies[page]
             Box(Modifier.fillMaxSize().clickable { onMovieClick(movie) }) {
-                AsyncImage(
-                    model = movie.backdropUrl ?: movie.posterUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (spec.kenBurns) {
+                    KenBurnsImage(movie.backdropUrl ?: movie.posterUrl, Modifier.fillMaxSize())
+                } else {
+                    AsyncImage(
+                        model = movie.backdropUrl ?: movie.posterUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
                 Box(Modifier.fillMaxSize().background(heroScrim(scrim)))
                 Column(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
@@ -274,12 +311,16 @@ fun HeroStatic(movie: Movie, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit)
             .clip(RoundedCornerShape(corner))
             .clickable { onMovieClick(movie) }
     ) {
-        AsyncImage(
-            model = movie.backdropUrl ?: movie.posterUrl,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+        if (spec.kenBurns) {
+            KenBurnsImage(movie.backdropUrl ?: movie.posterUrl, Modifier.fillMaxSize())
+        } else {
+            AsyncImage(
+                model = movie.backdropUrl ?: movie.posterUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
         Box(Modifier.fillMaxSize().background(heroScrim(scrim)))
 
         val alignment = if (spec.heroCenterText) Alignment.BottomCenter else Alignment.BottomStart
@@ -353,7 +394,20 @@ fun HomeCard(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, label = "cardScale")
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) spec.cardPressScale else 1f,
+        animationSpec = if (spec.bouncyCards)
+            spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessMedium)
+        else spring(stiffness = Spring.StiffnessMedium),
+        label = "cardScale"
+    )
+    var appeared by remember { mutableStateOf(!spec.staggerIn) }
+    LaunchedEffect(Unit) { appeared = true }
+    val appear by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(350),
+        label = "cardAppear"
+    )
     val shape = RoundedCornerShape(spec.cardCorner)
 
     Column(modifier = modifier.width(spec.cardWidth)) {
@@ -361,7 +415,11 @@ fun HomeCard(
             modifier = Modifier
                 .width(spec.cardWidth)
                 .height(spec.cardHeight)
-                .graphicsLayer { scaleX = scale; scaleY = scale }
+                .graphicsLayer {
+                    scaleX = scale; scaleY = scale
+                    alpha = appear
+                    translationY = (1f - appear) * 28.dp.toPx()
+                }
                 .clip(shape)
                 .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape)
                 .clickable(interactionSource = interaction, indication = null, onClick = onClick)

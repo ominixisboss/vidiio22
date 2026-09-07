@@ -43,14 +43,15 @@ interface TMDBService {
     @GET("movie/{movie_id}")
     suspend fun getMovieDetails(
         @Path("movie_id") movieId: Int,
-        @Query("api_key") apiKey: String = "13385ad4858c3f8568ce182c7287d9a9"
+        @Query("api_key") apiKey: String = "13385ad4858c3f8568ce182c7287d9a9",
+        @Query("append_to_response") appendToResponse: String = "videos"
     ): TMDBMovie
 
     @GET("tv/{tv_id}")
     suspend fun getTVShowDetails(
         @Path("tv_id") tvId: Int,
         @Query("api_key") apiKey: String = "13385ad4858c3f8568ce182c7287d9a9",
-        @Query("append_to_response") appendToResponse: String = "external_ids"
+        @Query("append_to_response") appendToResponse: String = "external_ids,videos"
     ): TMDBMovie
 
     @GET("tv/{tv_id}/season/{season_number}")

@@ -1,12 +1,18 @@
 package com.example.vidiio.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -128,11 +134,54 @@ fun MovieDetailContent(
     onDownloadClick: (StreamSource) -> Unit,
     onToggleSourceSelector: () -> Unit
 ) {
-    var selectedSeasonIndex by remember(movie.id) { 
-        mutableIntStateOf(movie.seasons.indexOfFirst { it.seasonNumber == selectedEpisode?.seasonNumber }.coerceAtLeast(0)) 
+    var selectedSeasonIndex by remember(movie.id) {
+        mutableIntStateOf(movie.seasons.indexOfFirst { it.seasonNumber == selectedEpisode?.seasonNumber }.coerceAtLeast(0))
+    }
+    var trailerMuted by remember(movie.id) { mutableStateOf(true) }
+    var trailerFailed by remember(movie.id) { mutableStateOf(false) }
+    var trailerFullscreen by remember(movie.id) { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val listState = rememberLazyListState()
+    // Pause the inline trailer once the header scrolls (mostly) out of view.
+    val headerVisible by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 700
+        }
+    }
+
+    val trailerKey = movie.trailerKey
+    if (trailerFullscreen && trailerKey != null) {
+        Dialog(
+            onDismissRequest = { trailerFullscreen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            BackHandler { trailerFullscreen = false }
+            Box(Modifier.fillMaxSize().background(Color.Black)) {
+                com.example.vidiio.ui.components.TrailerPlayer(
+                    videoId = trailerKey,
+                    playing = true,
+                    muted = false,
+                    controls = true,
+                    interactive = true,
+                    modifier = Modifier.fillMaxSize(),
+                    onUnavailable = { trailerFailed = true; trailerFullscreen = false }
+                )
+                IconButton(
+                    onClick = { trailerFullscreen = false },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(12.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                ) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
+                }
+            }
+        }
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize()
     ) {
         item {
@@ -141,12 +190,23 @@ fun MovieDetailContent(
                     .fillMaxWidth()
                     .height(400.dp)
             ) {
-                AsyncImage(
-                    model = movie.posterUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                val trailerActive = trailerKey != null && !trailerFailed
+                if (trailerActive) {
+                    com.example.vidiio.ui.components.TrailerPlayer(
+                        videoId = trailerKey!!,
+                        playing = headerVisible && !trailerFullscreen,
+                        muted = trailerMuted,
+                        modifier = Modifier.fillMaxSize(),
+                        onUnavailable = { trailerFailed = true }
+                    )
+                } else {
+                    AsyncImage(
+                        model = movie.backdropUrl ?: movie.posterUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -157,6 +217,53 @@ fun MovieDetailContent(
                             )
                         )
                 )
+                if (trailerActive) {
+                    Row(
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { trailerMuted = !trailerMuted },
+                            modifier = Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                        ) {
+                            Icon(
+                                imageVector = if (trailerMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                                contentDescription = if (trailerMuted) "Unmute trailer" else "Mute trailer",
+                                tint = Color.White
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { trailerFullscreen = true },
+                            modifier = Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                        ) {
+                            Icon(Icons.Rounded.Fullscreen, contentDescription = "Fullscreen trailer", tint = Color.White)
+                        }
+                    }
+                } else if (trailerKey != null) {
+                    // Trailer can't be embedded — offer to open it externally.
+                    FilledTonalButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("https://www.youtube.com/watch?v=$trailerKey")
+                                    )
+                                )
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.55f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(Icons.Rounded.PlayCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Trailer")
+                    }
+                }
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)

@@ -22,8 +22,32 @@ data class TMDBMovie(
     @Json(name = "media_type") val mediaType: String?,
     @Json(name = "imdb_id") val imdbId: String? = null,
     @Json(name = "external_ids") val externalIds: TMDBExternalIds? = null,
-    @Json(name = "seasons") val seasons: List<TMDBSeason>? = null
+    @Json(name = "seasons") val seasons: List<TMDBSeason>? = null,
+    @Json(name = "videos") val videos: TMDBVideoList? = null
 )
+
+@JsonClass(generateAdapter = true)
+data class TMDBVideoList(
+    @Json(name = "results") val results: List<TMDBVideo> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TMDBVideo(
+    @Json(name = "key") val key: String,
+    @Json(name = "site") val site: String?,
+    @Json(name = "type") val type: String?,
+    @Json(name = "official") val official: Boolean = false,
+    @Json(name = "name") val name: String? = null
+)
+
+/** Best YouTube trailer key, if any: official Trailer → any Trailer → Teaser → any YouTube clip. */
+fun TMDBVideoList?.bestTrailerKey(): String? {
+    val yt = this?.results?.filter { it.site.equals("YouTube", true) && it.key.isNotBlank() } ?: return null
+    return yt.firstOrNull { it.type.equals("Trailer", true) && it.official }?.key
+        ?: yt.firstOrNull { it.type.equals("Trailer", true) }?.key
+        ?: yt.firstOrNull { it.type.equals("Teaser", true) }?.key
+        ?: yt.firstOrNull()?.key
+}
 
 @JsonClass(generateAdapter = true)
 data class TMDBSeason(

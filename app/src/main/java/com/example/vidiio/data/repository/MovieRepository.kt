@@ -10,6 +10,7 @@ import com.example.vidiio.data.model.Episode
 import com.example.vidiio.data.model.StreamSource
 import com.example.vidiio.data.model.stremio.StremioMeta
 import com.example.vidiio.data.model.tmdb.TMDBMovie
+import com.example.vidiio.data.model.tmdb.bestTrailerKey
 import com.example.vidiio.data.model.tmdb.TMDBSeason
 import com.example.vidiio.data.model.tmdb.TMDBEpisode
 import com.example.vidiio.data.scraper.Scraper
@@ -285,7 +286,8 @@ class MovieRepository(
             year = (releaseDate ?: firstAirDate)?.take(4)?.toIntOrNull(),
             rating = voteAverage,
             type = if (isMovie) MovieType.MOVIE else MovieType.TV_SHOW,
-            source = "tmdb"
+            source = "tmdb",
+            trailerKey = videos.bestTrailerKey()
         )
     }
 
