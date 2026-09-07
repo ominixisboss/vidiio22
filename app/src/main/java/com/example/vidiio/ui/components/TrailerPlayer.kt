@@ -14,6 +14,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 
+enum class TrailerFit { COVER, CONTAIN }
+
 /**
  * Looping YouTube trailer rendered full-bleed (CSS "cover" crop) via the YouTube
  * IFrame API in a WebView, on the youtube-nocookie host (avoids the common
@@ -34,9 +36,13 @@ fun TrailerPlayer(
     modifier: Modifier = Modifier,
     controls: Boolean = false,
     interactive: Boolean = false,
+    startMuted: Boolean = true,
+    fit: TrailerFit = TrailerFit.COVER,
     onUnavailable: () -> Unit = {}
 ) {
-    val html = remember(videoId, controls, interactive) { buildHtml(videoId, controls, interactive) }
+    val html = remember(videoId, controls, interactive, startMuted, fit) {
+        buildHtml(videoId, controls, interactive, startMuted, fit)
+    }
     val currentOnUnavailable by rememberUpdatedState(onUnavailable)
 
     Box(modifier = modifier) {
@@ -90,9 +96,22 @@ fun TrailerPlayer(
     }
 }
 
-private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean): String {
+private fun buildHtml(
+    videoId: String,
+    controls: Boolean,
+    interactive: Boolean,
+    startMuted: Boolean,
+    fit: TrailerFit
+): String {
     val pe = if (interactive) "auto" else "none"
     val ctl = if (controls) 1 else 0
+    val mute0 = if (startMuted) 1 else 0
+    val wantMutedInit = if (startMuted) "true" else "false"
+    // COVER fills the box (crops); CONTAIN fits the whole 16:9 frame (letterboxes).
+    val sizing = if (fit == TrailerFit.COVER)
+        "width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh"
+    else
+        "width:100vw;height:56.25vw;max-height:100vh;max-width:177.78vh"
     return """
 <!DOCTYPE html>
 <html>
@@ -102,24 +121,23 @@ private fun buildHtml(videoId: String, controls: Boolean, interactive: Boolean):
   html,body{margin:0;padding:0;background:#000;overflow:hidden;height:100%}
   #wrap{position:fixed;inset:0;overflow:hidden}
   #wrap,#wrap *{pointer-events:$pe !important}
-  #player{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-          width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh}
+  #player{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);$sizing}
 </style>
 </head>
 <body>
 <div id="wrap"><div id="player"></div></div>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-  var player, ready=false, wantMuted=true, wantPlaying=true, failed=false;
+  var player, ready=false, wantMuted=$wantMutedInit, wantPlaying=true, failed=false;
   function fail(){ if(failed)return; failed=true; try{ AndroidTrailer.onUnavailable(); }catch(e){} }
   function onYouTubeIframeAPIReady(){
     player=new YT.Player('player',{
       host:'https://www.youtube-nocookie.com',
       videoId:'$videoId',
-      playerVars:{autoplay:1,controls:$ctl,mute:1,loop:1,playlist:'$videoId',
+      playerVars:{autoplay:1,controls:$ctl,mute:$mute0,loop:1,playlist:'$videoId',
                   playsinline:1,modestbranding:1,rel:0,fs:1,disablekb:1,iv_load_policy:3},
       events:{
-        onReady:function(e){ ready=true; e.target.mute(); apply(); },
+        onReady:function(e){ ready=true; apply(); },
         onError:function(){ fail(); },
         onStateChange:function(e){ if(e.data===YT.PlayerState.ENDED){ e.target.seekTo(0); e.target.playVideo(); } }
       }

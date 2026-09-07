@@ -42,6 +42,7 @@ fun SettingsScreen(
     val colorTheme by viewModel.colorTheme.collectAsState()
     val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsState()
     val homeStyle by viewModel.homeStyle.collectAsState()
+    val avoidCameraCutout by viewModel.avoidCameraCutout.collectAsState()
     val selectedSources by viewModel.selectedSources.collectAsState()
     val stremioAddons by viewModel.stremioAddons.collectAsState()
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
@@ -161,6 +162,14 @@ fun SettingsScreen(
                                 apiKeyToSet = subdlApiKey ?: ""
                                 showApiKeyDialog = true 
                             }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        SwitchPreferenceItem(
+                            title = "Avoid camera cutout",
+                            summary = "Inset the video player around the front camera",
+                            icon = Icons.Rounded.AspectRatio,
+                            checked = avoidCameraCutout,
+                            onCheckedChange = { viewModel.setAvoidCameraCutout(it) }
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         PreferenceItem(
