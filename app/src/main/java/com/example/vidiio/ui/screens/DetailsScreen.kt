@@ -395,9 +395,9 @@ fun MovieDetailContent(
                         Tab(
                             selected = selectedSeasonIndex == index,
                             onClick = { selectedSeasonIndex = index },
-                            text = { 
+                            text = {
                                 Text(
-                                    "Season ${season.seasonNumber}",
+                                    season.name ?: "Season ${season.seasonNumber}",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = if (selectedSeasonIndex == index) FontWeight.Bold else FontWeight.Normal
                                 )

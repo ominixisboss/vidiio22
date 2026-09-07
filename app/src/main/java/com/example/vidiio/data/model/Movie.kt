@@ -23,7 +23,9 @@ data class Movie(
 @Serializable
 data class Season(
     val seasonNumber: Int,
-    val episodes: List<Episode>
+    val episodes: List<Episode>,
+    /** Optional display name (e.g. a One Pace arc); falls back to "Season N". */
+    val name: String? = null
 )
 
 @Serializable

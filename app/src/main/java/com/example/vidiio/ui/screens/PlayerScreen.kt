@@ -39,6 +39,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import io.github.peerless2012.ass.media.kt.buildWithAssSupport
+import io.github.peerless2012.ass.media.type.AssRenderType
 import com.example.vidiio.MainActivity
 import com.example.vidiio.VidiioApplication
 import com.example.vidiio.data.model.StreamSource
@@ -238,10 +240,16 @@ fun PlayerScreen(
             )
             .build()
 
+        // buildWithAssSupport installs a libass-backed ASS/SSA subtitle renderer
+        // (styled positioning/fonts/colours). CUES mode pre-renders to bitmap cues the
+        // existing SubtitleView draws — no extra overlay view to wire up.
         ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory))
-            .build().apply {
+            .buildWithAssSupport(
+                context = context,
+                renderType = AssRenderType.CUES,
+                dataSourceFactory = dataSourceFactory
+            ).apply {
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
                         // A fresh torrent often 'Source error's for the first 10-30s while
