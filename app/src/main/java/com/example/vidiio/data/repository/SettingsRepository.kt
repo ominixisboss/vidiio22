@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -26,6 +27,26 @@ enum class HomeStyle {
     VIDIIO, NETFLIX, HULU, PRIME, DISNEY
 }
 
+enum class ProxyType { SOCKS5, HTTP }
+
+/** Proxy ("VPN") config applied to all app HTTP traffic and the torrent engine. */
+data class ProxyConfig(
+    val type: ProxyType,
+    val host: String,
+    val port: Int,
+    val username: String?,
+    val password: String?
+) {
+    /** socks5://user:pass@host:port — the form the torrent engine's ALL_PROXY env expects. */
+    fun toUri(): String {
+        val scheme = if (type == ProxyType.SOCKS5) "socks5" else "http"
+        val auth = if (!username.isNullOrBlank()) {
+            "${username}${if (!password.isNullOrBlank()) ":$password" else ""}@"
+        } else ""
+        return "$scheme://$auth$host:$port"
+    }
+}
+
 class SettingsRepository(private val context: Context) {
 
     private object PreferencesKeys {
@@ -38,6 +59,12 @@ class SettingsRepository(private val context: Context) {
         val SOURCES = stringSetPreferencesKey("sources")
         val STREMIO_ADDONS = stringSetPreferencesKey("stremio_addons")
         val SUBDL_API_KEY = stringPreferencesKey("subdl_api_key")
+        val PROXY_ENABLED = booleanPreferencesKey("proxy_enabled")
+        val PROXY_TYPE = stringPreferencesKey("proxy_type")
+        val PROXY_HOST = stringPreferencesKey("proxy_host")
+        val PROXY_PORT = intPreferencesKey("proxy_port")
+        val PROXY_USER = stringPreferencesKey("proxy_user")
+        val PROXY_PASS = stringPreferencesKey("proxy_pass")
     }
 
     val playbackQualityFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -121,6 +148,48 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAvoidCameraCutout(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AVOID_CAMERA_CUTOUT] = enabled
+        }
+    }
+
+    val proxyEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[PreferencesKeys.PROXY_ENABLED] ?: false }
+    val proxyTypeFlow: Flow<ProxyType> = context.dataStore.data.map {
+        runCatching { ProxyType.valueOf(it[PreferencesKeys.PROXY_TYPE] ?: "SOCKS5") }.getOrDefault(ProxyType.SOCKS5)
+    }
+    val proxyHostFlow: Flow<String> = context.dataStore.data.map { it[PreferencesKeys.PROXY_HOST] ?: "" }
+    val proxyPortFlow: Flow<Int> = context.dataStore.data.map { it[PreferencesKeys.PROXY_PORT] ?: 0 }
+    val proxyUserFlow: Flow<String> = context.dataStore.data.map { it[PreferencesKeys.PROXY_USER] ?: "" }
+    val proxyPassFlow: Flow<String> = context.dataStore.data.map { it[PreferencesKeys.PROXY_PASS] ?: "" }
+
+    /** The active proxy config, or null when disabled / not fully configured. */
+    val proxyConfigFlow: Flow<ProxyConfig?> = context.dataStore.data.map { p ->
+        if (p[PreferencesKeys.PROXY_ENABLED] != true) return@map null
+        val host = p[PreferencesKeys.PROXY_HOST]?.trim().orEmpty()
+        val port = p[PreferencesKeys.PROXY_PORT] ?: 0
+        if (host.isEmpty() || port !in 1..65535) return@map null
+        ProxyConfig(
+            type = runCatching { ProxyType.valueOf(p[PreferencesKeys.PROXY_TYPE] ?: "SOCKS5") }.getOrDefault(ProxyType.SOCKS5),
+            host = host,
+            port = port,
+            username = p[PreferencesKeys.PROXY_USER]?.trim()?.takeIf { it.isNotEmpty() },
+            password = p[PreferencesKeys.PROXY_PASS]?.takeIf { it.isNotEmpty() }
+        )
+    }
+
+    suspend fun setProxy(
+        enabled: Boolean,
+        type: ProxyType,
+        host: String,
+        port: Int,
+        username: String,
+        password: String
+    ) {
+        context.dataStore.edit { p ->
+            p[PreferencesKeys.PROXY_ENABLED] = enabled
+            p[PreferencesKeys.PROXY_TYPE] = type.name
+            p[PreferencesKeys.PROXY_HOST] = host.trim()
+            p[PreferencesKeys.PROXY_PORT] = port
+            p[PreferencesKeys.PROXY_USER] = username.trim()
+            p[PreferencesKeys.PROXY_PASS] = password
         }
     }
 

@@ -78,6 +78,21 @@ class TorrServerEngine(private val context: Context) {
             ).apply {
                 directory(dir)
                 redirectErrorStream(true)
+                // Route the torrent engine's traffic through the user's proxy ("VPN"),
+                // the same way qBittorrent-style SOCKS proxying works.
+                (context.applicationContext as? com.example.vidiio.VidiioApplication)?.proxyConfig?.let { cfg ->
+                    val uri = cfg.toUri()
+                    environment()["ALL_PROXY"] = uri
+                    environment()["all_proxy"] = uri
+                    if (cfg.type == com.example.vidiio.data.repository.ProxyType.HTTP) {
+                        environment()["HTTP_PROXY"] = uri
+                        environment()["HTTPS_PROXY"] = uri
+                        environment()["http_proxy"] = uri
+                        environment()["https_proxy"] = uri
+                    }
+                    environment()["NO_PROXY"] = "127.0.0.1,localhost"
+                    Log.i(TAG, "TorrServer proxy: ${cfg.type} ${cfg.host}:${cfg.port}")
+                }
             }.start()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to exec TorrServer binary", e)
