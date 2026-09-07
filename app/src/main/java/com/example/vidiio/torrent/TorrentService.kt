@@ -63,8 +63,14 @@ class TorrentService : Service() {
         } catch (e: Exception) {}
     }
 
-    fun startStreaming(fileIndex: Int = -1, season: Int? = null, episode: Int? = null, onReady: (String) -> Unit) {
-        Log.d("TorrentService", "startStreaming requested: fileIndex=$fileIndex, S=$season, E=$episode")
+    fun startStreaming(
+        fileIndex: Int = -1,
+        season: Int? = null,
+        episode: Int? = null,
+        fileName: String? = null,
+        onReady: (String) -> Unit
+    ) {
+        Log.d("TorrentService", "startStreaming requested: fileIndex=$fileIndex, S=$season, E=$episode, name=$fileName")
         if (!torrentManager.isAvailable) {
             Log.e("TorrentService", "Torrent engine not available (binary missing for this ABI)")
             onReady("")
@@ -72,7 +78,7 @@ class TorrentService : Service() {
         }
         acquireWifiLock()
         scope.launch {
-            val url = torrentManager.startStreaming(fileIndex, season, episode)
+            val url = torrentManager.startStreaming(fileIndex, season, episode, fileName)
             if (!url.isNullOrEmpty()) {
                 Log.d("TorrentService", "Stream ready: $url")
                 startForeground(1, createNotification("Streaming torrent...", "Playback in progress"))

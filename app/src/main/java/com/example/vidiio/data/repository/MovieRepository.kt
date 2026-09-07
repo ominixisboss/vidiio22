@@ -15,6 +15,7 @@ import com.example.vidiio.data.model.tmdb.TMDBSeason
 import com.example.vidiio.data.model.tmdb.TMDBEpisode
 import com.example.vidiio.data.scraper.Scraper
 import com.example.vidiio.data.stremio.AddonManager
+import com.example.vidiio.data.stremio.toStreamSource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -229,14 +230,7 @@ class MovieRepository(
                                 if (movie.type == MovieType.MOVIE) "movie" else "series",
                                 stremioId
                             ).forEach { stremioStream ->
-                                send(StreamSource(
-                                    url = stremioStream.url ?: "magnet:?xt=urn:btih:${stremioStream.infoHash}",
-                                    sourceName = "Stremio",
-                                    sourceId = "stremio",
-                                    serverName = stremioStream.name ?: stremioStream.title ?: "Unknown",
-                                    quality = stremioStream.title?.substringAfterLast("\n") ?: "HD",
-                                    seeders = null
-                                ))
+                                stremioStream.toStreamSource()?.let { send(it) }
                             }
                         }
                     }

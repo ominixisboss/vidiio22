@@ -26,7 +26,10 @@ data class DownloadTask(
     val createdAt: Long = System.currentTimeMillis(),
     val errorMessage: String? = null,
     /** JSON map of HTTP request headers (Referer/UA) for HTTP downloads. */
-    val headersJson: String? = null
+    val headersJson: String? = null,
+    /** For multi-file torrents: the exact file to fetch (Stremio addon selection). */
+    val torrentFileIndex: Int? = null,
+    val torrentFileName: String? = null
 )
 
 class DownloadConverters {
