@@ -32,6 +32,8 @@ import okhttp3.dnsoverhttps.DnsOverHttps
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
@@ -77,11 +79,19 @@ class VidiioApplication : Application() {
     lateinit var subdlService: SubdlService
         private set
 
+    /** Active proxy config, resolved once at startup. Null = direct. */
+    var proxyConfig: com.example.vidiio.data.repository.ProxyConfig? = null
+        private set
+
     override fun onCreate() {
         super.onCreate()
         Rive.init(this)
 
         settingsRepository = SettingsRepository(this)
+
+        // Read the proxy ("VPN") config once at startup. Changing it needs an app restart.
+        proxyConfig = kotlinx.coroutines.runBlocking { settingsRepository.proxyConfigFlow.first() }
+        applyProxyAuthenticator(proxyConfig)
 
         val database = Room.databaseBuilder(
             applicationContext,
@@ -106,6 +116,7 @@ class VidiioApplication : Application() {
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .writeTimeout(5, TimeUnit.SECONDS)
+            .applyProxy(proxyConfig)
             .build()
 
         val dns = DnsOverHttps.Builder()
@@ -125,6 +136,7 @@ class VidiioApplication : Application() {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(35, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .applyProxy(proxyConfig)
             .build()
 
         playbackHttpClient = okHttpClient.newBuilder()
@@ -182,5 +194,36 @@ class VidiioApplication : Application() {
             settingsRepository,
             addonManager
         )
+    }
+
+    private fun OkHttpClient.Builder.applyProxy(
+        cfg: com.example.vidiio.data.repository.ProxyConfig?
+    ): OkHttpClient.Builder {
+        if (cfg == null) return this
+        val javaType = if (cfg.type == com.example.vidiio.data.repository.ProxyType.SOCKS5)
+            java.net.Proxy.Type.SOCKS else java.net.Proxy.Type.HTTP
+        proxy(java.net.Proxy(javaType, java.net.InetSocketAddress.createUnresolved(cfg.host, cfg.port)))
+        if (cfg.type == com.example.vidiio.data.repository.ProxyType.HTTP && !cfg.username.isNullOrBlank()) {
+            proxyAuthenticator { _, response ->
+                val credential = okhttp3.Credentials.basic(cfg.username, cfg.password ?: "")
+                response.request.newBuilder().header("Proxy-Authorization", credential).build()
+            }
+        }
+        return this
+    }
+
+    /** SOCKS5 username/password auth is done through the JVM-wide Authenticator. */
+    private fun applyProxyAuthenticator(cfg: com.example.vidiio.data.repository.ProxyConfig?) {
+        if (cfg == null || cfg.type != com.example.vidiio.data.repository.ProxyType.SOCKS5 ||
+            cfg.username.isNullOrBlank()
+        ) return
+        java.net.Authenticator.setDefault(object : java.net.Authenticator() {
+            override fun getPasswordAuthentication(): java.net.PasswordAuthentication? {
+                if (requestingHost.equals(cfg.host, ignoreCase = true) && requestingPort == cfg.port) {
+                    return java.net.PasswordAuthentication(cfg.username, (cfg.password ?: "").toCharArray())
+                }
+                return null
+            }
+        })
     }
 }

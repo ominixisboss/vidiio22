@@ -8,11 +8,17 @@ import coil.imageLoader
 import com.example.vidiio.data.repository.AppTheme
 import com.example.vidiio.data.repository.ColorTheme
 import com.example.vidiio.data.repository.HomeStyle
+import com.example.vidiio.data.repository.ProxyConfig
+import com.example.vidiio.data.repository.ProxyType
 import com.example.vidiio.data.repository.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
@@ -36,6 +42,22 @@ class SettingsViewModel(
 
     val avoidCameraCutout: StateFlow<Boolean> = settingsRepository.avoidCameraCutoutFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val proxyEnabled: StateFlow<Boolean> = settingsRepository.proxyEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val proxyType: StateFlow<ProxyType> = settingsRepository.proxyTypeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ProxyType.SOCKS5)
+    val proxyHost: StateFlow<String> = settingsRepository.proxyHostFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val proxyPort: StateFlow<Int> = settingsRepository.proxyPortFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val proxyUser: StateFlow<String> = settingsRepository.proxyUserFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val proxyPass: StateFlow<String> = settingsRepository.proxyPassFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    private val _proxyTestResult = MutableStateFlow<String?>(null)
+    val proxyTestResult: StateFlow<String?> = _proxyTestResult.asStateFlow()
 
     val selectedSources: StateFlow<Set<String>> = settingsRepository.sourcesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf("vidsrc", "videasy", "vadapav", "vuflix", "cinejoy", "movy", "a111477", "knaben", "tg"))
@@ -79,6 +101,51 @@ class SettingsViewModel(
     fun setAvoidCameraCutout(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAvoidCameraCutout(enabled)
+        }
+    }
+
+    fun saveProxy(enabled: Boolean, type: ProxyType, host: String, port: Int, user: String, pass: String) {
+        viewModelScope.launch {
+            settingsRepository.setProxy(enabled, type, host, port, user, pass)
+        }
+    }
+
+    fun clearProxyTestResult() { _proxyTestResult.value = null }
+
+    /** Fetches the public IP through the given proxy so the user can confirm it works. */
+    fun testProxy(type: ProxyType, host: String, port: Int, user: String, pass: String) {
+        viewModelScope.launch {
+            _proxyTestResult.value = "Testing…"
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val cfg = ProxyConfig(type, host.trim(), port, user.trim().ifBlank { null }, pass.ifBlank { null })
+                    val jType = if (type == ProxyType.SOCKS5) java.net.Proxy.Type.SOCKS else java.net.Proxy.Type.HTTP
+                    val builder = okhttp3.OkHttpClient.Builder()
+                        .proxy(java.net.Proxy(jType, java.net.InetSocketAddress.createUnresolved(cfg.host, cfg.port)))
+                        .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+                    if (type == ProxyType.HTTP && !cfg.username.isNullOrBlank()) {
+                        builder.proxyAuthenticator { _, response ->
+                            response.request.newBuilder()
+                                .header("Proxy-Authorization", okhttp3.Credentials.basic(cfg.username, cfg.password ?: ""))
+                                .build()
+                        }
+                    }
+                    if (type == ProxyType.SOCKS5 && !cfg.username.isNullOrBlank()) {
+                        java.net.Authenticator.setDefault(object : java.net.Authenticator() {
+                            override fun getPasswordAuthentication() =
+                                java.net.PasswordAuthentication(cfg.username, (cfg.password ?: "").toCharArray())
+                        })
+                    }
+                    val client = builder.build()
+                    val req = okhttp3.Request.Builder().url("https://api.ipify.org?format=text").build()
+                    client.newCall(req).execute().use { r ->
+                        if (r.isSuccessful) "Connected — public IP: ${r.body?.string()?.trim()}"
+                        else "Proxy responded ${r.code}"
+                    }
+                }.getOrElse { "Failed: ${it.message ?: it.javaClass.simpleName}" }
+            }
+            _proxyTestResult.value = result
         }
     }
 

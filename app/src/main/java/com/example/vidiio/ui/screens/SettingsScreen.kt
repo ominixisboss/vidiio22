@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -46,7 +47,14 @@ fun SettingsScreen(
     val selectedSources by viewModel.selectedSources.collectAsState()
     val stremioAddons by viewModel.stremioAddons.collectAsState()
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
+    val proxyEnabled by viewModel.proxyEnabled.collectAsState()
+    val proxyType by viewModel.proxyType.collectAsState()
+    val proxyHost by viewModel.proxyHost.collectAsState()
+    val proxyPort by viewModel.proxyPort.collectAsState()
+    val proxyUser by viewModel.proxyUser.collectAsState()
+    val proxyPass by viewModel.proxyPass.collectAsState()
 
+    var showProxyDialog by rememberSaveable { mutableStateOf(false) }
     var showAddAddonDialog by rememberSaveable { mutableStateOf(false) }
     var addonUrlToAdd by rememberSaveable { mutableStateOf("") }
     var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
@@ -177,6 +185,35 @@ fun SettingsScreen(
                             summary = "Clear image and data cache",
                             icon = Icons.Rounded.DeleteSweep,
                             onClick = { viewModel.clearCache() }
+                        )
+                    }
+                }
+            }
+
+            // --- Privacy Section ---
+            item { SettingsHeader("Privacy", Icons.Rounded.Shield) }
+            item {
+                GlassCard {
+                    Column {
+                        SwitchPreferenceItem(
+                            title = "Proxy (VPN)",
+                            summary = when {
+                                !proxyEnabled -> "Route scraper + torrent traffic through a SOCKS5/HTTP proxy"
+                                proxyHost.isBlank() || proxyPort <= 0 -> "On, but not configured — open Proxy settings"
+                                else -> "${proxyType.name} · $proxyHost:$proxyPort"
+                            },
+                            icon = Icons.Rounded.VpnKey,
+                            checked = proxyEnabled,
+                            onCheckedChange = {
+                                viewModel.saveProxy(it, proxyType, proxyHost, proxyPort, proxyUser, proxyPass)
+                            }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        PreferenceItem(
+                            title = "Proxy settings",
+                            summary = "Host, port, credentials — test the connection",
+                            icon = Icons.Rounded.Tune,
+                            onClick = { showProxyDialog = true }
                         )
                     }
                 }
@@ -353,6 +390,103 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showProxyDialog) {
+        ProxySettingsDialog(
+            initialType = proxyType,
+            initialHost = proxyHost,
+            initialPort = if (proxyPort > 0) proxyPort.toString() else "",
+            initialUser = proxyUser,
+            initialPass = proxyPass,
+            testResult = viewModel.proxyTestResult.collectAsState().value,
+            onTest = { t, h, p, u, pw -> viewModel.testProxy(t, h, p.toIntOrNull() ?: 0, u, pw) },
+            onSave = { t, h, p, u, pw ->
+                viewModel.saveProxy(true, t, h, p.toIntOrNull() ?: 0, u, pw)
+                viewModel.clearProxyTestResult()
+                showProxyDialog = false
+            },
+            onDismiss = { viewModel.clearProxyTestResult(); showProxyDialog = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProxySettingsDialog(
+    initialType: com.example.vidiio.data.repository.ProxyType,
+    initialHost: String,
+    initialPort: String,
+    initialUser: String,
+    initialPass: String,
+    testResult: String?,
+    onTest: (com.example.vidiio.data.repository.ProxyType, String, String, String, String) -> Unit,
+    onSave: (com.example.vidiio.data.repository.ProxyType, String, String, String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var type by remember { mutableStateOf(initialType) }
+    var host by remember { mutableStateOf(initialHost) }
+    var port by remember { mutableStateOf(initialPort) }
+    var user by remember { mutableStateOf(initialUser) }
+    var pass by remember { mutableStateOf(initialPass) }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = Color.Gray,
+        focusedLabelColor = MaterialTheme.colorScheme.primary,
+        unfocusedLabelColor = Color.Gray
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
+        title = { Text("Proxy (VPN)") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.example.vidiio.data.repository.ProxyType.entries.forEach { t ->
+                        FilterChip(
+                            selected = type == t,
+                            onClick = { type = t },
+                            label = { Text(if (t == com.example.vidiio.data.repository.ProxyType.SOCKS5) "SOCKS5" else "HTTP") }
+                        )
+                    }
+                }
+                OutlinedTextField(host, { host = it }, label = { Text("Host") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), colors = fieldColors)
+                OutlinedTextField(port, { port = it.filter(Char::isDigit).take(5) }, label = { Text("Port") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors)
+                OutlinedTextField(user, { user = it }, label = { Text("Username (optional)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), colors = fieldColors)
+                OutlinedTextField(pass, { pass = it }, label = { Text("Password (optional)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), colors = fieldColors)
+                TextButton(
+                    onClick = { onTest(type, host, port, user, pass) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) { Text("Test connection") }
+                testResult?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    "Restart the app after saving for the change to take effect.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(type, host, port, user, pass) },
+                enabled = host.isNotBlank() && (port.toIntOrNull() ?: 0) in 1..65535,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+            ) { Text("Save & enable") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Color.Gray) } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
