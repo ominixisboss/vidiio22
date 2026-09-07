@@ -135,16 +135,24 @@ fun PlayerScreen(
     val settingsRepo = remember {
         (context.applicationContext as VidiioApplication).settingsRepository
     }
-    val avoidCutout by settingsRepo.avoidCameraCutoutFlow.collectAsState(initial = false)
+    val avoidCutoutSetting by settingsRepo.avoidCameraCutoutFlow.collectAsState(initial = false)
+    // Player-session copy so the Aspect menu can flip it live; seeded from the setting.
+    var notchSafe by remember { mutableStateOf(false) }
+    var notchSafeInit by remember { mutableStateOf(false) }
+    LaunchedEffect(avoidCutoutSetting) {
+        if (!notchSafeInit) { notchSafe = avoidCutoutSetting; notchSafeInit = true }
+    }
 
-    // Keep the picture clear of the front-camera cutout when the user asks for it.
-    DisposableEffect(avoidCutout) {
+    // "Fill, keep camera clear": NEVER lets Android letterbox the window just enough to
+    // clear the camera hole; otherwise SHORT_EDGES fills into it. Belt-and-braces, the
+    // video surface is also inset by the cutout below.
+    DisposableEffect(notchSafe) {
         val window = activity?.window
         val original = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
             window?.attributes?.layoutInDisplayCutoutMode else null
         if (window != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (avoidCutout)
+                layoutInDisplayCutoutMode = if (notchSafe)
                     android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
                 else
                     android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
@@ -154,9 +162,7 @@ fun PlayerScreen(
             if (window != null && original != null &&
                 android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P
             ) {
-                window.attributes = window.attributes.apply {
-                    layoutInDisplayCutoutMode = original
-                }
+                window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = original }
             }
         }
     }
@@ -528,7 +534,12 @@ fun PlayerScreen(
                 update = { view ->
                     view.resizeMode = resizeMode
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (notchSafe) Modifier.windowInsetsPadding(WindowInsets.displayCutout)
+                        else Modifier
+                    )
             )
         }
 
@@ -804,8 +815,11 @@ fun PlayerScreen(
             AspectMenu(
                 currentMode = resizeMode,
                 onModeSelect = { resizeMode = it },
-                avoidCutout = avoidCutout,
-                onToggleAvoidCutout = { scope.launch { settingsRepo.setAvoidCameraCutout(it) } },
+                avoidCutout = notchSafe,
+                onToggleAvoidCutout = {
+                    notchSafe = it
+                    scope.launch { settingsRepo.setAvoidCameraCutout(it) }
+                },
                 onDismiss = { showAspectMenu = false }
             )
         }

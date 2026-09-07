@@ -144,29 +144,42 @@ fun AspectMenu(
         2 to "Fixed Height"
     )
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Aspect Ratio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            modes.forEach { (mode, label) ->
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding()
+        ) {
+            item {
+                Text(
+                    "Aspect Ratio",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+            items(modes) { (mode, label) ->
                 ListItem(
                     headlineContent = { Text(label) },
                     leadingContent = { RadioButton(selected = mode == currentMode, onClick = null) },
                     modifier = Modifier.clickable { onModeSelect(mode); onDismiss() }
                 )
             }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            ListItem(
-                headlineContent = { Text("Avoid camera cutout") },
-                supportingContent = { Text("Inset the picture around the front camera") },
-                trailingContent = {
-                    Switch(checked = avoidCutout, onCheckedChange = onToggleAvoidCutout)
-                },
-                modifier = Modifier.clickable { onToggleAvoidCutout(!avoidCutout) }
-            )
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            item {
+                ListItem(
+                    headlineContent = { Text("Fill, keep camera clear") },
+                    supportingContent = { Text("Fills the screen but stops short of the front-camera hole") },
+                    trailingContent = {
+                        Switch(checked = avoidCutout, onCheckedChange = onToggleAvoidCutout)
+                    },
+                    modifier = Modifier.clickable { onToggleAvoidCutout(!avoidCutout) }
+                )
+            }
         }
     }
 }
