@@ -160,10 +160,16 @@ val downloadTorrServer = tasks.register("downloadTorrServer") {
         ?: "arm64-v8a,armeabi-v7a")
         .split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
+    // A real TorrServer binary is a >1MB ELF ("\x7fELF"). This rejects stub/placeholder
+    // files so a dev's throwaway libtorrserver.so can never get packaged.
+    fun File.isElfBinary(): Boolean = exists() && length() > 1_000_000L &&
+        inputStream().use { s -> ByteArray(4).also { s.read(it) } }
+            .let { it[0] == 0x7f.toByte() && it[1] == 'E'.code.toByte() && it[2] == 'L'.code.toByte() && it[3] == 'F'.code.toByte() }
+
     outputs.dir(jniDir)
     outputs.upToDateWhen {
         versionMarker.exists() && versionMarker.readText().trim() == torrServerVersion &&
-            wantedAbis.all { File(jniDir, "$it/libtorrserver.so").let { f -> f.exists() && f.length() > 1_000_000L } }
+            wantedAbis.all { File(jniDir, "$it/libtorrserver.so").isElfBinary() }
     }
 
     doLast {
@@ -179,7 +185,11 @@ val downloadTorrServer = tasks.register("downloadTorrServer") {
                 logger.warn("Unknown ABI '$abi' - skipping"); continue
             }
             val target = File(jniDir, "$abi/libtorrserver.so")
-            if (target.exists() && target.length() > 1_000_000L) continue
+            if (target.isElfBinary()) continue
+            if (target.exists()) {
+                logger.lifecycle("Replacing non-ELF $abi/libtorrserver.so (${target.length()} bytes)")
+                target.delete()
+            }
             target.parentFile.mkdirs()
 
             val local = localDir?.resolve(asset)
