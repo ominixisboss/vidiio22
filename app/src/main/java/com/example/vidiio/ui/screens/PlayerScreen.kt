@@ -166,10 +166,11 @@ fun PlayerScreen(
     val isDownloading = downloadStatus != null && downloadStatus != DownloadStatus.COMPLETED && downloadStatus != DownloadStatus.FAILED && downloadStatus != DownloadStatus.CANCELLED
 
     // Media3 Player
+    val dataSourceFactory = remember {
+        OkHttpDataSource.Factory((context.applicationContext as VidiioApplication).playbackHttpClient)
+    }
     val exoPlayer = remember {
-        val application = context.applicationContext as VidiioApplication
-        val dataSourceFactory = OkHttpDataSource.Factory(application.playbackHttpClient)
-        
+
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 60000, // minBufferMs
@@ -274,12 +275,21 @@ fun PlayerScreen(
     fun startPlayback(source: StreamSource) {
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        
+
+        // Many streaming hosts 403 without the scraper's Referer/Origin/UA headers.
+        // ExoPlayer carries these on the HTTP data source, not the MediaItem.
+        val requestHeaders = buildMap {
+            put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            source.headers?.let { putAll(it) }
+        }
+        dataSourceFactory.setDefaultRequestProperties(requestHeaders)
+
         val mediaItem = MediaItem.Builder()
             .setUri(source.url)
             .setMimeType(if (source.isM3u8) MimeTypes.APPLICATION_M3U8 else null)
             .build()
-            
+
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         exoPlayer.play()

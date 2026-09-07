@@ -104,13 +104,19 @@ class DetailsViewModel(
 
     private fun observeSettings() {
         viewModelScope.launch {
-            settingsRepository.sourcesFlow.collectLatest { enabled ->
-                val currentMovie = _movie.value
-                val currentEpisode = _selectedEpisode.value
-                if (currentMovie != null) {
-                    startScraping(currentMovie, currentEpisode)
+            // Single scrape trigger: (re)scrape when the movie first loads, the selected
+            // episode changes, or the enabled-source set changes - and nothing else.
+            // DataStore re-emits the same value on startup, so distinctUntilChanged is what
+            // stops startScraping from cancelling itself in a loop.
+            combine(
+                _movie.filterNotNull(),
+                _selectedEpisode,
+                settingsRepository.sourcesFlow,
+            ) { movie, episode, enabled -> Triple(movie, episode, enabled) }
+                .distinctUntilChanged()
+                .collectLatest { (movie, episode, _) ->
+                    startScraping(movie, episode)
                 }
-            }
         }
     }
 
@@ -136,8 +142,7 @@ class DetailsViewModel(
                         _isFavorite.value = isFav
                     }
                 }
-                
-                startScraping(fullMovie, selectedEpisode)
+                // Scraping is kicked off by observeSettings() once _movie is set.
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             }
@@ -165,12 +170,9 @@ class DetailsViewModel(
     }
 
     fun selectEpisode(episode: Episode) {
-        _selectedEpisode.value = episode
         _allFoundSources.value = emptyList()
-        val currentMovie = _movie.value
-        if (currentMovie != null) {
-            startScraping(currentMovie, episode)
-        }
+        _selectedEpisode.value = episode
+        // observeSettings() re-scrapes on the episode change.
     }
 
     fun toggleFavorite() {

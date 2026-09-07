@@ -30,6 +30,13 @@ class CinejoyScraper(private val client: OkHttpClient) : Scraper {
     private val referer = "https://cinejoy.to/"
     private val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
+    /** Headers the CDN requires on the actual media request (ExoPlayer would 403 without them). */
+    private val playbackHeaders = mapOf(
+        "User-Agent" to ua,
+        "Referer" to referer,
+        "Origin" to origin,
+    )
+
     private val serverPubKeyHex = "0483c7a82132b8516e3eb4061b82e9c881cc585593a4709001131bff7443eabc1701c1f0d50e23ac02b0b9a5979903dbd7e9055aab5e4a5532132d1d200707f5f2"
     private val serverPublicKey: PublicKey by lazy { CryptoUtils.decodePublicKey(serverPubKeyHex) }
 
@@ -105,7 +112,8 @@ class CinejoyScraper(private val client: OkHttpClient) : Scraper {
                             url = playlistUrl,
                             sourceName = name,
                             quality = quality,
-                            isM3u8 = true
+                            isM3u8 = true,
+                            headers = playbackHeaders
                         ))
                     } else if (stType == "file") {
                         val qualities = st.optJSONObject("qualities") ?: continue
@@ -123,7 +131,8 @@ class CinejoyScraper(private val client: OkHttpClient) : Scraper {
                                 url = fileUrl,
                                 sourceName = name,
                                 quality = quality,
-                                isM3u8 = false
+                                isM3u8 = false,
+                                headers = playbackHeaders
                             ))
                         }
                     }
