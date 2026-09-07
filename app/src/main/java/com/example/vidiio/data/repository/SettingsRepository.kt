@@ -21,12 +21,18 @@ enum class ColorTheme {
     RED, BLUE, GREEN, PURPLE, ORANGE, TEAL, PINK, INDIGO, GOLD, MONO
 }
 
+/** Home-screen layout preset. Restyles the hero, cards, rows and accent of the Home tab. */
+enum class HomeStyle {
+    VIDIIO, NETFLIX, HULU, PRIME, DISNEY
+}
+
 class SettingsRepository(private val context: Context) {
 
     private object PreferencesKeys {
         val PLAYBACK_QUALITY = stringPreferencesKey("playback_quality")
         val THEME = stringPreferencesKey("theme")
         val COLOR_THEME = stringPreferencesKey("color_theme")
+        val HOME_STYLE = stringPreferencesKey("home_style")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val SOURCES = stringSetPreferencesKey("sources")
         val STREMIO_ADDONS = stringSetPreferencesKey("stremio_addons")
@@ -48,6 +54,15 @@ class SettingsRepository(private val context: Context) {
             ColorTheme.valueOf(themeString)
         } catch (e: Exception) {
             ColorTheme.RED
+        }
+    }
+
+    val homeStyleFlow: Flow<HomeStyle> = context.dataStore.data.map { preferences ->
+        val raw = preferences[PreferencesKeys.HOME_STYLE] ?: HomeStyle.VIDIIO.name
+        try {
+            HomeStyle.valueOf(raw)
+        } catch (e: Exception) {
+            HomeStyle.VIDIIO
         }
     }
 
@@ -82,6 +97,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setColorTheme(theme: ColorTheme) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.COLOR_THEME] = theme.name
+        }
+    }
+
+    suspend fun setHomeStyle(style: HomeStyle) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.HOME_STYLE] = style.name
         }
     }
 

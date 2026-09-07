@@ -30,7 +30,8 @@ class VidiioViewModelFactory(
             modelClass.isAssignableFrom(HomeViewModel::class.java) -> {
                 HomeViewModel(
                     movieRepository ?: throw IllegalArgumentException("MovieRepository is required"),
-                    watchProgressRepository ?: throw IllegalArgumentException("WatchProgressRepository is required")
+                    watchProgressRepository ?: throw IllegalArgumentException("WatchProgressRepository is required"),
+                    settingsRepository ?: throw IllegalArgumentException("SettingsRepository is required")
                 ) as T
             }
             modelClass.isAssignableFrom(SearchViewModel::class.java) -> {

@@ -72,7 +72,8 @@ fun VidiioApp() {
             val viewModel: com.example.vidiio.ui.viewmodel.HomeViewModel = viewModel(
                 factory = VidiioViewModelFactory(
                     movieRepository = repository,
-                    watchProgressRepository = watchProgressRepository
+                    watchProgressRepository = watchProgressRepository,
+                    settingsRepository = settingsRepository
                 )
             )
             HomeScreen(

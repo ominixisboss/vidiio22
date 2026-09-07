@@ -1,10 +1,13 @@
 package com.example.vidiio.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircleFilled
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,16 +32,17 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.vidiio.data.model.Movie
 import com.example.vidiio.data.model.TOP10_LABEL
 import com.example.vidiio.data.model.WatchProgress
-import com.example.vidiio.ui.components.MovieItem
 import com.example.vidiio.ui.components.RiveLoader
 import com.example.vidiio.ui.viewmodel.HomeUiState
 import com.example.vidiio.ui.viewmodel.HomeViewModel
@@ -53,7 +58,12 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val continueWatching by viewModel.continueWatching.collectAsState()
+    val homeStyle by viewModel.homeStyle.collectAsState()
     val scrollState = rememberLazyListState()
+
+    val themeAccent = MaterialTheme.colorScheme.primary
+    val spec = remember(homeStyle, themeAccent) { homeStyle.spec(themeAccent) }
+    val background = spec.background ?: MaterialTheme.colorScheme.background
 
     val topBarAlpha by remember {
         derivedStateOf {
@@ -68,7 +78,7 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(modifier = modifier.fillMaxSize().background(background)) {
         when (val state = uiState) {
             is HomeUiState.Loading -> {
                 RiveLoader(modifier = Modifier.align(Alignment.Center))
@@ -84,37 +94,34 @@ fun HomeScreen(
                 LazyColumn(
                     state = scrollState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 32.dp)
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(spec.rowGap)
                 ) {
                     if (heroMovies.isNotEmpty()) {
                         item {
-                            HeroCarousel(movies = heroMovies, onMovieClick = onNavigateToDetails)
+                            if (spec.heroKind == HeroKind.CAROUSEL) {
+                                HeroCarousel(heroMovies, spec, onNavigateToDetails)
+                            } else {
+                                HeroStatic(heroMovies.first(), spec, onNavigateToDetails)
+                            }
                         }
                     }
                     if (continueWatching.isNotEmpty()) {
                         item {
                             ContinueWatchingRow(
                                 entries = continueWatching,
+                                spec = spec,
                                 onResume = onResumeWatching,
-                                onRemove = { viewModel.removeContinueWatching(it) },
-                                modifier = Modifier.padding(top = 16.dp)
+                                onRemove = { viewModel.removeContinueWatching(it) }
                             )
                         }
                     }
                     items(rows) { category ->
-                        if (category.name == TOP10_LABEL) {
-                            Top10Section(
-                                movies = category.movies,
-                                onMovieClick = onNavigateToDetails,
-                                modifier = Modifier.padding(top = 16.dp)
-                            )
-                        } else {
-                            CategorySection(
-                                name = category.name,
-                                movies = category.movies,
-                                onMovieClick = onNavigateToDetails,
-                                modifier = Modifier.padding(top = 16.dp)
-                            )
+                        when {
+                            category.name == TOP10_LABEL && spec.showTop10 ->
+                                Top10Section(category.movies, spec, onNavigateToDetails)
+                            category.name == TOP10_LABEL -> Unit // hidden for this style
+                            else -> CategorySection(category.name, category.movies, spec, onNavigateToDetails)
                         }
                     }
                 }
@@ -123,7 +130,7 @@ fun HomeScreen(
                     title = {
                         Text(
                             "VIDIIO",
-                            color = MaterialTheme.colorScheme.primary,
+                            color = spec.accent,
                             fontWeight = FontWeight.Black,
                             letterSpacing = (-1).sp,
                             fontSize = 24.sp,
@@ -131,8 +138,8 @@ fun HomeScreen(
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background.copy(alpha = backgroundAlpha),
-                        titleContentColor = MaterialTheme.colorScheme.primary
+                        containerColor = background.copy(alpha = backgroundAlpha),
+                        titleContentColor = spec.accent
                     )
                 )
             }
@@ -149,54 +156,78 @@ fun HomeScreen(
     }
 }
 
+/* ----------------------------- Hero variants ----------------------------- */
+
 @Composable
-fun HeroCarousel(
-    movies: List<Movie>,
-    onMovieClick: (Movie) -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun HeroButtons(movie: Movie, spec: HomeStyleSpec, center: Boolean, onClick: (Movie) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        horizontalArrangement = if (center) Arrangement.Center else Arrangement.Start
+    ) {
+        Button(
+            onClick = { onClick(movie) },
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+            modifier = if (center) Modifier.weight(1f).height(48.dp) else Modifier.height(48.dp)
+        ) {
+            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Text("Play", fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(12.dp))
+        Button(
+            onClick = { onClick(movie) },
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.DarkGray.copy(alpha = 0.8f),
+                contentColor = Color.White
+            ),
+            modifier = (if (center) Modifier.weight(1f) else Modifier)
+                .height(48.dp)
+                .border(0.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
+        ) {
+            Icon(Icons.Rounded.Info, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Text("Info", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun heroScrim(bottom: Color) = Brush.verticalGradient(
+    colors = listOf(
+        Color.Black.copy(alpha = 0.35f),
+        Color.Transparent,
+        bottom.copy(alpha = 0.85f),
+        bottom
+    )
+)
+
+@Composable
+fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit) {
     val pagerState = rememberPagerState(pageCount = { movies.size })
+    val scrim = spec.background ?: Color.Black
 
     LaunchedEffect(movies.size) {
         while (true) {
             delay(6000)
-            val next = (pagerState.currentPage + 1) % movies.size
-            pagerState.animateScrollToPage(next)
+            pagerState.animateScrollToPage((pagerState.currentPage + 1) % movies.size)
         }
     }
 
-    Box(modifier = modifier.fillMaxWidth().height(500.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().height(spec.heroHeight)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val movie = movies[page]
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { onMovieClick(movie) }
-            ) {
+            Box(Modifier.fillMaxSize().clickable { onMovieClick(movie) }) {
                 AsyncImage(
                     model = movie.backdropUrl ?: movie.posterUrl,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.4f),
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.9f),
-                                    Color.Black
-                                )
-                            )
-                        )
-                )
+                Box(Modifier.fillMaxSize().background(heroScrim(scrim)))
                 Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 40.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
@@ -207,65 +238,220 @@ fun HeroCarousel(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 24.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Button(
-                            onClick = { onMovieClick(movie) },
-                            shape = RoundedCornerShape(24.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color.Black
-                            ),
-                            modifier = Modifier.weight(1f).height(48.dp)
-                        ) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Play", fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Button(
-                            onClick = { onMovieClick(movie) },
-                            shape = RoundedCornerShape(24.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.DarkGray.copy(alpha = 0.8f),
-                                contentColor = Color.White
-                            ),
-                            modifier = Modifier.weight(1f).height(48.dp).border(
-                                width = 0.5.dp,
-                                color = Color.White.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(24.dp)
-                            )
-                        ) {
-                            Icon(Icons.Rounded.Info, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Info", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    Spacer(Modifier.height(16.dp))
+                    HeroButtons(movie, spec, center = true, onClick = onMovieClick)
                 }
             }
         }
-
-        // Page indicator dots
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             repeat(movies.size) { index ->
                 val selected = pagerState.currentPage == index
                 Box(
-                    modifier = Modifier
+                    Modifier
                         .size(if (selected) 8.dp else 6.dp)
                         .clip(CircleShape)
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.primary
-                            else Color.White.copy(alpha = 0.4f)
-                        )
+                        .background(if (selected) spec.accent else Color.White.copy(alpha = 0.4f))
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun HeroStatic(movie: Movie, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit) {
+    val scrim = spec.background ?: Color.Black
+    val inset = spec.heroKind == HeroKind.SPOTLIGHT
+    val corner = if (inset) 20.dp else 0.dp
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(spec.heroHeight)
+            .then(if (inset) Modifier.padding(horizontal = 12.dp, vertical = 8.dp) else Modifier)
+            .clip(RoundedCornerShape(corner))
+            .clickable { onMovieClick(movie) }
+    ) {
+        AsyncImage(
+            model = movie.backdropUrl ?: movie.posterUrl,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+        Box(Modifier.fillMaxSize().background(heroScrim(scrim)))
+
+        val alignment = if (spec.heroCenterText) Alignment.BottomCenter else Alignment.BottomStart
+        Column(
+            modifier = Modifier
+                .align(alignment)
+                .padding(bottom = if (spec.heroKind == HeroKind.COMPACT) 20.dp else 32.dp),
+            horizontalAlignment = if (spec.heroCenterText) Alignment.CenterHorizontally else Alignment.Start
+        ) {
+            Text(
+                text = movie.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = if (spec.heroCenterText) TextAlign.Center else TextAlign.Start,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+            movie.synopsis?.takeIf { spec.heroKind == HeroKind.BANNER }?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.75f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 24.dp).fillMaxWidth(0.85f)
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            if (spec.heroKind == HeroKind.COMPACT) {
+                Button(
+                    onClick = { onMovieClick(movie) },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = spec.accent,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.padding(horizontal = 24.dp).height(46.dp)
+                ) {
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Play", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                HeroButtons(movie, spec, center = spec.heroCenterText, onClick = onMovieClick)
+            }
+        }
+    }
+}
+
+/* ----------------------------- Rows ----------------------------- */
+
+@Composable
+private fun RowHeader(text: String, spec: HomeStyleSpec) {
+    Text(
+        text = if (spec.uppercaseHeaders) text.uppercase() else text,
+        fontSize = spec.rowHeaderSize,
+        fontWeight = spec.rowHeaderWeight,
+        letterSpacing = if (spec.uppercaseHeaders) 1.sp else 0.sp,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+    )
+}
+
+@Composable
+fun HomeCard(
+    movie: Movie,
+    spec: HomeStyleSpec,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, label = "cardScale")
+    val shape = RoundedCornerShape(spec.cardCorner)
+
+    Column(modifier = modifier.width(spec.cardWidth)) {
+        Box(
+            modifier = Modifier
+                .width(spec.cardWidth)
+                .height(spec.cardHeight)
+                .graphicsLayer { scaleX = scale; scaleY = scale }
+                .clip(shape)
+                .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape)
+                .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+        ) {
+            AsyncImage(
+                model = if (spec.card == CardKind.LANDSCAPE) (movie.backdropUrl ?: movie.posterUrl) else movie.posterUrl,
+                contentDescription = movie.title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            if (spec.ratingBadge) {
+                movie.rating?.takeIf { it > 0.0 }?.let { rating ->
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.Star, null, tint = spec.accent, modifier = Modifier.size(11.dp))
+                        Text(
+                            text = String.format("%.1f", rating),
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+        if (spec.cardShowTitle) {
+            Text(
+                text = movie.title,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp).width(spec.cardWidth)
+            )
+        }
+    }
+}
+
+@Composable
+fun CategorySection(
+    name: String,
+    movies: List<Movie>,
+    spec: HomeStyleSpec,
+    onMovieClick: (Movie) -> Unit
+) {
+    Column {
+        RowHeader(name, spec)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(movies) { movie ->
+                HomeCard(movie, spec, onClick = { onMovieClick(movie) })
+            }
+        }
+    }
+}
+
+@Composable
+fun Top10Section(
+    movies: List<Movie>,
+    spec: HomeStyleSpec,
+    onMovieClick: (Movie) -> Unit
+) {
+    Column {
+        RowHeader("Top 10 This Week", spec)
+        LazyRow(
+            contentPadding = PaddingValues(start = 24.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            itemsIndexed(movies.take(10)) { index, movie ->
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "${index + 1}",
+                        fontSize = 88.sp,
+                        fontWeight = FontWeight.Black,
+                        color = spec.accent.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    HomeCard(movie, spec, onClick = { onMovieClick(movie) })
+                }
             }
         }
     }
@@ -275,23 +461,18 @@ fun HeroCarousel(
 @Composable
 fun ContinueWatchingRow(
     entries: List<WatchProgress>,
+    spec: HomeStyleSpec,
     onResume: (WatchProgress) -> Unit,
-    onRemove: (String) -> Unit,
-    modifier: Modifier = Modifier
+    onRemove: (String) -> Unit
 ) {
-    Column(modifier = modifier) {
-        Text(
-            text = "Continue Watching",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+    Column {
+        RowHeader("Continue Watching", spec)
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(entries) { entry ->
-                val shape = RoundedCornerShape(16.dp)
+                val shape = RoundedCornerShape(spec.cardCorner.coerceAtLeast(8.dp))
                 Column(modifier = Modifier.width(240.dp)) {
                     Box(
                         modifier = Modifier
@@ -310,11 +491,7 @@ fun ContinueWatchingRow(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.25f))
-                        )
+                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
                         Icon(
                             Icons.Rounded.PlayCircleFilled,
                             contentDescription = "Resume",
@@ -330,12 +507,7 @@ fun ContinueWatchingRow(
                                 .clickable { onRemove(entry.id) }
                                 .padding(3.dp)
                         ) {
-                            Icon(
-                                Icons.Rounded.Close,
-                                contentDescription = "Remove",
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
-                            )
+                            Icon(Icons.Rounded.Close, "Remove", tint = Color.White, modifier = Modifier.size(14.dp))
                         }
                         LinearProgressIndicator(
                             progress = { entry.progressFraction },
@@ -343,7 +515,7 @@ fun ContinueWatchingRow(
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .height(3.dp),
-                            color = MaterialTheme.colorScheme.primary,
+                            color = spec.accent,
                             trackColor = Color.White.copy(alpha = 0.25f)
                         )
                     }
@@ -352,6 +524,8 @@ fun ContinueWatchingRow(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(top = 6.dp)
                     )
                     entry.episodeLabel?.let {
@@ -362,64 +536,6 @@ fun ContinueWatchingRow(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun Top10Section(
-    movies: List<Movie>,
-    onMovieClick: (Movie) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = "Top 10 This Week",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        LazyRow(
-            contentPadding = PaddingValues(start = 24.dp, end = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            itemsIndexed(movies.take(10)) { index, movie ->
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = "${index + 1}",
-                        fontSize = 88.sp,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                        modifier = Modifier.padding(end = 4.dp)
-                    )
-                    MovieItem(movie = movie, onClick = { onMovieClick(movie) })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CategorySection(
-    name: String,
-    movies: List<Movie>,
-    onMovieClick: (Movie) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = name,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(movies) { movie ->
-                MovieItem(movie = movie, onClick = { onMovieClick(movie) })
             }
         }
     }
