@@ -41,18 +41,13 @@ fun MovieItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, label = "posterScale")
     val shape = RoundedCornerShape(20.dp)
 
     Box(
         modifier = modifier
             .width(140.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(shape)
+            .tvClickable(onClick = onClick, shape = shape)
             .border(0.5.dp, Color.White.copy(alpha = 0.15f), shape)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
     ) {
         AsyncImage(
             model = movie.posterUrl,
