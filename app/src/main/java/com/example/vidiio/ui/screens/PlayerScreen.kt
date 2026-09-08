@@ -12,8 +12,13 @@ import android.webkit.*
 import android.widget.FrameLayout
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -463,9 +468,44 @@ fun PlayerScreen(
         }
     }
 
+    val playerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { playerFocus.requestFocus() } }
+
     Box(modifier = modifier
         .fillMaxSize()
         .background(Color.Black)
+        .focusRequester(playerFocus)
+        .focusable()
+        .onPreviewKeyEvent { ev ->
+            if (ev.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            when (ev.key) {
+                androidx.compose.ui.input.key.Key.DirectionCenter,
+                androidx.compose.ui.input.key.Key.Enter,
+                androidx.compose.ui.input.key.Key.MediaPlayPause -> {
+                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                    showControls = true; true
+                }
+                androidx.compose.ui.input.key.Key.DirectionLeft,
+                androidx.compose.ui.input.key.Key.MediaRewind -> {
+                    exoPlayer.seekTo(maxOf(0L, exoPlayer.currentPosition - 10_000L))
+                    showControls = true; true
+                }
+                androidx.compose.ui.input.key.Key.DirectionRight,
+                androidx.compose.ui.input.key.Key.MediaFastForward -> {
+                    exoPlayer.seekTo(minOf(exoPlayer.duration.coerceAtLeast(0L), exoPlayer.currentPosition + 10_000L))
+                    showControls = true; true
+                }
+                androidx.compose.ui.input.key.Key.DirectionUp,
+                androidx.compose.ui.input.key.Key.DirectionDown -> {
+                    // Reveal the transport so the remote can move onto its buttons.
+                    if (!showControls) { showControls = true; true } else false
+                }
+                androidx.compose.ui.input.key.Key.MediaPlay -> { exoPlayer.play(); showControls = true; true }
+                androidx.compose.ui.input.key.Key.MediaPause,
+                androidx.compose.ui.input.key.Key.MediaStop -> { exoPlayer.pause(); showControls = true; true }
+                else -> false
+            }
+        }
         .pointerInput(Unit) {
             var dragSide = 0 // 0: None, 1: Left (Brightness), 2: Right (Volume)
             detectVerticalDragGestures(

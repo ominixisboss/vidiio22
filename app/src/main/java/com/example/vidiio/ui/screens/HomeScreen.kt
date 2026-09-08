@@ -52,6 +52,7 @@ import com.example.vidiio.data.model.Movie
 import com.example.vidiio.data.model.TOP10_LABEL
 import com.example.vidiio.data.model.WatchProgress
 import com.example.vidiio.ui.components.RiveLoader
+import com.example.vidiio.ui.components.tvClickable
 import com.example.vidiio.ui.viewmodel.HomeUiState
 import com.example.vidiio.ui.viewmodel.HomeViewModel
 import kotlinx.coroutines.delay
@@ -251,7 +252,7 @@ fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie)
     Box(modifier = Modifier.fillMaxWidth().height(spec.heroHeight)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val movie = movies[page]
-            Box(Modifier.fillMaxSize().clickable { onMovieClick(movie) }) {
+            Box(Modifier.fillMaxSize().tvClickable(onClick = { onMovieClick(movie) }, focusScale = 1f)) {
                 if (spec.kenBurns) {
                     KenBurnsImage(movie.backdropUrl ?: movie.posterUrl, Modifier.fillMaxSize())
                 } else {
@@ -308,8 +309,7 @@ fun HeroStatic(movie: Movie, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit)
             .fillMaxWidth()
             .height(spec.heroHeight)
             .then(if (inset) Modifier.padding(horizontal = 12.dp, vertical = 8.dp) else Modifier)
-            .clip(RoundedCornerShape(corner))
-            .clickable { onMovieClick(movie) }
+            .tvClickable(onClick = { onMovieClick(movie) }, shape = RoundedCornerShape(corner), focusScale = 1f)
     ) {
         if (spec.kenBurns) {
             KenBurnsImage(movie.backdropUrl ?: movie.posterUrl, Modifier.fillMaxSize())
@@ -392,15 +392,6 @@ fun HomeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) spec.cardPressScale else 1f,
-        animationSpec = if (spec.bouncyCards)
-            spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessMedium)
-        else spring(stiffness = Spring.StiffnessMedium),
-        label = "cardScale"
-    )
     var appeared by remember { mutableStateOf(!spec.staggerIn) }
     LaunchedEffect(Unit) { appeared = true }
     val appear by animateFloatAsState(
@@ -416,13 +407,11 @@ fun HomeCard(
                 .width(spec.cardWidth)
                 .height(spec.cardHeight)
                 .graphicsLayer {
-                    scaleX = scale; scaleY = scale
                     alpha = appear
                     translationY = (1f - appear) * 28.dp.toPx()
                 }
-                .clip(shape)
+                .tvClickable(onClick = onClick, shape = shape, focusScale = 1.08f)
                 .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape)
-                .clickable(interactionSource = interaction, indication = null, onClick = onClick)
         ) {
             AsyncImage(
                 model = if (spec.card == CardKind.LANDSCAPE) (movie.backdropUrl ?: movie.posterUrl) else movie.posterUrl,
@@ -536,12 +525,12 @@ fun ContinueWatchingRow(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(135.dp)
-                            .clip(shape)
-                            .border(0.5.dp, Color.White.copy(alpha = 0.15f), shape)
-                            .combinedClickable(
+                            .tvClickable(
                                 onClick = { onResume(entry) },
-                                onLongClick = { onRemove(entry.id) }
+                                onLongClick = { onRemove(entry.id) },
+                                shape = shape
                             )
+                            .border(0.5.dp, Color.White.copy(alpha = 0.15f), shape)
                     ) {
                         AsyncImage(
                             model = entry.backdropUrl ?: entry.posterUrl,
