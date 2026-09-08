@@ -759,16 +759,11 @@ fun PlayerScreen(
                 onOffsetChange = { subtitleOffsetMs = it },
                 subtitlesEnabled = subtitlesEnabled,
                 onUseEmbedded = {
+                    // Just re-enable the text renderer - no setMediaItem, so no re-buffer.
                     selectedSubtitleUrl = null
                     subtitlesEnabled = true
                     exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                         .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
-                    exoPlayer.currentMediaItem?.let { item ->
-                        exoPlayer.setMediaItem(
-                            item.buildUpon().setSubtitleConfigurations(emptyList()).build(),
-                            exoPlayer.currentPosition
-                        )
-                    }
                 },
                 onSubtitleSelect = { sub ->
                     selectedSubtitleUrl = sub.url
@@ -792,19 +787,12 @@ fun PlayerScreen(
                     }
                 },
                 onDisable = {
-                    // Turn off every subtitle track - the file's own (embedded ASS/SRT) and
-                    // any external one we added.
+                    // Turn off every subtitle track by disabling the text renderer. No
+                    // setMediaItem here - that would re-prepare and re-buffer the stream.
                     selectedSubtitleUrl = null
                     subtitlesEnabled = false
                     exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                         .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
-                    val currentMediaItem = exoPlayer.currentMediaItem
-                    if (currentMediaItem != null) {
-                        val updatedItem = currentMediaItem.buildUpon()
-                            .setSubtitleConfigurations(emptyList())
-                            .build()
-                        exoPlayer.setMediaItem(updatedItem, exoPlayer.currentPosition)
-                    }
                 },
                 onDismiss = { showSubtitleMenu = false }
             )
