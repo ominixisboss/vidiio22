@@ -80,7 +80,7 @@ android {
     buildTypes {
         release {
             // R8: shrink, optimize and obfuscate. Keep rules live in
-            // src/main/keepRules/*.pro - AGP feeds every file in that directory to R8.
+            // src/main/keepRules/*.keep - AGP feeds every file in that directory to R8.
             // Turning this off (as it was) shipped every unused class in every
             // dependency, which is most of why the release APK was ~45MB.
             optimization {
@@ -230,51 +230,74 @@ val downloadTorrServer = tasks.register("downloadTorrServer") {
         ?: "arm64-v8a,armeabi-v7a")
         .split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
-    // A real TorrServer binary is a >1MB ELF ("\x7fELF"). This rejects stub/placeholder
-    // files so a dev's throwaway libtorrserver.so can never get packaged.
-    fun File.isElfBinary(): Boolean = exists() && length() > 1_000_000L &&
-        inputStream().use { s -> ByteArray(4).also { s.read(it) } }
-            .let { it[0] == 0x7f.toByte() && it[1] == 'E'.code.toByte() && it[2] == 'L'.code.toByte() && it[3] == 'F'.code.toByte() }
+    // Everything the execution-time lambdas below touch must be captured here, at
+    // configuration time, as plain serializable values. Referring to torrServerVersion,
+    // rootDir or logger from inside doLast captures the build script object itself.
+    val version = torrServerVersion
+    val assets = torrServerAssets
+    val sha256 = torrServerSha256
+    val rootDirPath = rootDir.absolutePath
+
 
     outputs.dir(jniDir)
     outputs.upToDateWhen {
-        versionMarker.exists() && versionMarker.readText().trim() == torrServerVersion &&
-            wantedAbis.all { File(jniDir, "$it/libtorrserver.so").isElfBinary() }
+        // Inlined rather than a shared helper: a function declared in the build script
+        // is a member of the script object, and referencing it from an execution-time
+        // lambda is exactly what the configuration cache cannot serialize.
+        // A real TorrServer binary is a >1MB ELF ("\x7fELF"); this rejects stubs.
+        val isElfBinary: (java.io.File) -> Boolean = { f ->
+            f.exists() && f.length() > 1_000_000L &&
+                f.inputStream().use { s -> ByteArray(4).also { s.read(it) } }
+                    .let { it[0] == 0x7f.toByte() && it[1] == 'E'.code.toByte() &&
+                        it[2] == 'L'.code.toByte() && it[3] == 'F'.code.toByte() }
+        }
+        versionMarker.exists() && versionMarker.readText().trim() == version &&
+            wantedAbis.all { isElfBinary(File(jniDir, "$it/libtorrserver.so")) }
     }
 
     doLast {
-        if (versionMarker.exists() && versionMarker.readText().trim() != torrServerVersion) {
-            logger.lifecycle("TorrServer version changed -> cleaning stale jniLibs")
+        // Inlined rather than a shared helper: a function declared in the build script
+        // is a member of the script object, and referencing it from an execution-time
+        // lambda is exactly what the configuration cache cannot serialize.
+        // A real TorrServer binary is a >1MB ELF ("\x7fELF"); this rejects stubs.
+        val isElfBinary: (java.io.File) -> Boolean = { f ->
+            f.exists() && f.length() > 1_000_000L &&
+                f.inputStream().use { s -> ByteArray(4).also { s.read(it) } }
+                    .let { it[0] == 0x7f.toByte() && it[1] == 'E'.code.toByte() &&
+                        it[2] == 'L'.code.toByte() && it[3] == 'F'.code.toByte() }
+        }
+        if (versionMarker.exists() && versionMarker.readText().trim() != version) {
+            println("TorrServer version changed -> cleaning stale jniLibs")
             jniDir.deleteRecursively()
         }
 
         val localDir = System.getenv("TORRSERVER_LOCAL_BINARIES")?.let { File(it) }
 
         for (abi in wantedAbis) {
-            val asset = torrServerAssets[abi] ?: run {
-                logger.warn("Unknown ABI '$abi' - skipping"); continue
+            val asset = assets[abi] ?: run {
+                println("WARNING: unknown ABI '$abi' - skipping"); continue
             }
             val target = File(jniDir, "$abi/libtorrserver.so")
-            if (target.isElfBinary()) continue
+            if (isElfBinary(target)) continue
             if (target.exists()) {
-                logger.lifecycle("Replacing non-ELF $abi/libtorrserver.so (${target.length()} bytes)")
+                println("Replacing non-ELF $abi/libtorrserver.so (${target.length()} bytes)")
                 target.delete()
             }
             target.parentFile.mkdirs()
 
             val local = localDir?.resolve(asset)
             if (local != null && local.exists()) {
-                logger.lifecycle("Using local TorrServer binary for $abi: $local")
+                println("Using local TorrServer binary for $abi: $local")
                 local.copyTo(target, overwrite = true)
             } else {
-                val url = "https://github.com/YouROK/TorrServer/releases/download/$torrServerVersion/$asset"
-                logger.lifecycle("Downloading TorrServer $torrServerVersion for $abi ...")
+                val url = "https://github.com/YouROK/TorrServer/releases/download/$version/$asset"
+                println("Downloading TorrServer $version for $abi ...")
                 val tmp = File.createTempFile("torrserver-", ".bin")
                 try {
                     URI(url).toURL().openStream().use { input ->
                         tmp.outputStream().use { output -> input.copyTo(output, 1 shl 16) }
                     }
-                    val expected = torrServerSha256[asset].orEmpty()
+                    val expected = sha256[asset].orEmpty()
                     if (expected.isNotEmpty()) {
                         val md = MessageDigest.getInstance("SHA-256")
                         tmp.inputStream().use { s ->
@@ -287,9 +310,9 @@ val downloadTorrServer = tasks.register("downloadTorrServer") {
                         if (!got.equals(expected, ignoreCase = true)) {
                             throw GradleException("SHA-256 mismatch for $asset: expected $expected, got $got")
                         }
-                        logger.lifecycle("Verified SHA-256 for $asset")
+                        println("Verified SHA-256 for $asset")
                     } else {
-                        logger.warn("No pinned SHA-256 for $asset - integrity check skipped")
+                        println("WARNING: no pinned SHA-256 for $asset - integrity check skipped")
                     }
                     tmp.copyTo(target, overwrite = true)
                 } finally {
@@ -298,11 +321,11 @@ val downloadTorrServer = tasks.register("downloadTorrServer") {
             }
             target.setReadable(true, false)
             target.setExecutable(true, false)
-            logger.lifecycle("TorrServer ready: ${target.relativeTo(rootDir)} (${target.length()} bytes)")
+            println("TorrServer ready: ${target.relativeTo(File(rootDirPath))} (${target.length()} bytes)")
         }
 
         versionMarker.parentFile.mkdirs()
-        versionMarker.writeText(torrServerVersion)
+        versionMarker.writeText(version)
     }
 }
 
