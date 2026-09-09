@@ -33,3 +33,12 @@ local.properties
 /app/keystore.properties
 *.jks
 *.keystore
+
+# Per-developer IDE state. .idea/gradle.xml, compiler.xml, vcs.xml and
+# inspectionProfiles/ stay tracked - those are shared project config.
+/.idea/deploymentTargetSelector.xml
+/.idea/deviceManager.xml
+/.idea/planningMode.xml
+/.idea/markdown.xml
+/.idea/AndroidProjectSystem.xml
+/.idea/misc.xml
