@@ -52,12 +52,28 @@ object VidiioViewModelFactories {
     }
 
     /**
-     * Owns the ExoPlayer and the playback session. Keyed alongside [details] so the two
-     * ViewModels for one screen share a lifetime.
+     * Owns the ExoPlayer, the playback session and the title being played. The player no
+     * longer needs [details] alongside it.
      */
     @androidx.media3.common.util.UnstableApi
-    fun player(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
-        initializer { PlayerViewModel(app, app.settingsRepository) }
+    fun player(
+        app: VidiioApplication,
+        movie: Movie,
+        initialEpisodeId: String? = null
+    ): ViewModelProvider.Factory = viewModelFactory {
+        initializer {
+            PlayerViewModel(
+                app,
+                app.settingsRepository,
+                app.movieRepository,
+                app.downloadRepository,
+                app.downloadManager,
+                app.subdlService,
+                app.watchProgressRepository,
+                movie,
+                initialEpisodeId
+            )
+        }
     }
 
     /**

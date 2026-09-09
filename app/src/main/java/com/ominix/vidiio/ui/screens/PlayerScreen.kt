@@ -47,8 +47,6 @@ import com.ominix.vidiio.ui.player.components.*
 import com.ominix.vidiio.ui.player.playerRemoteControls
 import com.ominix.vidiio.ui.player.playerTouchGestures
 import com.ominix.vidiio.ui.player.rememberPlayerDeviceControls
-import com.ominix.vidiio.ui.viewmodel.DetailsUiState
-import com.ominix.vidiio.ui.viewmodel.DetailsViewModel
 import com.ominix.vidiio.utils.PermissionUtils
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -59,17 +57,16 @@ import kotlinx.coroutines.launch
 /**
  * The player.
  *
- * Playback state and the ExoPlayer itself live in [PlayerViewModel]; the window-level
- * effects in PlayerWindowEffects; the input handling in Modifier.playerRemoteControls /
- * playerTouchGestures. What is left here is composition, the menu-visibility flags (view
- * state, nothing else needs them) and the TorrentService binding, which is tied to this
- * composable's context.
+ * Playback state, the ExoPlayer and the title being played all live in [PlayerViewModel];
+ * the window-level effects in PlayerWindowEffects; the input handling in
+ * Modifier.playerRemoteControls / playerTouchGestures. What is left here is composition,
+ * the menu-visibility flags (view state, nothing else needs them) and the TorrentService
+ * binding, which is tied to this composable's context.
  */
 @UnstableApi
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun PlayerScreen(
-    viewModel: DetailsViewModel,
     playerViewModel: PlayerViewModel,
     initialSource: StreamSource? = null,
     onBack: () -> Unit,
@@ -78,11 +75,12 @@ fun PlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val uiState by viewModel.uiState.collectAsState()
     val state by playerViewModel.state.collectAsState()
     val audioHudText by playerViewModel.audioHudText.collectAsState()
-    val resumePositionMs by viewModel.resumePositionMs.collectAsState()
     val retryTrigger by playerViewModel.retryTrigger.collectAsState()
+    val movie by playerViewModel.movie.collectAsState()
+    val selectedEpisode by playerViewModel.selectedEpisode.collectAsState()
+    val subtitles by playerViewModel.subtitles.collectAsState()
 
     val permissionsState = rememberMultiplePermissionsState(
         permissions = PermissionUtils.getRequiredPermissions()
@@ -98,14 +96,6 @@ fun PlayerScreen(
 
     val deviceControls = rememberPlayerDeviceControls()
 
-    // Watch progress is saved by the ViewModel's polling loop and on clear, but only
-    // DetailsViewModel knows which movie/episode the position belongs to.
-    LaunchedEffect(viewModel) {
-        playerViewModel.onSaveProgress = { position, duration ->
-            viewModel.saveWatchProgress(position, duration)
-        }
-    }
-    LaunchedEffect(resumePositionMs) { playerViewModel.setResumePosition(resumePositionMs) }
     LaunchedEffect(initialSource) { initialSource?.let(playerViewModel::selectSource) }
 
     PlayerWindowEffects(notchSafe = state.notchSafe, showControls = showControls)
@@ -142,19 +132,12 @@ fun PlayerScreen(
         )
 
     val downloadStatus by remember(state.selectedSource) {
-        state.selectedSource?.let { viewModel.getDownloadStatus(it.url) } ?: flowOf(null)
+        state.selectedSource?.let { playerViewModel.getDownloadStatus(it.url) } ?: flowOf(null)
     }.collectAsState(null)
     val isDownloading = downloadStatus != null &&
         downloadStatus != DownloadStatus.COMPLETED &&
         downloadStatus != DownloadStatus.FAILED &&
         downloadStatus != DownloadStatus.CANCELLED
-
-    // Pick the first source once details land, if the caller gave us none.
-    LaunchedEffect(uiState) {
-        (uiState as? DetailsUiState.Success)?.let {
-            playerViewModel.selectSourceIfNone(it.streamSources.firstOrNull())
-        }
-    }
 
     // ── Source preparation ───────────────────────────────────────────────────
     LaunchedEffect(state.selectedSource, torrentService, retryTrigger) {
@@ -175,7 +158,6 @@ fun PlayerScreen(
                     playerViewModel.showError("Failed to fetch torrent metadata.")
                     return@getMetadata
                 }
-                val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
                 // Show the picker only for a genuinely ambiguous multi-file torrent that
                 // nobody has resolved yet: not an addon pick, not an already-picked file,
                 // and more than one *video* file (subtitles/samples don't count).
@@ -272,13 +254,9 @@ fun PlayerScreen(
 
         AnimatedVisibility(visible = showControls, enter = fadeIn(), exit = fadeOut()) {
             Box(modifier = Modifier.fillMaxSize()) {
-                val success = uiState as? DetailsUiState.Success
-                val movie = success?.movie
-                val currentEpisode = success?.selectedEpisode
-
                 PlayerTopBar(
                     title = movie?.title ?: "Loading...",
-                    subtitle = currentEpisode?.let { "S${it.seasonNumber}:E${it.episodeNumber} - ${it.name}" },
+                    subtitle = selectedEpisode?.let { "S${it.seasonNumber}:E${it.episodeNumber} - ${it.name}" },
                     quality = state.selectedSource?.quality,
                     isDownloading = isDownloading,
                     isEpisodesActive = showEpisodesSidebar,
@@ -291,7 +269,7 @@ fun PlayerScreen(
                             if (!permissionsState.allPermissionsGranted) {
                                 permissionsState.launchMultiplePermissionRequest()
                             }
-                            viewModel.downloadSource(source)
+                            playerViewModel.downloadSource(source)
                         }
                     },
                     onToggleEpisodes = { showEpisodesSidebar = !showEpisodesSidebar }
@@ -372,26 +350,25 @@ fun PlayerScreen(
         }
 
         if (state.showAutoNext) {
-            val success = uiState as? DetailsUiState.Success
-            val allEpisodes = success?.movie?.seasons?.flatMap { it.episodes }.orEmpty()
-            val currentIndex = allEpisodes.indexOfFirst { it.id == success?.selectedEpisode?.id }
+            val allEpisodes = movie?.seasons?.flatMap { it.episodes }.orEmpty()
+            val currentIndex = allEpisodes.indexOfFirst { it.id == selectedEpisode?.id }
             if (currentIndex != -1 && currentIndex < allEpisodes.size - 1) {
                 AutoNextOverlay(
                     nextEpisodeName = allEpisodes[currentIndex + 1].name,
                     secondsLeft = state.autoNextSeconds,
                     onCancel = playerViewModel::cancelAutoNext,
-                    onPlayNow = { viewModel.selectEpisode(allEpisodes[currentIndex + 1]) }
+                    onPlayNow = { playerViewModel.selectEpisode(allEpisodes[currentIndex + 1]) }
                 )
             }
         }
 
         if (showEpisodesSidebar) {
-            (uiState as? DetailsUiState.Success)?.let { success ->
+            movie?.let { resolved ->
                 EpisodeSidebar(
-                    movie = success.movie,
-                    currentEpisode = success.selectedEpisode,
+                    movie = resolved,
+                    currentEpisode = selectedEpisode,
                     onEpisodeSelect = {
-                        viewModel.selectEpisode(it)
+                        playerViewModel.selectEpisode(it)
                         showEpisodesSidebar = false
                     },
                     onClose = { showEpisodesSidebar = false },
@@ -401,19 +378,17 @@ fun PlayerScreen(
         }
 
         if (showSubtitleMenu) {
-            (uiState as? DetailsUiState.Success)?.let { success ->
-                SubtitleMenu(
-                    subtitles = success.subtitles,
-                    selectedUrl = state.selectedSubtitleUrl,
-                    offsetMs = state.subtitleOffsetMs,
-                    onOffsetChange = playerViewModel::setSubtitleOffset,
-                    subtitlesEnabled = state.subtitlesEnabled,
-                    onUseEmbedded = playerViewModel::useEmbeddedSubtitles,
-                    onSubtitleSelect = playerViewModel::selectSubtitle,
-                    onDisable = playerViewModel::disableSubtitles,
-                    onDismiss = { showSubtitleMenu = false }
-                )
-            }
+            SubtitleMenu(
+                subtitles = subtitles,
+                selectedUrl = state.selectedSubtitleUrl,
+                offsetMs = state.subtitleOffsetMs,
+                onOffsetChange = playerViewModel::setSubtitleOffset,
+                subtitlesEnabled = state.subtitlesEnabled,
+                onUseEmbedded = playerViewModel::useEmbeddedSubtitles,
+                onSubtitleSelect = playerViewModel::selectSubtitle,
+                onDisable = playerViewModel::disableSubtitles,
+                onDismiss = { showSubtitleMenu = false }
+            )
         }
 
         if (showAudioMenu) {

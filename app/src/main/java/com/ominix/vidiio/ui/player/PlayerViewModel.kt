@@ -20,8 +20,18 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import com.ominix.vidiio.VidiioApplication
 import com.ominix.vidiio.data.model.StreamSource
 import com.ominix.vidiio.data.model.subtitles.SubdlSubtitle
+import com.ominix.vidiio.data.api.SubdlService
+import com.ominix.vidiio.data.model.DownloadStatus
+import com.ominix.vidiio.data.model.Episode
+import com.ominix.vidiio.data.model.Movie
+import com.ominix.vidiio.data.repository.DownloadRepository
+import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.SettingsRepository
+import com.ominix.vidiio.data.repository.WatchProgressRepository
+import com.ominix.vidiio.download.DownloadManager
 import com.ominix.vidiio.torrent.TorrentFileInfo
+import com.ominix.vidiio.ui.viewmodel.MediaSession
+import kotlinx.coroutines.flow.Flow
 import io.github.peerless2012.ass.media.kt.buildWithAssSupport
 import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.Job
@@ -88,16 +98,44 @@ data class PlayerUiState(
 class PlayerViewModel(
     application: Application,
     private val settingsRepository: SettingsRepository,
+    movieRepository: MovieRepository,
+    downloadRepository: DownloadRepository,
+    downloadManager: DownloadManager,
+    subdlService: SubdlService,
+    watchProgressRepository: WatchProgressRepository,
+    movie: Movie,
+    initialEpisodeId: String? = null,
 ) : AndroidViewModel(application) {
+
+    /**
+     * The title being played: details, episodes, sources, subtitles, watch progress.
+     *
+     * The player used to reach into DetailsViewModel for all of this, which meant
+     * PlayerScreen took two ViewModels that had to be keyed in lockstep and carried
+     * favourites and source-toggle state it never used.
+     */
+    private val session = MediaSession(
+        scope = viewModelScope,
+        movieRepository = movieRepository,
+        downloadRepository = downloadRepository,
+        downloadManager = downloadManager,
+        subdlService = subdlService,
+        settingsRepository = settingsRepository,
+        watchProgressRepository = watchProgressRepository,
+        initialMovie = movie,
+        initialEpisodeId = initialEpisodeId
+    )
+
+    val movie: StateFlow<Movie?> = session.movie
+    val selectedEpisode: StateFlow<Episode?> = session.selectedEpisode
+    val subtitles: StateFlow<List<SubdlSubtitle>> = session.subtitles
+
+    fun selectEpisode(episode: Episode) = session.selectEpisode(episode)
+    fun downloadSource(source: StreamSource) = session.downloadSource(source)
+    fun getDownloadStatus(url: String): Flow<DownloadStatus?> = session.getDownloadStatus(url)
 
     private val _state = MutableStateFlow(PlayerUiState())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
-
-    /**
-     * Where watch progress goes. Set by the screen, because DetailsViewModel is what knows
-     * which movie and episode this position belongs to.
-     */
-    var onSaveProgress: ((positionMs: Long, durationMs: Long) -> Unit)? = null
 
     /** Resume point from Continue Watching. Applied once, when the media is ready. */
     private var resumePositionMs: Long = 0L
@@ -205,6 +243,15 @@ class PlayerViewModel(
         player.addListener(playerListener)
         startPolling()
 
+        viewModelScope.launch {
+            session.resumePositionMs.collect { resumePositionMs = it }
+        }
+        viewModelScope.launch {
+            session.streamSources.collect { sources ->
+                selectSourceIfNone(sources.firstOrNull())
+            }
+        }
+
         // Seed the cutout preference once; the Aspect menu can then flip it live for the
         // session without writing back until the user asks.
         viewModelScope.launch {
@@ -238,7 +285,7 @@ class PlayerViewModel(
 
                 // Persist progress every ~10s of playback.
                 if (playing && duration > 0L && ++tick % 20 == 0) {
-                    onSaveProgress?.invoke(position, duration)
+                    session.saveWatchProgress(position, duration)
                 }
 
                 _state.update { s ->
@@ -283,14 +330,10 @@ class PlayerViewModel(
         }
     }
 
-    fun setResumePosition(positionMs: Long) {
-        resumePositionMs = positionMs
-    }
-
     // ── Source selection and playback ────────────────────────────────────────
 
     /** Picks the first source once the details load, if the caller gave us none. */
-    fun selectSourceIfNone(source: StreamSource?) {
+    private fun selectSourceIfNone(source: StreamSource?) {
         if (_state.value.selectedSource == null && source != null) selectSource(source)
     }
 
@@ -468,7 +511,7 @@ class PlayerViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        runCatching { onSaveProgress?.invoke(player.currentPosition, player.duration) }
+        runCatching { session.saveWatchProgress(player.currentPosition, player.duration) }
         pollJob?.cancel()
         player.removeListener(playerListener)
         player.stop()
