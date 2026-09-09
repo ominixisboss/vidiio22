@@ -32,7 +32,7 @@ import com.ominix.vidiio.navigation.rememberNavigationState
 import com.ominix.vidiio.navigation.toEntries
 import com.ominix.vidiio.data.model.toMovie
 import com.ominix.vidiio.ui.screens.*
-import com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactory
+import com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactories
 
 @Composable
 fun VidiioApp() {
@@ -45,14 +45,9 @@ fun VidiioApp() {
     val context = LocalContext.current
     val application = context.applicationContext as VidiioApplication
     
-    // Core dependencies
-    val repository = application.movieRepository
+    // Screens get their dependencies from VidiioViewModelFactories, which reads them off
+    // `application` directly - only what this composable itself uses is hoisted here.
     val settingsRepository = application.settingsRepository
-    val favoriteRepository = application.favoriteRepository
-    val downloadRepository = application.downloadRepository
-    val downloadManager = application.downloadManager
-    val subdlService = application.subdlService
-    val watchProgressRepository = application.watchProgressRepository
 
     val homeStyle by settingsRepository.homeStyleFlow
         .collectAsState(initial = com.ominix.vidiio.data.repository.HomeStyle.VIDIIO)
@@ -71,11 +66,7 @@ fun VidiioApp() {
             }
         ) {
             val viewModel: com.ominix.vidiio.ui.viewmodel.HomeViewModel = viewModel(
-                factory = VidiioViewModelFactory(
-                    movieRepository = repository,
-                    watchProgressRepository = watchProgressRepository,
-                    settingsRepository = settingsRepository
-                )
+                factory = VidiioViewModelFactories.home(application)
             )
             HomeScreen(
                 viewModel = viewModel,
@@ -92,7 +83,7 @@ fun VidiioApp() {
             }
         ) {
             val viewModel: com.ominix.vidiio.ui.viewmodel.SearchViewModel = viewModel(
-                factory = VidiioViewModelFactory(movieRepository = repository)
+                factory = VidiioViewModelFactories.search(application)
             )
             SearchScreen(
                 viewModel = viewModel,
@@ -106,7 +97,7 @@ fun VidiioApp() {
             }
         ) {
             val viewModel: com.ominix.vidiio.ui.viewmodel.FavoritesViewModel = viewModel(
-                factory = VidiioViewModelFactory(favoriteRepository = favoriteRepository)
+                factory = VidiioViewModelFactories.favorites(application)
             )
             FavoritesScreen(
                 viewModel = viewModel,
@@ -120,11 +111,7 @@ fun VidiioApp() {
             }
         ) {
             val viewModel: com.ominix.vidiio.ui.viewmodel.DownloadsViewModel = viewModel(
-                factory = VidiioViewModelFactory(
-                    downloadRepository = downloadRepository,
-                    downloadManager = downloadManager,
-                    context = context
-                )
+                factory = VidiioViewModelFactories.downloads(application)
             )
             DownloadsScreen(
                 viewModel = viewModel,
@@ -141,10 +128,7 @@ fun VidiioApp() {
             }
         ) {
             val viewModel: com.ominix.vidiio.ui.viewmodel.SettingsViewModel = viewModel(
-                factory = VidiioViewModelFactory(
-                    settingsRepository = settingsRepository,
-                    context = context
-                )
+                factory = VidiioViewModelFactories.settings(application)
             )
             SettingsScreen(
                 viewModel = viewModel,
@@ -159,16 +143,7 @@ fun VidiioApp() {
         ) { key ->
             val viewModel: com.ominix.vidiio.ui.viewmodel.DetailsViewModel = viewModel(
                 key = key.movie.id,
-                factory = VidiioViewModelFactory(
-                    movieRepository = repository,
-                    favoriteRepository = favoriteRepository,
-                    downloadRepository = downloadRepository,
-                    downloadManager = downloadManager,
-                    subdlService = subdlService,
-                    watchProgressRepository = watchProgressRepository,
-                    settingsRepository = settingsRepository,
-                    movie = key.movie
-                )
+                factory = VidiioViewModelFactories.details(application, key.movie)
             )
             DetailsScreen(
                 viewModel = viewModel,
@@ -189,17 +164,7 @@ fun VidiioApp() {
         ) { key ->
             val viewModel: com.ominix.vidiio.ui.viewmodel.DetailsViewModel = viewModel(
                 key = "player_${key.movie.id}_${key.episodeId ?: ""}",
-                factory = VidiioViewModelFactory(
-                    movieRepository = repository,
-                    favoriteRepository = favoriteRepository,
-                    downloadRepository = downloadRepository,
-                    downloadManager = downloadManager,
-                    subdlService = subdlService,
-                    watchProgressRepository = watchProgressRepository,
-                    settingsRepository = settingsRepository,
-                    movie = key.movie,
-                    initialEpisodeId = key.episodeId
-                )
+                factory = VidiioViewModelFactories.details(application, key.movie, key.episodeId)
             )
             PlayerScreen(
                 viewModel = viewModel,
