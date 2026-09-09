@@ -9,6 +9,11 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
 }
 
+// local.properties is gitignored; it is where per-developer secrets live.
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
+}
+
 android {
     namespace = "com.ominix.vidiio"
     compileSdk {
@@ -36,6 +41,16 @@ android {
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
+
+        // TMDB key. Set tmdb.apiKey in local.properties (gitignored) or TMDB_API_KEY in
+        // the environment. The fallback is the key that was previously hardcoded into
+        // eleven TMDBService method signatures - it is already public in every published
+        // APK, so this changes nothing about its exposure, it only makes it rotatable
+        // from one place. Replace it and drop the fallback once a new key is issued.
+        val tmdbApiKey = localProps.getProperty("tmdb.apiKey")
+            ?: System.getenv("TMDB_API_KEY")
+            ?: "13385ad4858c3f8568ce182c7287d9a9"
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     }
 
     // Release signing. Reads app/keystore.properties (gitignored) or, for CI, the
@@ -100,6 +115,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // Committed Room schemas (app/schemas) are what MigrationTestHelper replays against,

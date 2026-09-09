@@ -1,11 +1,14 @@
 package com.ominix.vidiio
 
 import android.app.Application
+import android.util.Log
 import app.rive.runtime.kotlin.core.Rive
 import com.ominix.vidiio.data.db.VidiioDatabase
 import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.FavoriteRepository
 import com.ominix.vidiio.data.repository.MovieRepository
+import com.ominix.vidiio.data.repository.ProxyConfig
+import com.ominix.vidiio.data.repository.ProxyType
 import com.ominix.vidiio.data.repository.SettingsRepository
 import com.ominix.vidiio.data.repository.WatchProgressRepository
 import com.ominix.vidiio.download.DownloadManager
@@ -24,98 +27,156 @@ import com.ominix.vidiio.data.scraper.VuflixScraper
 import com.ominix.vidiio.data.api.TMDBService
 import com.ominix.vidiio.data.api.StremioService
 import com.ominix.vidiio.data.api.SubdlService
+import com.ominix.vidiio.data.api.TmdbApiKeyInterceptor
 import com.ominix.vidiio.data.stremio.AddonManager
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.dnsoverhttps.DnsOverHttps
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.ProxySelector
+import java.net.SocketAddress
+import java.net.URI
 import java.util.concurrent.TimeUnit
 
+/**
+ * Service locator for the app graph.
+ *
+ * Two rules hold this together:
+ *
+ * 1. **[onCreate] must not block.** It runs on the main thread before the first frame, so
+ *    anything touching disk or the network belongs in a `by lazy` below (built on whichever
+ *    thread first needs it) or on [applicationScope].
+ * 2. **Proxy settings load asynchronously.** See [proxyConfig].
+ */
 class VidiioApplication : Application() {
 
-    lateinit var movieRepository: MovieRepository
-        private set
+    /** Outlives every screen; used for app-wide settings collection. Never cancelled. */
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    lateinit var okHttpClient: OkHttpClient
-        private set
+    val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
 
-    /**
-     * OkHttp client for media playback (ExoPlayer). Same config as [okHttpClient] but with
-     * no interceptors - a BODY-level logging interceptor buffers entire response bodies,
-     * which is fatal for streaming video.
-     */
-    lateinit var playbackHttpClient: OkHttpClient
-        private set
+    private val database: VidiioDatabase by lazy { VidiioDatabase.build(this) }
 
-    lateinit var settingsRepository: SettingsRepository
-        private set
-
-    lateinit var favoriteRepository: FavoriteRepository
-        private set
-
-    lateinit var downloadRepository: DownloadRepository
-        private set
-
-    lateinit var downloadManager: DownloadManager
-        private set
-
-    lateinit var watchProgressRepository: WatchProgressRepository
-        private set
-
+    val favoriteRepository: FavoriteRepository by lazy { FavoriteRepository(database.favoriteDao()) }
+    val downloadRepository: DownloadRepository by lazy { DownloadRepository(database.downloadDao()) }
+    val downloadManager: DownloadManager by lazy { DownloadManager(this, downloadRepository) }
+    val watchProgressRepository: WatchProgressRepository by lazy {
+        WatchProgressRepository(database.watchProgressDao())
+    }
 
     /** Embedded TorrServer engine used for movie/series torrent streaming (PlayTorrio-style). */
-    lateinit var torrServerEngine: TorrServerEngine
+    val torrServerEngine: TorrServerEngine by lazy { TorrServerEngine(this) }
+
+    // ── Proxy ("VPN") ────────────────────────────────────────────────────────────
+    //
+    // This used to be `runBlocking { proxyConfigFlow.first() }` in onCreate. A first-ever
+    // DataStore read is a disk read plus a proto parse, and doing it on the main thread
+    // stalls cold start before the splash can draw.
+    //
+    // Instead a collector on applicationScope keeps [proxyConfig] current and
+    // [proxySelector] reads it per connection - which also means changing the proxy takes
+    // effect on the next connection rather than requiring an app restart.
+
+    /**
+     * Active proxy config, or null for direct. Written from [applicationScope], read from
+     * OkHttp's dispatcher threads, hence `@Volatile`.
+     */
+    @Volatile
+    var proxyConfig: ProxyConfig? = null
         private set
 
-    lateinit var addonManager: AddonManager
-        private set
+    /** Completes on the first emission, so no request can race ahead of the setting. */
+    private val proxyLoaded = CompletableDeferred<Unit>()
 
-    lateinit var subdlService: SubdlService
-        private set
+    /**
+     * Per-request proxy decision.
+     *
+     * Deliberately a selector rather than `OkHttpClient.Builder.proxy()`: the value is read
+     * at connection time, so it picks up changes, and loopback can be excluded.
+     */
+    private val proxySelector = object : ProxySelector() {
+        override fun select(uri: URI?): List<Proxy> {
+            val cfg = proxyConfig ?: return DIRECT
 
-    /** Active proxy config, resolved once at startup. Null = direct. */
-    var proxyConfig: com.ominix.vidiio.data.repository.ProxyConfig? = null
-        private set
+            // The embedded TorrServer listens on loopback. Routing that through an external
+            // proxy cannot work, and would hand it a list of what is being streamed.
+            val host = uri?.host
+            if (host == "127.0.0.1" || host == "::1" || host.equals("localhost", ignoreCase = true)) {
+                return DIRECT
+            }
 
-    override fun onCreate() {
-        super.onCreate()
-        Rive.init(this)
+            val javaType = if (cfg.type == ProxyType.SOCKS5) Proxy.Type.SOCKS else Proxy.Type.HTTP
+            return listOf(Proxy(javaType, InetSocketAddress.createUnresolved(cfg.host, cfg.port)))
+        }
 
-        settingsRepository = SettingsRepository(this)
+        override fun connectFailed(uri: URI?, sa: SocketAddress?, e: IOException?) {
+            Log.w(TAG, "Proxy connect failed for $uri via $sa", e)
+        }
+    }
 
-        // Read the proxy ("VPN") config once at startup. Changing it needs an app restart.
-        proxyConfig = kotlinx.coroutines.runBlocking { settingsRepository.proxyConfigFlow.first() }
-        applyProxyAuthenticator(proxyConfig)
+    /**
+     * Holds the very first request until the proxy setting has loaded.
+     *
+     * This runs on an OkHttp dispatcher thread, never the main thread, so blocking here is
+     * safe - and it is what stops a cold-start request from leaking past a configured
+     * proxy. The timeout degrades a broken DataStore to "direct" instead of hanging every
+     * request forever.
+     */
+    private val proxyGateInterceptor = Interceptor { chain ->
+        if (!proxyLoaded.isCompleted) {
+            val loaded = runBlocking {
+                withTimeoutOrNull(PROXY_LOAD_TIMEOUT_MS) { proxyLoaded.await() }
+            }
+            if (loaded == null) {
+                Log.w(TAG, "Proxy settings did not load in ${PROXY_LOAD_TIMEOUT_MS}ms - going direct")
+            }
+        }
+        chain.proceed(chain.request())
+    }
 
-        val database = VidiioDatabase.build(this)
+    // ── HTTP ─────────────────────────────────────────────────────────────────────
 
-        favoriteRepository = FavoriteRepository(database.favoriteDao())
-        downloadRepository = DownloadRepository(database.downloadDao())
-        downloadManager = DownloadManager(this, downloadRepository)
-        watchProgressRepository = WatchProgressRepository(database.watchProgressDao())
-        torrServerEngine = TorrServerEngine(this)
-
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
-            // BODY buffers every full response into memory before returning it — with the
+    private val loggingInterceptor by lazy {
+        HttpLoggingInterceptor().apply {
+            // BODY buffers every full response into memory before returning it - with the
             // HTML-scraping sources that means multi-MB pages copied + UTF-8 decoded on the
             // hot path. HEADERS keeps the useful request/response lines without that cost.
             level = HttpLoggingInterceptor.Level.HEADERS
         }
+    }
 
-        val bootstrapClient = OkHttpClient.Builder()
+    /** Shared base: proxy handling and timeouts. No logging, no DNS override. */
+    private fun baseClientBuilder(): OkHttpClient.Builder = OkHttpClient.Builder()
+        .proxySelector(proxySelector)
+        .addInterceptor(proxyGateInterceptor)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(35, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+
+    private val dns by lazy {
+        val bootstrapClient = baseClientBuilder()
             .addInterceptor(loggingInterceptor)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .writeTimeout(5, TimeUnit.SECONDS)
-            .applyProxy(proxyConfig)
             .build()
 
-        val dns = DnsOverHttps.Builder()
+        DnsOverHttps.Builder()
             .client(bootstrapClient)
             .url("https://cloudflare-dns.com/dns-query".toHttpUrl())
             .bootstrapDnsHosts(listOf(
@@ -125,94 +186,115 @@ class VidiioApplication : Application() {
                 InetAddress.getByName("2606:4700:4700::1001")
             ))
             .build()
+    }
 
-        okHttpClient = OkHttpClient.Builder()
+    val okHttpClient: OkHttpClient by lazy {
+        baseClientBuilder()
             .addInterceptor(loggingInterceptor)
             .dns(dns)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(35, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .applyProxy(proxyConfig)
             .build()
+    }
 
-        playbackHttpClient = okHttpClient.newBuilder()
-            .apply {
-                interceptors().clear()
-                networkInterceptors().clear()
-            }
+    /**
+     * OkHttp client for media playback (ExoPlayer): same config as [okHttpClient] minus
+     * logging, because a logging interceptor buffers whole response bodies, which is fatal
+     * for streaming video.
+     *
+     * Built from [baseClientBuilder] rather than by clearing interceptors off
+     * [okHttpClient] - clearing drops the proxy gate too, which would let the first
+     * playback request slip past a configured proxy.
+     */
+    val playbackHttpClient: OkHttpClient by lazy {
+        baseClientBuilder().dns(dns).build()
+    }
+
+    // ── API services and repositories ────────────────────────────────────────────
+
+    /**
+     * TMDB client. Separate from [okHttpClient] purely so the api_key interceptor is not
+     * attached to the client the Stremio addons and scrapers use.
+     */
+    private val tmdbHttpClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .addInterceptor(TmdbApiKeyInterceptor(BuildConfig.TMDB_API_KEY))
             .build()
+    }
 
-        val retrofit = Retrofit.Builder()
+    private val tmdbRetrofit: Retrofit by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://api.themoviedb.org/3/")
+            .client(tmdbHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create())
+            .build()
+    }
+
+    /**
+     * Stremio addon calls. Same base URL as [tmdbRetrofit] (the addon endpoints are
+     * absolute @Url values anyway) but on the un-keyed client.
+     */
+    private val stremioRetrofit: Retrofit by lazy {
+        Retrofit.Builder()
             .baseUrl("https://api.themoviedb.org/3/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create())
             .build()
+    }
 
-        val tmdbService = retrofit.create(TMDBService::class.java)
-        val stremioService = retrofit.create(StremioService::class.java)
-
-        addonManager = AddonManager(stremioService, settingsRepository)
-
-        val subdlRetrofit = Retrofit.Builder()
+    val subdlService: SubdlService by lazy {
+        Retrofit.Builder()
             .baseUrl("https://api.subdl.com/api/v1/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create())
             .build()
-        subdlService = subdlRetrofit.create(SubdlService::class.java)
+            .create(SubdlService::class.java)
+    }
 
-        val cinejoyScraper = CinejoyScraper(okHttpClient)
-        val movyScraper = MovyScraper(okHttpClient)
-        val a111477Scraper = A111477Scraper(okHttpClient)
-        val vidsrcScraper = VidSrcScraper(okHttpClient)
-        val videasyScraper = VidEasyScraper(okHttpClient)
-        val knabenScraper = KnabenScraper(okHttpClient)
-        val tgScraper = TorrentGalaxyScraper(okHttpClient)
-        val ottsxScraper = OneThreeThreeSevenXScraper(okHttpClient)
-        val ytsScraper = YtsScraper(okHttpClient)
-        val vadapavScraper = VadapavScraper(okHttpClient)
-        val vuflixScraper = VuflixScraper(okHttpClient)
+    val addonManager: AddonManager by lazy {
+        AddonManager(stremioRetrofit.create(StremioService::class.java), settingsRepository)
+    }
 
-        movieRepository = MovieRepository(
-            tmdbService,
+    val movieRepository: MovieRepository by lazy {
+        MovieRepository(
+            tmdbRetrofit.create(TMDBService::class.java),
             listOf(
-                cinejoyScraper, 
-                movyScraper, 
-                a111477Scraper, 
-                vidsrcScraper, 
-                videasyScraper, 
-                knabenScraper, 
-                tgScraper, 
-                ottsxScraper,
-                ytsScraper,
-                vadapavScraper, 
-                vuflixScraper
+                CinejoyScraper(okHttpClient),
+                MovyScraper(okHttpClient),
+                A111477Scraper(okHttpClient),
+                VidSrcScraper(okHttpClient),
+                VidEasyScraper(okHttpClient),
+                KnabenScraper(okHttpClient),
+                TorrentGalaxyScraper(okHttpClient),
+                OneThreeThreeSevenXScraper(okHttpClient),
+                YtsScraper(okHttpClient),
+                VadapavScraper(okHttpClient),
+                VuflixScraper(okHttpClient)
             ),
             settingsRepository,
             addonManager
         )
     }
 
-    private fun OkHttpClient.Builder.applyProxy(
-        cfg: com.ominix.vidiio.data.repository.ProxyConfig?
-    ): OkHttpClient.Builder {
-        if (cfg == null) return this
-        val javaType = if (cfg.type == com.ominix.vidiio.data.repository.ProxyType.SOCKS5)
-            java.net.Proxy.Type.SOCKS else java.net.Proxy.Type.HTTP
-        proxy(java.net.Proxy(javaType, java.net.InetSocketAddress.createUnresolved(cfg.host, cfg.port)))
-        if (cfg.type == com.ominix.vidiio.data.repository.ProxyType.HTTP && !cfg.username.isNullOrBlank()) {
-            proxyAuthenticator { _, response ->
-                val credential = okhttp3.Credentials.basic(cfg.username, cfg.password ?: "")
-                response.request.newBuilder().header("Proxy-Authorization", credential).build()
+    override fun onCreate() {
+        super.onCreate()
+        Rive.init(this)
+
+        applicationScope.launch {
+            settingsRepository.proxyConfigFlow.collectLatest { cfg ->
+                proxyConfig = cfg
+                applyProxyAuthenticator(cfg)
+                proxyLoaded.complete(Unit)
             }
         }
-        return this
     }
 
     /** SOCKS5 username/password auth is done through the JVM-wide Authenticator. */
-    private fun applyProxyAuthenticator(cfg: com.ominix.vidiio.data.repository.ProxyConfig?) {
-        if (cfg == null || cfg.type != com.ominix.vidiio.data.repository.ProxyType.SOCKS5 ||
-            cfg.username.isNullOrBlank()
-        ) return
+    private fun applyProxyAuthenticator(cfg: ProxyConfig?) {
+        if (cfg == null || cfg.type != ProxyType.SOCKS5 || cfg.username.isNullOrBlank()) {
+            // Clear any previously installed authenticator, or credentials from an old
+            // config outlive the config itself.
+            java.net.Authenticator.setDefault(null)
+            return
+        }
         java.net.Authenticator.setDefault(object : java.net.Authenticator() {
             override fun getPasswordAuthentication(): java.net.PasswordAuthentication? {
                 if (requestingHost.equals(cfg.host, ignoreCase = true) && requestingPort == cfg.port) {
@@ -221,5 +303,11 @@ class VidiioApplication : Application() {
                 return null
             }
         })
+    }
+
+    private companion object {
+        const val TAG = "VidiioApplication"
+        const val PROXY_LOAD_TIMEOUT_MS = 3_000L
+        val DIRECT: List<Proxy> = listOf(Proxy.NO_PROXY)
     }
 }
