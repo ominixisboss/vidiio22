@@ -1,5 +1,6 @@
 import java.net.URI
 import java.security.MessageDigest
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -18,8 +19,10 @@ android {
         applicationId = "com.example.vidiio"
         minSdk = 23
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // Single source of truth for the shipped version. CI can override without
+        // editing the file: -PversionCode=42 -PversionName=1.4.2
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 2
+        versionName = (project.findProperty("versionName") as String?) ?: "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -28,11 +31,50 @@ android {
         }
     }
 
+    // Release signing. Reads app/keystore.properties (gitignored) or, for CI, the
+    // KEYSTORE_* environment variables. When neither is present the release build
+    // stays unsigned rather than failing, so a plain `assembleRelease` still works
+    // for a local smoke test.
+    val keystorePropsFile = rootProject.file("app/keystore.properties")
+    val keystoreProps = Properties().apply {
+        if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use(::load)
+    }
+    fun secret(key: String, env: String): String? =
+        (keystoreProps.getProperty(key) ?: System.getenv(env))?.takeIf { it.isNotBlank() }
+
+    val releaseStorePath = secret("storeFile", "KEYSTORE_FILE")
+
+    signingConfigs {
+        if (releaseStorePath != null) {
+            create("release") {
+                storeFile = file(releaseStorePath)
+                storePassword = secret("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias = secret("keyAlias", "KEY_ALIAS")
+                keyPassword = secret("keyPassword", "KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // R8: shrink, optimize and obfuscate. Keep rules live in
+            // src/main/keepRules/*.pro - AGP feeds every file in that directory to R8.
+            // Turning this off (as it was) shipped every unused class in every
+            // dependency, which is most of why the release APK was ~45MB.
+            optimization {
+                enable = true
+            }
+            isShrinkResources = true
+
+            signingConfig = signingConfigs.findByName("release")
+        }
+
+        debug {
+            // Keep debug builds fast and debuggable - never shrink them.
             optimization {
                 enable = false
             }
+            isShrinkResources = false
         }
     }
     packaging {

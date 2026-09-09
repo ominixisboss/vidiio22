@@ -27,3 +27,9 @@ local.properties
 # already tracked, so it had no effect until they were git rm --cached'd).
 /implementation_plan.artifact.md
 *.artifact.md
+
+# Release signing secrets. Copy app/keystore.properties.example and fill it in,
+# or set the KEYSTORE_* env vars in CI. Never commit the keystore or its passwords.
+/app/keystore.properties
+*.jks
+*.keystore
