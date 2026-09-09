@@ -12,9 +12,9 @@
 
 # Services and the Application are named in the manifest; AGP keeps those, but
 # they are also started via explicit Intent(context, X::class.java).
--keep class com.example.vidiio.VidiioApplication
--keep class com.example.vidiio.torrent.TorrentService
--keep class com.example.vidiio.download.DownloadService
+-keep class com.ominix.vidiio.VidiioApplication
+-keep class com.ominix.vidiio.torrent.TorrentService
+-keep class com.ominix.vidiio.download.DownloadService
 
 # Useful release stack traces. Without this, a crash report is unreadable.
 # Keep the mapping.txt that R8 writes under build/outputs/mapping/release/.

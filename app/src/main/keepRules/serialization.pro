@@ -14,7 +14,7 @@
 -keepclassmembers class **$* {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class com.example.vidiio.**$$serializer { *; }
--keepclassmembers class com.example.vidiio.** {
+-keep,includedescriptorclasses class com.ominix.vidiio.**$$serializer { *; }
+-keepclassmembers class com.ominix.vidiio.** {
     *** Companion;
 }

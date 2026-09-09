@@ -10,14 +10,21 @@ plugins {
 }
 
 android {
-    namespace = "com.example.vidiio"
+    namespace = "com.ominix.vidiio"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
+        // Deliberately still com.example.vidiio while the source package is com.ominix.vidiio.
+        // applicationId is the install identity: changing it orphans every existing
+        // install (no update path, local library gone). Change it in the same release
+        // that first ships to Play, not before.
         applicationId = "com.example.vidiio"
-        minSdk = 23
+
+        // 24, not 23: res/xml/network_security_config.xml is only honoured from API 24,
+        // so on 23 the cleartext lockdown silently does nothing.
+        minSdk = 24
         targetSdk = 37
         // Single source of truth for the shipped version. CI can override without
         // editing the file: -PversionCode=42 -PversionName=1.4.2
