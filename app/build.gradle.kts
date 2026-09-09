@@ -52,6 +52,17 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Committed Room schemas (app/schemas) are what MigrationTestHelper replays against,
+    // so they must ship to the androidTest APK as assets.
+    sourceSets["androidTest"].assets.srcDir("$projectDir/schemas")
+}
+
+// Room writes the exported schema JSON here on every build. Commit each new file:
+// it is the only record of what the previous schema looked like, and without it no
+// migration can be written or tested.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -109,6 +120,7 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.runner)
+    androidTestImplementation(libs.androidx.room.testing)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
     "ksp"(libs.androidx.room.compiler)

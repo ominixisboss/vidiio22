@@ -18,3 +18,12 @@ local.properties
 
 # TorrServer engine binaries fetched by the downloadTorrServer Gradle task
 /app/src/main/jniLibs/
+
+# Build outputs — publish these as GitHub Releases, not git objects.
+/app/release/
+/app/*/release/
+
+# Agent planning artifacts (the .artifacts/ rule above was added after these were
+# already tracked, so it had no effect until they were git rm --cached'd).
+/implementation_plan.artifact.md
+*.artifact.md
