@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 class KnabenScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "Knaben"
@@ -52,6 +53,8 @@ class KnabenScraper(private val client: OkHttpClient) : Scraper {
                 }
                 if (html.isNotEmpty()) break
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "KnabenScraper.getStreamSources() failed", e)
                 continue
             }
         }
@@ -100,9 +103,12 @@ class KnabenScraper(private val client: OkHttpClient) : Scraper {
                 ))
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("KnabenScraper", "Error: ${e.message}")
         }
         
         sources.sortedByDescending { it.seeders }
     }
 }
+
+private const val TAG = "KnabenScraper"

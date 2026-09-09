@@ -7,6 +7,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.ominix.vidiio.data.scraper.TorrentTitleParser
+import kotlinx.coroutines.CancellationException
 
 /**
  * Facade over the embedded [TorrServerEngine], reproducing PlayTorrioV3's
@@ -64,6 +65,7 @@ class TorrentManager(private val context: Context) {
         val added = try {
             api.addTorrent(magnet, extractDisplayName(magnet))
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "addTorrent failed", e)
             null
         }
@@ -116,6 +118,7 @@ class TorrentManager(private val context: Context) {
             info = try {
                 api.getTorrent(hash)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.w(TAG, "metadata poll error: ${e.message}")
                 null
             }
@@ -142,6 +145,8 @@ class TorrentManager(private val context: Context) {
         val info = try {
             api.getTorrent(h)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "TorrentManager.startStreaming() failed", e)
             null
         } ?: return@withContext null
 
@@ -274,6 +279,8 @@ class TorrentManager(private val context: Context) {
         return try {
             java.net.URLDecoder.decode(m.groupValues[1].replace("+", " "), "UTF-8")
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "TorrentManager.extractDisplayName() failed", e)
             null
         }
     }
@@ -297,6 +304,8 @@ class TorrentManager(private val context: Context) {
             val bytes = out.toByteArray()
             if (bytes.size >= 20) bytes.take(20).joinToString("") { "%02x".format(it) } else null
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "TorrentManager.base32ToHex() failed", e)
             null
         }
     }

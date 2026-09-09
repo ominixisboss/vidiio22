@@ -18,6 +18,8 @@ import com.ominix.vidiio.download.DownloadManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 sealed interface DetailsUiState {
     data object Loading : DetailsUiState
@@ -159,6 +161,7 @@ class DetailsViewModel(
                 }
                 // Scraping is kicked off by observeSettings() once _movie is set.
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _error.value = e.message ?: "Unknown error"
             }
         }
@@ -261,7 +264,11 @@ class DetailsViewModel(
             )
             response.subtitles ?: emptyList()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "DetailsViewModel.getSubtitles() failed", e)
             emptyList()
         }
     }
 }
+
+private const val TAG = "DetailsViewModel"

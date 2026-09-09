@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 class MovieRepository(
     private val tmdbService: TMDBService,
@@ -126,6 +127,7 @@ class MovieRepository(
             categories.addAll(stremioCatalogs.await())
             categories
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("MovieRepository", "Error fetching from TMDB", e)
             emptyList()
         }
@@ -134,6 +136,7 @@ class MovieRepository(
     suspend fun search(query: String): List<Movie> = try {
         tmdbService.searchMulti(query).results.map { it.toMovie() }
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
         Log.e("MovieRepository", "Search error", e)
         emptyList()
     }
@@ -145,6 +148,8 @@ class MovieRepository(
             sortBy = "popularity.desc"
         ).results.map { it.toMovie(MovieType.TV_SHOW) }
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Log.w(TAG, "MovieRepository failed", e)
         emptyList()
     }
 
@@ -155,6 +160,8 @@ class MovieRepository(
             sortBy = "popularity.desc"
         ).results.map { it.toMovie(MovieType.TV_SHOW) }
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Log.w(TAG, "MovieRepository failed", e)
         emptyList()
     }
 
@@ -166,6 +173,8 @@ class MovieRepository(
             voteCountGte = 200
         ).results.map { it.toMovie(MovieType.TV_SHOW) }
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Log.w(TAG, "MovieRepository failed", e)
         emptyList()
     }
 
@@ -206,6 +215,7 @@ class MovieRepository(
                     seasons = seasons
                 )
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("MovieRepository", "Stremio meta error", e)
                 movie
             }
@@ -220,6 +230,8 @@ class MovieRepository(
                     scraper.getMovieDetails(movie)
                 } ?: movie
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "MovieRepository.getMovieDetails() failed", e)
                 movie
             }
         }
@@ -235,12 +247,15 @@ class MovieRepository(
                     try {
                         tmdbService.getTVSeasonDetails(id, season.seasonNumber).toSeason()
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Log.w(TAG, "MovieRepository.getMovieDetails() failed", e)
                         season.toSeason()
                     }
                 } ?: emptyList()
                 tmdbMovie.toMovie(movie.type).copy(seasons = seasons)
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("MovieRepository", "Error getting movie details", e)
             movie
         }
@@ -275,6 +290,7 @@ class MovieRepository(
                             }
                         }
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Log.e("MovieRepository", "Scraper error: ${scraper.name}", e)
                     }
                 }
@@ -305,6 +321,7 @@ class MovieRepository(
                         }
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Log.e("MovieRepository", "Stremio error", e)
                 }
             }
@@ -321,6 +338,8 @@ class MovieRepository(
                 tmdbService.getTVShowDetails(id).externalIds?.imdbId
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "MovieRepository.getImdbId() failed", e)
             null
         }
     }
@@ -374,3 +393,5 @@ class MovieRepository(
         )
     }
 }
+
+private const val TAG = "MovieRepository"

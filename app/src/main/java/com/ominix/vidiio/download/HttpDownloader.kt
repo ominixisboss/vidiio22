@@ -9,6 +9,8 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 class HttpDownloader(private val okHttpClient: OkHttpClient) {
 
@@ -73,6 +75,8 @@ class HttpDownloader(private val okHttpClient: OkHttpClient) {
 
             DownloadResult.Success(file.absolutePath, totalSize)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "HttpDownloader.download() failed", e)
             DownloadResult.Error(e.message ?: "Unknown error")
         }
     }
@@ -88,3 +92,5 @@ sealed class DownloadResult {
     data class Error(val message: String) : DownloadResult()
     object Cancelled : DownloadResult()
 }
+
+private const val TAG = "HttpDownloader"

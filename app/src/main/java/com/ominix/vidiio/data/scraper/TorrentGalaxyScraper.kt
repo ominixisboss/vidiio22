@@ -14,6 +14,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 class TorrentGalaxyScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "TorrentGalaxy"
@@ -57,6 +58,8 @@ class TorrentGalaxyScraper(private val client: OkHttpClient) : Scraper {
                     break
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "TorrentGalaxyScraper.getStreamSources() failed", e)
                 continue
             }
         }
@@ -108,6 +111,7 @@ class TorrentGalaxyScraper(private val client: OkHttpClient) : Scraper {
             }
             sources.addAll(deferredSources.awaitAll().filterNotNull())
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("TorrentGalaxyScraper", "Error: ${e.message}")
         }
         
@@ -128,7 +132,11 @@ class TorrentGalaxyScraper(private val client: OkHttpClient) : Scraper {
                 } else null
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "TorrentGalaxyScraper.fetchMagnet() failed", e)
             null
         }
     }
 }
+
+private const val TAG = "TorrentGalaxyScraper"

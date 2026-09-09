@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import android.os.Build
+import kotlinx.coroutines.CancellationException
 
 /**
  * Foreground service that owns the torrent streaming session. The actual BitTorrent work
@@ -60,7 +61,10 @@ class TorrentService : Service() {
     private fun releaseWifiLock() {
         try {
             wifiLock?.release()
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "TorrentService.releaseWifiLock() failed", e)
+        }
     }
 
     fun startStreaming(
@@ -133,3 +137,5 @@ class TorrentService : Service() {
             .build()
     }
 }
+
+private const val TAG = "TorrentService"

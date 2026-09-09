@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlinx.coroutines.CancellationException
 
 /**
  * Downloads a torrent by streaming it out of the embedded TorrServer engine and writing
@@ -80,6 +81,8 @@ class TorrentDownloader(
             api.dropTorrent(hash)
             result
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "TorrentDownloader.download() failed", e)
             DownloadResult.Error(e.message ?: "Unknown error")
         }
     }

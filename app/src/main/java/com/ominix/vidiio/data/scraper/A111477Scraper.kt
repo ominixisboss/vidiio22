@@ -14,6 +14,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 class A111477Scraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "A111477"
@@ -95,6 +96,7 @@ class A111477Scraper(private val client: OkHttpClient) : Scraper {
                     if (streams.length() > 0) break // Found streams, skip fallback IDs
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("A111477Scraper", "Error fetching from $endpoint", e)
             }
         }

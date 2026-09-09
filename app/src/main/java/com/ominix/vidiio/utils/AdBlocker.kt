@@ -3,6 +3,7 @@ package com.ominix.vidiio.utils
 import android.webkit.WebResourceResponse
 import java.io.ByteArrayInputStream
 import java.net.URI
+import kotlinx.coroutines.CancellationException
 
 object AdBlocker {
     private val adDomains = setOf(
@@ -68,7 +69,8 @@ object AdBlocker {
         return try {
             val host = URI(url).host?.lowercase() ?: return false
             adDomains.any { host == it || host.endsWith(".$it") }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             false
         }
     }

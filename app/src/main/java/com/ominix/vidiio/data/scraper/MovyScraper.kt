@@ -18,6 +18,7 @@ import android.util.Log
 import android.util.Base64
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.CancellationException
 
 class MovyScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "Movy"
@@ -141,6 +142,7 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
                         Log.w("MovyScraper", "$serverName: HTTP ${res.code}")
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Log.w("MovyScraper", "$serverName: ${e.message}")
                 }
                 emptyList<StreamSource>()
@@ -168,6 +170,7 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("MovyScraper", "Failed to fetch seed", e)
         }
         null
@@ -206,6 +209,8 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
             val payload = cipherBytes.sliceArray(magic.size until cipherBytes.size)
             String(payload, StandardCharsets.UTF_8)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "MovyScraper.decrypt() failed", e)
             null
         }
     }
@@ -287,3 +292,5 @@ class MovyScraper(private val client: OkHttpClient) : Scraper {
     private data class SeedEntry(val seed: String, val expiresAt: Long)
     private class KeyState(val s: IntArray, val isSet: BooleanArray, var acc: Int)
 }
+
+private const val TAG = "MovyScraper"

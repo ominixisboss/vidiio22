@@ -12,6 +12,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import android.util.Log
 import java.net.URLEncoder
+import kotlinx.coroutines.CancellationException
 
 class YtsScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "YTS"
@@ -79,6 +80,7 @@ class YtsScraper(private val client: OkHttpClient) : Scraper {
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("YtsScraper", "Error: ${e.message}")
         }
         

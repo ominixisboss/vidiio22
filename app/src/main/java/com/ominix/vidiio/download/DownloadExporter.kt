@@ -10,6 +10,8 @@ import com.ominix.vidiio.data.model.DownloadTask
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 sealed class ExportResult {
     data class Success(val location: String) : ExportResult()
@@ -78,6 +80,8 @@ object DownloadExporter {
                 ExportResult.Success("Downloads/$SUBDIR/$displayName")
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "DownloadExporter.export() failed", e)
             ExportResult.Error(e.message ?: "Export failed")
         }
     }
@@ -92,3 +96,5 @@ object DownloadExporter {
         else -> "video/mp4"
     }
 }
+
+private const val TAG = "DownloadExporter"

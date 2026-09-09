@@ -12,6 +12,7 @@ import org.json.JSONObject
 import android.util.Base64
 import android.util.Log
 import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.CancellationException
 
 class VuflixScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "Vuflix"
@@ -139,6 +140,8 @@ class VuflixScraper(private val client: OkHttpClient) : Scraper {
                         } else null
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.w(TAG, "VuflixScraper.getStreamSources() failed", e)
                     null
                 }
             }
@@ -174,6 +177,7 @@ class VuflixScraper(private val client: OkHttpClient) : Scraper {
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("VuflixScraper", "Error fetching providers: ${e.message}")
         }
         fallbackProviders
@@ -206,8 +210,11 @@ class VuflixScraper(private val client: OkHttpClient) : Scraper {
                 return Pair(directUrl, headers)
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("VuflixScraper", "Error unwrapping URL: ${e.message}")
         }
         return Pair(rawUrl, defaultHeaders)
     }
 }
+
+private const val TAG = "VuflixScraper"

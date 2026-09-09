@@ -14,6 +14,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 class OneThreeThreeSevenXScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "1337x"
@@ -57,6 +58,8 @@ class OneThreeThreeSevenXScraper(private val client: OkHttpClient) : Scraper {
                     break
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "OneThreeThreeSevenXScraper.getStreamSources() failed", e)
                 continue
             }
         }
@@ -107,6 +110,7 @@ class OneThreeThreeSevenXScraper(private val client: OkHttpClient) : Scraper {
             }
             sources.addAll(deferredSources.awaitAll().filterNotNull())
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("1337xScraper", "Error: ${e.message}")
         }
         
@@ -127,7 +131,11 @@ class OneThreeThreeSevenXScraper(private val client: OkHttpClient) : Scraper {
                 } else null
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "OneThreeThreeSevenXScraper.fetchMagnet() failed", e)
             null
         }
     }
 }
+
+private const val TAG = "OneThreeThreeSevenXScraper"

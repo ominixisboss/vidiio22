@@ -11,6 +11,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 
 /** url + resolved manifest for one installed Stremio addon. */
 data class InstalledAddon(val url: String, val manifest: Manifest) {
@@ -36,6 +37,7 @@ class AddonManager(
                 val m = manifestCache[url] ?: try {
                     stremioService.getManifest(url).also { manifestCache[url] = it }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Log.e("AddonManager", "Error fetching manifest from $url", e); null
                 }
                 m?.let { InstalledAddon(url, it) }
@@ -50,6 +52,7 @@ class AddonManager(
                 try {
                     stremioService.getStreams("${addon.baseUrl}stream/$type/$id.json").streams
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Log.e("AddonManager", "Error fetching streams from ${addon.manifest.name}", e)
                     emptyList()
                 }
@@ -65,6 +68,8 @@ class AddonManager(
                 try {
                     stremioService.getMeta("${addon.baseUrl}meta/$type/$id.json").meta
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.w(TAG, "AddonManager.getMeta() failed", e)
                     null
                 }
             }
@@ -81,6 +86,7 @@ class AddonManager(
                             val url = "${addon.baseUrl}catalog/${catalog.type}/${catalog.id}.json"
                             (catalog.name ?: addon.manifest.name) to stremioService.getCatalog(url).metas
                         } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Log.e("AddonManager", "Error fetching catalog ${catalog.name}", e); null
                         }
                     }
@@ -118,3 +124,5 @@ class AddonManager(
         )
     }
 }
+
+private const val TAG = "AddonManager"

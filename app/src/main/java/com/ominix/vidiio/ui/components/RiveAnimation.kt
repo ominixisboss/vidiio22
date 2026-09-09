@@ -20,6 +20,7 @@ import app.rive.runtime.kotlin.RiveAnimationView
 import app.rive.runtime.kotlin.core.Alignment as RiveAlignment
 import app.rive.runtime.kotlin.core.Fit
 import app.rive.runtime.kotlin.core.Loop
+import kotlinx.coroutines.CancellationException
 
 /**
  * A Composable that wraps RiveAnimationView to display Rive animations.
@@ -61,6 +62,7 @@ fun RiveAnimation(
                         
                         builder.build()
                     } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
                         Log.e("RiveAnimation", "Critical error in Rive factory", t)
                         hasError = true
                         android.view.View(context)
@@ -75,6 +77,7 @@ fun RiveAnimation(
                             view.alignment = alignment
                         }
                     } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
                         Log.e("RiveAnimation", "Critical error in Rive update", t)
                         hasError = true
                     }

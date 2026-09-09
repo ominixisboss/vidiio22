@@ -10,6 +10,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 
 /**
  * Thin typed client for the TorrServer REST API, mirroring
@@ -43,6 +44,8 @@ class TorrServerApi(private val baseUrl: String) {
             if (r.isSuccessful) r.body.string().trim() else null
         }
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Log.w(TAG, "TorrServerApi failed", e)
         null
     }
 
@@ -123,6 +126,7 @@ class TorrServerApi(private val baseUrl: String) {
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.w(TAG, "POST /torrents ${body.optString("action")} failed: ${e.message}")
             null
         }
@@ -136,6 +140,7 @@ class TorrServerApi(private val baseUrl: String) {
             torrentAdapter.fromJson(json)
         }
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
         Log.w(TAG, "Failed to parse torrent JSON: ${e.message}")
         null
     }

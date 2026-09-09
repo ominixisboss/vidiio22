@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 class VadapavScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "Vadapav"
@@ -73,6 +74,7 @@ class VadapavScraper(private val client: OkHttpClient) : Scraper {
                     }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("VadapavScraper", "Error ($id): ${e.message}")
             }
             if (sources.isNotEmpty()) break

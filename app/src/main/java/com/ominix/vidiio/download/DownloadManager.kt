@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import kotlinx.coroutines.CancellationException
 
 class DownloadManager(
     private val context: Context,
@@ -127,6 +128,7 @@ class DownloadManager(
                             }
                         }
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace()
                     }
                 }

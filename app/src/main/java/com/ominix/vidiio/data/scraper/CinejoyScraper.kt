@@ -19,6 +19,7 @@ import org.json.JSONArray
 import android.util.Log
 import java.security.PublicKey
 import java.security.SecureRandom
+import kotlinx.coroutines.CancellationException
 
 class CinejoyScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "Cinejoy"
@@ -162,6 +163,8 @@ class CinejoyScraper(private val client: OkHttpClient) : Scraper {
                 list
             } else fallbackServers
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "CinejoyScraper.fetchServers() failed", e)
             fallbackServers
         }
     }
@@ -208,8 +211,11 @@ class CinejoyScraper(private val client: OkHttpClient) : Scraper {
             val decrypted = CryptoUtils.decryptAesGcm(resCiphertext, resKey, resIv, resAad)
             JSONObject(String(decrypted))
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("CinejoyScraper", "Encrypted query error", e)
             null
         }
     }
 }
+
+private const val TAG = "CinejoyScraper"

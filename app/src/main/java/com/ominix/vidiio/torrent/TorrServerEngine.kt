@@ -9,6 +9,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlinx.coroutines.CancellationException
 
 /**
  * Runs the bundled TorrServer engine as a subprocess and exposes its loopback HTTP API,
@@ -95,6 +96,7 @@ class TorrServerEngine(private val context: Context) {
                 }
             }.start()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Failed to exec TorrServer binary", e)
             return false
         }

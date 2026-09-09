@@ -13,6 +13,7 @@ import java.net.URI
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import kotlinx.coroutines.CancellationException
 
 /**
  * Downloads an HLS (.m3u8) VOD by fetching every segment and concatenating them into one
@@ -88,6 +89,8 @@ class HlsDownloader(private val client: OkHttpClient) {
             Log.d(TAG, "HLS download done: ${out.name} (${out.length()} bytes, ${segments.size} segments)")
             DownloadResult.Success(out.absolutePath, out.length())
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "HlsDownloader.download() failed", e)
             DownloadResult.Error(e.message ?: "HLS download error")
         }
     }

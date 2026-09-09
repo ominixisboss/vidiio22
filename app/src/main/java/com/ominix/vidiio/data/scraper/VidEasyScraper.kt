@@ -13,6 +13,7 @@ import android.util.Base64
 import android.util.Log
 import java.nio.charset.StandardCharsets
 import java.util.*
+import kotlinx.coroutines.CancellationException
 
 class VidEasyScraper(private val client: OkHttpClient) : Scraper {
     override val name: String = "VidEasy"
@@ -123,6 +124,7 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
                             }
                         }
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Log.w("VidEasyScraper", "$label: ${e.message}")
                         null
                     }
@@ -132,6 +134,7 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
             sources.addAll(deferredSources.awaitAll().filterNotNull().flatten())
 
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("VidEasyScraper", "Error: ${e.message}")
         }
 
@@ -153,6 +156,8 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
                 } else null
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "VidEasyScraper.fetchSeed() failed", e)
             null
         }
     }
@@ -288,3 +293,5 @@ class VidEasyScraper(private val client: OkHttpClient) : Scraper {
         return String(decrypted, magic.size, decrypted.size - magic.size, StandardCharsets.UTF_8)
     }
 }
+
+private const val TAG = "VidEasyScraper"

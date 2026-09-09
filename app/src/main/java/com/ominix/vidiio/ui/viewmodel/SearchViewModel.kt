@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 sealed interface SearchUiState {
     data object Idle : SearchUiState
@@ -38,8 +40,12 @@ class SearchViewModel(private val movieRepository: MovieRepository) : ViewModel(
                 val results = movieRepository.search(currentQuery)
                 _uiState.value = SearchUiState.Success(results)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "SearchViewModel.search() failed", e)
                 _uiState.value = SearchUiState.Error(e.message ?: "Unknown error")
             }
         }
     }
 }
+
+private const val TAG = "SearchViewModel"

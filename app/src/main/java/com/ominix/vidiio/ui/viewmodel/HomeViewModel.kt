@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 sealed interface HomeUiState {
     data object Loading : HomeUiState
@@ -48,6 +50,8 @@ class HomeViewModel(
                 val categories = movieRepository.getHomeCategories()
                 _uiState.value = HomeUiState.Success(categories)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "HomeViewModel.refresh() failed", e)
                 _uiState.value = HomeUiState.Error(e.message ?: "Unknown error")
             }
         }
@@ -57,3 +61,5 @@ class HomeViewModel(
         viewModelScope.launch { watchProgressRepository.remove(id) }
     }
 }
+
+private const val TAG = "HomeViewModel"

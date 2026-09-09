@@ -11,6 +11,8 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -81,6 +83,8 @@ class SettingsRepository(private val context: Context) {
         try {
             ColorTheme.valueOf(themeString)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "SettingsRepository failed", e)
             ColorTheme.RED
         }
     }
@@ -90,6 +94,8 @@ class SettingsRepository(private val context: Context) {
         try {
             HomeStyle.valueOf(raw)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "SettingsRepository failed", e)
             HomeStyle.VIDIIO
         }
     }
@@ -211,3 +217,5 @@ class SettingsRepository(private val context: Context) {
         }
     }
 }
+
+private const val TAG = "SettingsRepository"
