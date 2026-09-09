@@ -1,5 +1,7 @@
 package com.ominix.vidiio.torrent
 
+import com.ominix.vidiio.data.scraper.TorrentTitleParser
+
 /**
  * Intelligent torrent file picker, ported from PlayTorrioV3's
  * `DebridMediaMatcher.computeFileMatchScore` (lib/services/debrid/utils/debrid_media_matcher.dart).

@@ -6,6 +6,7 @@ import com.ominix.vidiio.VidiioApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.ominix.vidiio.data.scraper.TorrentTitleParser
 
 /**
  * Facade over the embedded [TorrServerEngine], reproducing PlayTorrioV3's
