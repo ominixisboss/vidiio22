@@ -1,619 +1,293 @@
 package com.ominix.vidiio.ui.screens
 
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.media.AudioManager
 import android.os.IBinder
 import android.view.ViewGroup
-import android.webkit.*
 import android.widget.FrameLayout
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
-import androidx.window.core.layout.WindowWidthSizeClass
-import androidx.media3.common.*
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import io.github.peerless2012.ass.media.kt.buildWithAssSupport
-import io.github.peerless2012.ass.media.type.AssRenderType
-import com.ominix.vidiio.MainActivity
-import com.ominix.vidiio.VidiioApplication
-import com.ominix.vidiio.data.model.StreamSource
+import androidx.media3.ui.PlayerView
 import com.ominix.vidiio.data.model.DownloadStatus
+import com.ominix.vidiio.data.model.StreamSource
 import com.ominix.vidiio.torrent.TorrentService
-import com.ominix.vidiio.torrent.TorrentFileInfo
+import com.ominix.vidiio.ui.player.PlayerViewModel
+import com.ominix.vidiio.ui.player.PlayerWindowEffects
+import com.ominix.vidiio.ui.player.components.*
+import com.ominix.vidiio.ui.player.playerRemoteControls
+import com.ominix.vidiio.ui.player.playerTouchGestures
+import com.ominix.vidiio.ui.player.rememberPlayerDeviceControls
 import com.ominix.vidiio.ui.viewmodel.DetailsUiState
 import com.ominix.vidiio.ui.viewmodel.DetailsViewModel
-import com.ominix.vidiio.ui.player.AudioTrackInfo
-import com.ominix.vidiio.ui.player.components.*
+import com.ominix.vidiio.utils.PermissionUtils
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
+/**
+ * The player.
+ *
+ * Playback state and the ExoPlayer itself live in [PlayerViewModel]; the window-level
+ * effects in PlayerWindowEffects; the input handling in Modifier.playerRemoteControls /
+ * playerTouchGestures. What is left here is composition, the menu-visibility flags (view
+ * state, nothing else needs them) and the TorrentService binding, which is tied to this
+ * composable's context.
+ */
 @UnstableApi
-@OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun PlayerScreen(
     viewModel: DetailsViewModel,
+    playerViewModel: PlayerViewModel,
     initialSource: StreamSource? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val uiState by viewModel.uiState.collectAsState()
-    var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val permissionsState = com.google.accompanist.permissions.rememberMultiplePermissionsState(
-        permissions = com.ominix.vidiio.utils.PermissionUtils.getRequiredPermissions()
-    )
-    
-    // Core Playback State
-    var selectedSource by remember { mutableStateOf(initialSource) }
+
+    val uiState by viewModel.uiState.collectAsState()
+    val state by playerViewModel.state.collectAsState()
+    val audioHudText by playerViewModel.audioHudText.collectAsState()
     val resumePositionMs by viewModel.resumePositionMs.collectAsState()
-    var didResume by remember { mutableStateOf(false) }
-    var isBuffering by remember { mutableStateOf(false) }
-    var isTorrentLoading by remember { mutableStateOf(false) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var currentPosition by remember { mutableLongStateOf(0L) }
-    var duration by remember { mutableLongStateOf(0L) }
-    var bufferedPosition by remember { mutableLongStateOf(0L) }
-    var selectedSubtitleUrl by remember { mutableStateOf<String?>(null) }
-    // Player-session wide: matches the persistent text-track-disabled flag on exoPlayer.
-    var subtitlesEnabled by remember { mutableStateOf(true) }
-    
-    // UI State
+    val retryTrigger by playerViewModel.retryTrigger.collectAsState()
+
+    val permissionsState = rememberMultiplePermissionsState(
+        permissions = PermissionUtils.getRequiredPermissions()
+    )
+
+    // ── View state: which chrome is showing. Nothing outside this screen needs it. ──
     var showControls by remember { mutableStateOf(true) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var showAudioMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showAspectMenu by remember { mutableStateOf(false) }
     var showEpisodesSidebar by remember { mutableStateOf(false) }
-    
-    // HUDs & Gestures
-    var showVolumeHud by remember { mutableStateOf(false) }
-    var showBrightnessHud by remember { mutableStateOf(false) }
-    var volume by remember { mutableFloatStateOf(1.0f) }
-    var brightness by remember { mutableFloatStateOf(0.5f) }
-    var isMuted by remember { mutableStateOf(false) }
-    var audioHudText by remember { mutableStateOf("") }
-    var showAudioHud by remember { mutableStateOf(false) }
-    
-    // Settings
-    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
-    var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
-    var subtitleOffsetMs by remember { mutableLongStateOf(0L) }
-    var selectedAudioTrack by remember { mutableStateOf<AudioTrackInfo?>(null) }
-    var availableAudioTracks by remember { mutableStateOf<List<AudioTrackInfo>>(emptyList()) }
 
-    // Auto-Next & Skip
-    var showSkipIntro by remember { mutableStateOf(false) }
-    var isIntroDismissed by remember { mutableStateOf(false) }
-    var showSkipOutro by remember { mutableStateOf(false) }
-    var showAutoNextOverlay by remember { mutableStateOf(false) }
-    var autoNextSeconds by remember { mutableIntStateOf(5) }
+    val deviceControls = rememberPlayerDeviceControls()
 
-    val adaptiveInfo = currentWindowAdaptiveInfo()
-    val isCompact = adaptiveInfo.windowSizeClass.windowWidthSizeClass == WindowWidthSizeClass.COMPACT
-    
-    // Torrent Logic
+    // Watch progress is saved by the ViewModel's polling loop and on clear, but only
+    // DetailsViewModel knows which movie/episode the position belongs to.
+    LaunchedEffect(viewModel) {
+        playerViewModel.onSaveProgress = { position, duration ->
+            viewModel.saveWatchProgress(position, duration)
+        }
+    }
+    LaunchedEffect(resumePositionMs) { playerViewModel.setResumePosition(resumePositionMs) }
+    LaunchedEffect(initialSource) { initialSource?.let(playerViewModel::selectSource) }
+
+    PlayerWindowEffects(notchSafe = state.notchSafe, showControls = showControls)
+
+    // ── Torrent service binding ──────────────────────────────────────────────
     var torrentService by remember { mutableStateOf<TorrentService?>(null) }
     val serviceConnection = remember {
         object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
                 torrentService = (service as TorrentService.LocalBinder).getService()
             }
+
             override fun onServiceDisconnected(name: ComponentName?) {
                 torrentService = null
             }
         }
     }
 
-    val activity = context as? Activity
-    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
-
-    val settingsRepo = remember {
-        (context.applicationContext as VidiioApplication).settingsRepository
-    }
-    val avoidCutoutSetting by settingsRepo.avoidCameraCutoutFlow.collectAsState(initial = false)
-    // Player-session copy so the Aspect menu can flip it live; seeded from the setting.
-    var notchSafe by remember { mutableStateOf(false) }
-    var notchSafeInit by remember { mutableStateOf(false) }
-    LaunchedEffect(avoidCutoutSetting) {
-        if (!notchSafeInit) { notchSafe = avoidCutoutSetting; notchSafeInit = true }
-    }
-
-    // "Fill, keep camera clear": NEVER lets Android letterbox the window just enough to
-    // clear the camera hole; otherwise SHORT_EDGES fills into it. Belt-and-braces, the
-    // video surface is also inset by the cutout below.
-    DisposableEffect(notchSafe) {
-        val window = activity?.window
-        val original = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
-            window?.attributes?.layoutInDisplayCutoutMode else null
-        if (window != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (notchSafe)
-                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
-                else
-                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
-        }
-        onDispose {
-            if (window != null && original != null &&
-                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P
-            ) {
-                window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = original }
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() /
-            audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        // Seed brightness from the window override if set, else from the system setting.
-        val winB = activity?.window?.attributes?.screenBrightness ?: -1f
-        brightness = if (winB in 0f..1f) winB else runCatching {
-            android.provider.Settings.System.getInt(
-                context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS
-            ) / 255f
-        }.getOrDefault(0.5f)
-    }
-
     DisposableEffect(Unit) {
-        val window = activity?.window
-        if (window != null) {
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-        }
-
-        context.bindService(Intent(context, TorrentService::class.java), serviceConnection, Context.BIND_AUTO_CREATE)
-        (activity as? MainActivity)?.acquirePlayerLocks()
-
+        context.bindService(
+            Intent(context, TorrentService::class.java),
+            serviceConnection,
+            Context.BIND_AUTO_CREATE
+        )
         onDispose {
-            (activity as? MainActivity)?.releasePlayerLocks()
-            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            if (window != null) {
-                val controller = WindowCompat.getInsetsController(window, window.decorView)
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            }
             torrentService?.stopStreaming()
             context.unbindService(serviceConnection)
         }
     }
 
-    val torrentStatus by (torrentService?.torrentManager?.status?.collectAsState() ?: remember { mutableStateOf(null) })
-    var torrentFiles by remember { mutableStateOf<List<TorrentFileInfo>?>(null) }
-    var showTorrentFileSheet by remember { mutableStateOf(false) }
-    // Once the user (or the addon) picks a file from a multi-file torrent, keep it so a
-    // Retry re-uses the same file instead of re-opening the picker.
-    var pickedTorrentFileIndex by remember(selectedSource) { mutableStateOf<Int?>(null) }
-    var torrentPrepareRetries by remember(selectedSource) { mutableIntStateOf(0) }
-    var isTorrentStream by remember { mutableStateOf(false) }
-    var retryTrigger by remember { mutableIntStateOf(0) }
+    val torrentStatus by (
+        torrentService?.torrentManager?.status?.collectAsState()
+            ?: remember { mutableStateOf(null) }
+        )
 
-    val downloadStatus by remember(selectedSource) {
-        selectedSource?.let { viewModel.getDownloadStatus(it.url) } ?: flowOf(null)
+    val downloadStatus by remember(state.selectedSource) {
+        state.selectedSource?.let { viewModel.getDownloadStatus(it.url) } ?: flowOf(null)
     }.collectAsState(null)
-    val isDownloading = downloadStatus != null && downloadStatus != DownloadStatus.COMPLETED && downloadStatus != DownloadStatus.FAILED && downloadStatus != DownloadStatus.CANCELLED
+    val isDownloading = downloadStatus != null &&
+        downloadStatus != DownloadStatus.COMPLETED &&
+        downloadStatus != DownloadStatus.FAILED &&
+        downloadStatus != DownloadStatus.CANCELLED
 
-    // Media3 Player
-    // OkHttp for http(s); DefaultDataSource delegates file:// / content:// (offline downloads)
-    // to FileDataSource / ContentDataSource.
-    val httpDataSourceFactory = remember {
-        OkHttpDataSource.Factory((context.applicationContext as VidiioApplication).playbackHttpClient)
-    }
-    val dataSourceFactory = remember {
-        androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
-    }
-    val exoPlayer = remember {
-
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                60000, // minBufferMs
-                120000, // maxBufferMs
-                10000, // bufferForPlaybackMs
-                15000 // bufferForPlaybackAfterRebufferMs
-            )
-            .build()
-
-        // buildWithAssSupport installs a libass-backed ASS/SSA subtitle renderer
-        // (styled positioning/fonts/colours). CUES mode pre-renders to bitmap cues the
-        // existing SubtitleView draws — no extra overlay view to wire up.
-        ExoPlayer.Builder(context)
-            .setLoadControl(loadControl)
-            .buildWithAssSupport(
-                context = context,
-                renderType = AssRenderType.CUES,
-                dataSourceFactory = dataSourceFactory
-            ).apply {
-                addListener(object : Player.Listener {
-                    override fun onPlayerError(error: PlaybackException) {
-                        // A fresh torrent often 'Source error's for the first 10-30s while
-                        // TorrServer finds peers and buffers. Silently re-kick the stream a
-                        // couple of times (the picked file is remembered) before giving up.
-                        if (isTorrentStream && torrentPrepareRetries < 3) {
-                            torrentPrepareRetries++
-                            isTorrentLoading = true
-                            scope.launch { delay(4000); retryTrigger++ }
-                        } else {
-                            errorMessage = "Playback Error: ${error.localizedMessage}"
-                        }
-                    }
-                    override fun onTracksChanged(tracks: Tracks) {
-                        val tracksList = mutableListOf<AudioTrackInfo>()
-                        tracks.groups.forEachIndexed { groupIndex, group ->
-                            if (group.type == C.TRACK_TYPE_AUDIO) {
-                                for (i in 0 until group.length) {
-                                    val format = group.getTrackFormat(i)
-                                    tracksList.add(AudioTrackInfo(
-                                        name = format.label ?: format.language ?: "Track ${tracksList.size + 1}",
-                                        groupIndex = groupIndex,
-                                        trackIndex = i,
-                                        format = format
-                                    ))
-                                }
-                            }
-                        }
-                        availableAudioTracks = tracksList
-                    }
-                    override fun onIsPlayingChanged(playing: Boolean) {
-                        isPlaying = playing
-                    }
-                    override fun onPlaybackStateChanged(state: Int) {
-                        isBuffering = state == Player.STATE_BUFFERING
-                    }
-                })
-            }
-    }
-
-    DisposableEffect(exoPlayer) {
-        onDispose {
-            runCatching {
-                viewModel.saveWatchProgress(exoPlayer.currentPosition, exoPlayer.duration)
-            }
-            exoPlayer.stop()
-            exoPlayer.release()
-        }
-    }
-
-    // Position Polling
-    LaunchedEffect(exoPlayer, isPlaying) {
-        var tick = 0
-        while (true) {
-            currentPosition = exoPlayer.currentPosition
-            duration = if (exoPlayer.duration > 0) exoPlayer.duration else 0L
-            bufferedPosition = exoPlayer.bufferedPosition
-
-            // Resume from saved Continue Watching position, once, when the media is ready.
-            if (!didResume && resumePositionMs > 3000L && duration > 0L &&
-                exoPlayer.playbackState == Player.STATE_READY
-            ) {
-                exoPlayer.seekTo(resumePositionMs)
-                didResume = true
-            }
-
-            // Persist progress every ~10s of playback.
-            if (isPlaying && duration > 0L && ++tick % 20 == 0) {
-                viewModel.saveWatchProgress(currentPosition, duration)
-            }
-
-            // Skip & Auto-Next Logic
-            if (duration > 0) {
-                val inIntroRange = currentPosition in 5000L..90000L
-                showSkipIntro = inIntroRange && !isIntroDismissed
-                
-                if (!inIntroRange) {
-                    isIntroDismissed = false // Reset for later if needed
-                }
-
-                showSkipOutro = duration - currentPosition < 120000L && duration > 120000L
-                
-                val remaining = duration - currentPosition
-                if (remaining in 1L..5000L && isPlaying) {
-                    showAutoNextOverlay = true
-                    autoNextSeconds = (remaining / 1000).toInt() + 1
-                } else if (remaining > 5000L) {
-                    showAutoNextOverlay = false
-                }
-            }
-            delay(500)
-        }
-    }
-
-    // Auto-dismiss Skip Intro
-    LaunchedEffect(showSkipIntro) {
-        if (showSkipIntro) {
-            delay(7000)
-            showSkipIntro = false
-            isIntroDismissed = true
-        }
-    }
-
-    // Source Selection Effect
+    // Pick the first source once details land, if the caller gave us none.
     LaunchedEffect(uiState) {
-        val state = uiState
-        if (state is DetailsUiState.Success && selectedSource == null) {
-            selectedSource = state.streamSources.firstOrNull()
+        (uiState as? DetailsUiState.Success)?.let {
+            playerViewModel.selectSourceIfNone(it.streamSources.firstOrNull())
         }
     }
 
-    // Playback Logic
-    fun startPlayback(source: StreamSource) {
-        exoPlayer.stop()
-        exoPlayer.clearMediaItems()
-
-        // Many streaming hosts 403 without the scraper's Referer/Origin/UA headers.
-        // ExoPlayer carries these on the HTTP data source, not the MediaItem.
-        val requestHeaders = buildMap {
-            put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-            source.headers?.let { putAll(it) }
-        }
-        httpDataSourceFactory.setDefaultRequestProperties(requestHeaders)
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(source.url)
-            .setMimeType(if (source.isM3u8) MimeTypes.APPLICATION_M3U8 else null)
-            .build()
-
-        exoPlayer.setMediaItem(mediaItem)
-        exoPlayer.prepare()
-        exoPlayer.play()
-    }
-
-    LaunchedEffect(selectedSource, torrentService, retryTrigger) {
+    // ── Source preparation ───────────────────────────────────────────────────
+    LaunchedEffect(state.selectedSource, torrentService, retryTrigger) {
         val service = torrentService ?: return@LaunchedEffect
-        selectedSource?.let { source ->
-            if (source.url.startsWith("magnet:")) {
-                isTorrentLoading = true
-                val timeoutJob = scope.launch {
-                    delay(95000)
-                    if (isTorrentLoading) {
-                        isTorrentLoading = false
-                        errorMessage = "Torrent timed out (no peers found after 95 seconds)."
-                    }
+        val source = state.selectedSource ?: return@LaunchedEffect
+
+        if (source.url.startsWith("magnet:")) {
+            playerViewModel.setTorrentLoading(true)
+            val timeoutJob = scope.launch {
+                delay(95000)
+                if (playerViewModel.state.value.isTorrentLoading) {
+                    playerViewModel.showError("Torrent timed out (no peers found after 95 seconds).")
                 }
-                service.getMetadata(source.url) { files ->
-                    timeoutJob.cancel()
-                    if (files != null) {
-                        val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
-                        // Show the picker only for a genuinely ambiguous multi-file torrent that
-                        // nobody has resolved yet: not an addon pick, not an already-picked file,
-                        // and more than one *video* file (subtitles/samples don't count).
-                        val addonPicked = source.fileName != null || source.fileIndex != null
-                        val videoFiles = files.filter { it.isMedia }
-                        val needsPicker = pickedTorrentFileIndex == null && !addonPicked &&
-                            selectedEpisode == null && videoFiles.size > 1
-                        if (needsPicker) {
-                            torrentFiles = (videoFiles.ifEmpty { files }).sortedByDescending { it.size }
-                            showTorrentFileSheet = true
-                            isTorrentLoading = false
+            }
+            service.getMetadata(source.url) { files ->
+                timeoutJob.cancel()
+                if (files == null) {
+                    playerViewModel.showError("Failed to fetch torrent metadata.")
+                    return@getMetadata
+                }
+                val selectedEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
+                // Show the picker only for a genuinely ambiguous multi-file torrent that
+                // nobody has resolved yet: not an addon pick, not an already-picked file,
+                // and more than one *video* file (subtitles/samples don't count).
+                val addonPicked = source.fileName != null || source.fileIndex != null
+                val videoFiles = files.filter { it.isMedia }
+                val needsPicker = playerViewModel.state.value.pickedTorrentFileIndex == null &&
+                    !addonPicked && selectedEpisode == null && videoFiles.size > 1
+                if (needsPicker) {
+                    playerViewModel.showTorrentFilePicker(
+                        (videoFiles.ifEmpty { files }).sortedByDescending { it.size }
+                    )
+                } else {
+                    playerViewModel.setTorrentStream(true)
+                    service.startStreaming(
+                        fileIndex = playerViewModel.state.value.pickedTorrentFileIndex ?: -1,
+                        season = selectedEpisode?.seasonNumber,
+                        episode = selectedEpisode?.episodeNumber,
+                        fileName = source.fileName
+                    ) { streamUrl ->
+                        playerViewModel.setTorrentLoading(false)
+                        if (streamUrl.isNotEmpty()) {
+                            playerViewModel.startPlayback(
+                                StreamSource(serverName = source.serverName, url = streamUrl, isM3u8 = false)
+                            )
                         } else {
-                            isTorrentStream = true
-                            service.startStreaming(
-                                fileIndex = pickedTorrentFileIndex ?: -1,
-                                season = selectedEpisode?.seasonNumber,
-                                episode = selectedEpisode?.episodeNumber,
-                                fileName = source.fileName
-                            ) { streamUrl ->
-                                isTorrentLoading = false
-                                if (streamUrl.isNotEmpty()) {
-                                    startPlayback(StreamSource(serverName = source.serverName, url = streamUrl, isM3u8 = false))
-                                } else {
-                                    errorMessage = "Failed to load torrent. No peers found or timeout."
-                                }
-                            }
+                            playerViewModel.showError("Failed to load torrent. No peers found or timeout.")
                         }
-                    } else {
-                        isTorrentLoading = false
-                        errorMessage = "Failed to fetch torrent metadata."
                     }
                 }
-            } else if (!source.url.contains("embed")) {
-                isTorrentStream = false
-                startPlayback(source)
             }
+        } else if (!source.url.contains("embed")) {
+            playerViewModel.setTorrentStream(false)
+            playerViewModel.startPlayback(source)
         }
     }
 
-    // Controls visibility and immersive mode
-    LaunchedEffect(showControls) {
-        val window = activity?.window
-        if (window != null) {
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            if (showControls) {
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            } else {
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
-
-    // Controls timeout
-    LaunchedEffect(showControls, isPlaying) {
-        if (showControls && isPlaying) {
+    // Controls auto-hide during playback.
+    LaunchedEffect(showControls, state.isPlaying) {
+        if (showControls && state.isPlaying) {
             delay(5000)
             showControls = false
         }
     }
 
-    val playerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val playerFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playerFocus.requestFocus() } }
 
-    Box(modifier = modifier
-        .fillMaxSize()
-        .background(Color.Black)
-        .focusRequester(playerFocus)
-        .focusable()
-        .onPreviewKeyEvent { ev ->
-            if (ev.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
-            when (ev.key) {
-                androidx.compose.ui.input.key.Key.DirectionCenter,
-                androidx.compose.ui.input.key.Key.Enter,
-                androidx.compose.ui.input.key.Key.MediaPlayPause -> {
-                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                    showControls = true; true
-                }
-                androidx.compose.ui.input.key.Key.DirectionLeft,
-                androidx.compose.ui.input.key.Key.MediaRewind -> {
-                    exoPlayer.seekTo(maxOf(0L, exoPlayer.currentPosition - 10_000L))
-                    showControls = true; true
-                }
-                androidx.compose.ui.input.key.Key.DirectionRight,
-                androidx.compose.ui.input.key.Key.MediaFastForward -> {
-                    exoPlayer.seekTo(minOf(exoPlayer.duration.coerceAtLeast(0L), exoPlayer.currentPosition + 10_000L))
-                    showControls = true; true
-                }
-                androidx.compose.ui.input.key.Key.DirectionUp,
-                androidx.compose.ui.input.key.Key.DirectionDown -> {
-                    // Reveal the transport so the remote can move onto its buttons.
-                    if (!showControls) { showControls = true; true } else false
-                }
-                androidx.compose.ui.input.key.Key.MediaPlay -> { exoPlayer.play(); showControls = true; true }
-                androidx.compose.ui.input.key.Key.MediaPause,
-                androidx.compose.ui.input.key.Key.MediaStop -> { exoPlayer.pause(); showControls = true; true }
-                else -> false
-            }
-        }
-        .pointerInput(Unit) {
-            var dragSide = 0 // 0: None, 1: Left (Brightness), 2: Right (Volume)
-            detectVerticalDragGestures(
-                onDragStart = { offset ->
-                    dragSide = if (offset.x < size.width / 2) 1 else 2
-                },
-                onVerticalDrag = { _, dragAmount ->
-                    // Drag up = increase. A full swipe over ~65% of the screen covers the whole range,
-                    // and we accumulate in a float so tiny drags still register.
-                    val deltaFraction = -dragAmount / (size.height * 0.65f)
-                    if (dragSide == 2) {
-                        volume = (volume + deltaFraction).coerceIn(0f, 1f)
-                        val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                        audioManager.setStreamVolume(
-                            AudioManager.STREAM_MUSIC,
-                            kotlin.math.round(volume * maxVol).toInt(),
-                            0
-                        )
-                        isMuted = volume <= 0f
-                        showVolumeHud = true
-                        showBrightnessHud = false
-                    } else {
-                        brightness = (brightness + deltaFraction).coerceIn(0.02f, 1f)
-                        activity?.window?.let { w ->
-                            w.attributes = w.attributes.apply { screenBrightness = brightness }
-                        }
-                        showBrightnessHud = true
-                        showVolumeHud = false
-                    }
-                },
-                onDragEnd = {
-                    scope.launch {
-                        delay(1200)
-                        showVolumeHud = false
-                        showBrightnessHud = false
-                    }
-                }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(playerFocus)
+            .focusable()
+            .playerRemoteControls(
+                viewModel = playerViewModel,
+                controlsVisible = showControls,
+                onShowControls = { showControls = true }
             )
-        }
-        .pointerInput(Unit) {
-            detectTapGestures(
-                onTap = { showControls = !showControls },
-                onDoubleTap = { offset ->
-                    val width = size.width
-                    if (offset.x < width / 2) {
-                        exoPlayer.seekTo(maxOf(0, exoPlayer.currentPosition - 10000))
-                    } else {
-                        exoPlayer.seekTo(minOf(exoPlayer.duration, exoPlayer.currentPosition + 10000))
-                    }
-                }
+            .playerTouchGestures(
+                viewModel = playerViewModel,
+                deviceControls = deviceControls,
+                scope = scope,
+                onToggleControls = { showControls = !showControls }
             )
-        }
     ) {
-        val streamUrl = selectedSource?.url ?: ""
-        val isEmbed = streamUrl.contains("embed") || streamUrl.contains("vidsrc")
-
-        if (isEmbed) {
+        if (state.isEmbed) {
             EmbedPlayer(
-                url = streamUrl,
+                url = state.selectedSource?.url ?: "",
                 onBack = onBack,
-                onError = { errorMessage = it }
+                onError = playerViewModel::showError
             )
         } else {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
-                        player = exoPlayer
+                        player = playerViewModel.player
                         useController = false
-                        this.resizeMode = resizeMode
+                        resizeMode = state.resizeMode
                         layoutParams = FrameLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
                     }
                 },
-                update = { view ->
-                    view.resizeMode = resizeMode
-                },
+                update = { view -> view.resizeMode = state.resizeMode },
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
-                        if (notchSafe) Modifier.windowInsetsPadding(WindowInsets.displayCutout)
+                        if (state.notchSafe) Modifier.windowInsetsPadding(WindowInsets.displayCutout)
                         else Modifier
                     )
             )
         }
 
-        // UI Layer
-        AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
+        AnimatedVisibility(visible = showControls, enter = fadeIn(), exit = fadeOut()) {
             Box(modifier = Modifier.fillMaxSize()) {
-                val movie = (uiState as? DetailsUiState.Success)?.movie
-                val currentEpisode = (uiState as? DetailsUiState.Success)?.selectedEpisode
-                
+                val success = uiState as? DetailsUiState.Success
+                val movie = success?.movie
+                val currentEpisode = success?.selectedEpisode
+
                 PlayerTopBar(
                     title = movie?.title ?: "Loading...",
                     subtitle = currentEpisode?.let { "S${it.seasonNumber}:E${it.episodeNumber} - ${it.name}" },
-                    quality = selectedSource?.quality,
+                    quality = state.selectedSource?.quality,
                     isDownloading = isDownloading,
                     isEpisodesActive = showEpisodesSidebar,
                     onBack = onBack,
                     onDownload = {
-                        selectedSource?.let { source ->
+                        state.selectedSource?.let { source ->
                             // Downloads go to app-scoped storage - no permission needed.
-                            // Still ask for POST_NOTIFICATIONS so progress shows, but don't block on it.
+                            // Still ask for POST_NOTIFICATIONS so progress shows, but don't
+                            // block on it.
                             if (!permissionsState.allPermissionsGranted) {
                                 permissionsState.launchMultiplePermissionRequest()
                             }
@@ -624,332 +298,170 @@ fun PlayerScreen(
                 )
 
                 PlayerTransport(
-                    isPlaying = isPlaying,
-                    position = currentPosition,
-                    duration = duration,
-                    bufferedPosition = bufferedPosition,
-                    isSubtitlesActive = subtitlesEnabled, 
-                    isAudioActive = selectedAudioTrack != null,
-                    isSpeedActive = playbackSpeed != 1.0f,
-                    isAspectActive = resizeMode != AspectRatioFrameLayout.RESIZE_MODE_FIT,
-                    isFullscreen = true, 
-                    playbackSpeed = playbackSpeed,
-                    onPlayPause = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
-                    onSeek = { exoPlayer.seekTo(it) },
-                    onRewind = { exoPlayer.seekTo(maxOf(0, currentPosition - 10000)) },
-                    onForward = { exoPlayer.seekTo(minOf(duration, currentPosition + 10000)) },
+                    isPlaying = state.isPlaying,
+                    position = state.positionMs,
+                    duration = state.durationMs,
+                    bufferedPosition = state.bufferedPositionMs,
+                    isSubtitlesActive = state.subtitlesEnabled,
+                    isAudioActive = state.selectedAudioTrack != null,
+                    isSpeedActive = state.playbackSpeed != 1.0f,
+                    isAspectActive = state.resizeMode != AspectRatioFrameLayout.RESIZE_MODE_FIT,
+                    isFullscreen = true,
+                    playbackSpeed = state.playbackSpeed,
+                    onPlayPause = playerViewModel::togglePlayPause,
+                    onSeek = playerViewModel::seekTo,
+                    onRewind = { playerViewModel.seekBy(-10_000L) },
+                    onForward = { playerViewModel.seekBy(10_000L) },
                     onToggleSubtitles = { showSubtitleMenu = true },
                     onToggleAudio = { showAudioMenu = true },
                     onToggleSpeed = { showSpeedMenu = true },
                     onToggleAspect = { showAspectMenu = true },
-                    onToggleFullscreen = {
-                        // The player is always immersive; use this as a quick fill/fit toggle.
-                        resizeMode = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
-                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        } else {
-                            AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        }
-                    },
+                    onToggleFullscreen = playerViewModel::toggleFillMode,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }
         }
 
-        // Overlays
-        if (isTorrentLoading || isBuffering) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .align(Alignment.Center),
-                contentAlignment = Alignment.Center
-            ) {
-                val currentStatus = torrentStatus
-                if (selectedSource?.url?.startsWith("magnet:") == true && currentStatus != null) {
-                    val status = currentStatus
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            progress = { (status.bufferProgress / 100f).coerceIn(0f, 1f) },
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 4.dp,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = status.statusMessage,
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        if (status.statusMessage.contains("Buffering") || status.statusMessage.contains("Peers")) {
-                            Text(
-                                text = "Buffer: ${status.bufferProgress.toInt()}%",
-                                color = Color.White.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "${status.numSeeders} seeders • ${status.numPeers} peers",
-                                color = Color.Gray,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = String.format("%.1f KB/s", status.downloadRate),
-                                color = Color.Gray,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                } else {
-                    CircularProgressIndicator()
-                }
-            }
-        }
-
-        errorMessage?.let { msg ->
-            AlertDialog(
-                onDismissRequest = { errorMessage = null },
-                title = { Text("Playback Error") },
-                text = { Text(msg) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        errorMessage = null
-                        isTorrentLoading = false
-                        retryTrigger++
-                    }) {
-                        Text("Retry")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        errorMessage = null
-                        isTorrentLoading = false
-                        onBack()
-                    }) {
-                        Text("Choose Another Source")
-                    }
-                }
+        if (state.isTorrentLoading || state.isBuffering) {
+            PlayerLoadingOverlay(
+                isMagnet = state.isMagnet,
+                status = torrentStatus,
+                modifier = Modifier.align(Alignment.Center)
             )
         }
 
+        state.errorMessage?.let { message ->
+            PlaybackErrorDialog(
+                message = message,
+                onRetry = playerViewModel::retry,
+                onChooseAnotherSource = {
+                    playerViewModel.clearError()
+                    onBack()
+                },
+                onDismiss = playerViewModel::clearError
+            )
+        }
 
         Box(modifier = Modifier.align(Alignment.Center)) {
-            VolumeHud(volume = volume, isMuted = isMuted, visible = showVolumeHud)
+            VolumeHud(
+                volume = deviceControls.volume,
+                isMuted = deviceControls.isMuted,
+                visible = deviceControls.showVolumeHud
+            )
         }
         Box(modifier = Modifier.align(Alignment.Center)) {
-            BrightnessHud(brightness = brightness, visible = showBrightnessHud)
+            BrightnessHud(
+                brightness = deviceControls.brightness,
+                visible = deviceControls.showBrightnessHud
+            )
         }
-
-        if (showAudioHud) {
+        audioHudText?.let { text ->
             Box(modifier = Modifier.align(Alignment.Center)) {
-                AudioHud(text = audioHudText, visible = showAudioHud)
+                AudioHud(text = text, visible = true)
             }
         }
 
-        if (showSkipIntro) {
+        if (state.showSkipIntro) {
             Box(modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 120.dp, end = 24.dp)) {
                 SkipButton(
-                    label = "Skip Intro", 
-                    onSkip = { 
-                        exoPlayer.seekTo(90000L)
-                        showSkipIntro = false
-                        isIntroDismissed = true
-                    }, 
-                    onDismiss = { 
-                        showSkipIntro = false
-                        isIntroDismissed = true
-                    }
+                    label = "Skip Intro",
+                    onSkip = playerViewModel::skipIntro,
+                    onDismiss = playerViewModel::dismissSkipIntro
                 )
             }
         }
 
-        if (showAutoNextOverlay && uiState is DetailsUiState.Success) {
-            val success = uiState as DetailsUiState.Success
-            val allEpisodes = success.movie.seasons.flatMap { it.episodes }
-            val currentIndex = allEpisodes.indexOfFirst { it.id == success.selectedEpisode?.id }
+        if (state.showAutoNext) {
+            val success = uiState as? DetailsUiState.Success
+            val allEpisodes = success?.movie?.seasons?.flatMap { it.episodes }.orEmpty()
+            val currentIndex = allEpisodes.indexOfFirst { it.id == success?.selectedEpisode?.id }
             if (currentIndex != -1 && currentIndex < allEpisodes.size - 1) {
                 AutoNextOverlay(
                     nextEpisodeName = allEpisodes[currentIndex + 1].name,
-                    secondsLeft = autoNextSeconds,
-                    onCancel = { showAutoNextOverlay = false },
+                    secondsLeft = state.autoNextSeconds,
+                    onCancel = playerViewModel::cancelAutoNext,
                     onPlayNow = { viewModel.selectEpisode(allEpisodes[currentIndex + 1]) }
                 )
             }
         }
 
-        // Side Panels & Menus
-        if (showEpisodesSidebar && uiState is DetailsUiState.Success) {
-            val success = uiState as DetailsUiState.Success
-            EpisodeSidebar(
-                movie = success.movie,
-                currentEpisode = success.selectedEpisode,
-                onEpisodeSelect = { 
-                    viewModel.selectEpisode(it)
-                    showEpisodesSidebar = false
-                },
-                onClose = { showEpisodesSidebar = false },
-                modifier = Modifier.align(Alignment.CenterEnd)
-            )
+        if (showEpisodesSidebar) {
+            (uiState as? DetailsUiState.Success)?.let { success ->
+                EpisodeSidebar(
+                    movie = success.movie,
+                    currentEpisode = success.selectedEpisode,
+                    onEpisodeSelect = {
+                        viewModel.selectEpisode(it)
+                        showEpisodesSidebar = false
+                    },
+                    onClose = { showEpisodesSidebar = false },
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
+            }
         }
 
-        if (showSubtitleMenu && uiState is DetailsUiState.Success) {
-            SubtitleMenu(
-                subtitles = (uiState as DetailsUiState.Success).subtitles,
-                selectedUrl = selectedSubtitleUrl, 
-                offsetMs = subtitleOffsetMs,
-                onOffsetChange = { subtitleOffsetMs = it },
-                subtitlesEnabled = subtitlesEnabled,
-                onUseEmbedded = {
-                    // Just re-enable the text renderer - no setMediaItem, so no re-buffer.
-                    selectedSubtitleUrl = null
-                    subtitlesEnabled = true
-                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                        .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
-                },
-                onSubtitleSelect = { sub ->
-                    selectedSubtitleUrl = sub.url
-                    subtitlesEnabled = true
-                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                        .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
-                    sub.url?.let { url ->
-                        val subConfig = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(url))
-                            .setMimeType(MimeTypes.TEXT_VTT)
-                            .setLanguage(sub.language)
-                            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                            .build()
-
-                        val currentMediaItem = exoPlayer.currentMediaItem
-                        if (currentMediaItem != null) {
-                            val updatedItem = currentMediaItem.buildUpon()
-                                .setSubtitleConfigurations(listOf(subConfig))
-                                .build()
-                            exoPlayer.setMediaItem(updatedItem, exoPlayer.currentPosition)
-                        }
-                    }
-                },
-                onDisable = {
-                    // Turn off every subtitle track by disabling the text renderer. No
-                    // setMediaItem here - that would re-prepare and re-buffer the stream.
-                    selectedSubtitleUrl = null
-                    subtitlesEnabled = false
-                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                        .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
-                },
-                onDismiss = { showSubtitleMenu = false }
-            )
+        if (showSubtitleMenu) {
+            (uiState as? DetailsUiState.Success)?.let { success ->
+                SubtitleMenu(
+                    subtitles = success.subtitles,
+                    selectedUrl = state.selectedSubtitleUrl,
+                    offsetMs = state.subtitleOffsetMs,
+                    onOffsetChange = playerViewModel::setSubtitleOffset,
+                    subtitlesEnabled = state.subtitlesEnabled,
+                    onUseEmbedded = playerViewModel::useEmbeddedSubtitles,
+                    onSubtitleSelect = playerViewModel::selectSubtitle,
+                    onDisable = playerViewModel::disableSubtitles,
+                    onDismiss = { showSubtitleMenu = false }
+                )
+            }
         }
 
         if (showAudioMenu) {
             AudioMenu(
-                tracks = availableAudioTracks,
-                selectedTrack = selectedAudioTrack,
-                onTrackSelect = { track ->
-                    selectedAudioTrack = track
-                    audioHudText = track.name
-                    showAudioHud = true
-                    
-                    val parameters = exoPlayer.trackSelectionParameters.buildUpon()
-                        .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
-                        .addOverride(TrackSelectionOverride(exoPlayer.currentTracks.groups[track.groupIndex].mediaTrackGroup, track.trackIndex))
-                        .build()
-                    exoPlayer.trackSelectionParameters = parameters
-
-                    scope.launch { delay(2000); showAudioHud = false }
-                },
+                tracks = state.availableAudioTracks,
+                selectedTrack = state.selectedAudioTrack,
+                onTrackSelect = playerViewModel::selectAudioTrack,
                 onDismiss = { showAudioMenu = false }
             )
         }
 
         if (showSpeedMenu) {
             SpeedMenu(
-                currentSpeed = playbackSpeed,
-                onSpeedSelect = { speed ->
-                    playbackSpeed = speed
-                    exoPlayer.setPlaybackSpeed(speed)
-                },
+                currentSpeed = state.playbackSpeed,
+                onSpeedSelect = playerViewModel::setSpeed,
                 onDismiss = { showSpeedMenu = false }
             )
         }
 
         if (showAspectMenu) {
             AspectMenu(
-                currentMode = resizeMode,
-                onModeSelect = { resizeMode = it },
-                avoidCutout = notchSafe,
-                onToggleAvoidCutout = {
-                    notchSafe = it
-                    scope.launch { settingsRepo.setAvoidCameraCutout(it) }
-                },
+                currentMode = state.resizeMode,
+                onModeSelect = playerViewModel::setResizeMode,
+                avoidCutout = state.notchSafe,
+                onToggleAvoidCutout = { playerViewModel.setNotchSafe(it) },
                 onDismiss = { showAspectMenu = false }
             )
         }
 
-        if (showTorrentFileSheet && torrentFiles != null) {
+        val torrentFiles = state.torrentFiles
+        if (state.showTorrentFileSheet && torrentFiles != null) {
             TorrentFileSheet(
-                onDismiss = { showTorrentFileSheet = false },
-                files = torrentFiles!!,
+                onDismiss = playerViewModel::dismissTorrentFilePicker,
+                files = torrentFiles,
                 onFileSelect = { file ->
-                    isTorrentLoading = true
-                    pickedTorrentFileIndex = file.index
-                    isTorrentStream = true
+                    playerViewModel.onTorrentFilePicked(file.index)
                     torrentService?.startStreaming(fileIndex = file.index) { streamUrl ->
-                        isTorrentLoading = false
+                        playerViewModel.setTorrentLoading(false)
                         if (streamUrl.isNotEmpty()) {
-                            startPlayback(StreamSource(serverName = file.name, url = streamUrl, isM3u8 = false))
+                            playerViewModel.startPlayback(
+                                StreamSource(serverName = file.name, url = streamUrl, isM3u8 = false)
+                            )
                         } else {
-                            errorMessage = "Failed to load torrent. No peers found or timeout."
+                            playerViewModel.showError("Failed to load torrent. No peers found or timeout.")
                         }
                     }
-                    showTorrentFileSheet = false
                 }
             )
-        }
-    }
-}
-
-@Composable
-fun EmbedPlayer(url: String, onBack: () -> Unit, onError: (String) -> Unit) {
-    val context = LocalContext.current
-    val webView = remember {
-        WebView(context).apply {
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                mediaPlaybackRequiresUserGesture = false
-            }
-            webViewClient = object : WebViewClient() {
-                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                    super.onReceivedError(view, request, error)
-                    if (request?.isForMainFrame == true) {
-                        onError("Failed to load embed page (${error?.description ?: "Network error"})")
-                    }
-                }
-
-                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
-                    super.onReceivedHttpError(view, request, errorResponse)
-                    if (request?.isForMainFrame == true) {
-                        onError("Failed to load embed page (HTTP error ${errorResponse?.statusCode})")
-                    }
-                }
-            }
-        }
-    }
-
-    DisposableEffect(webView) {
-        webView.loadUrl(url)
-        onDispose {
-            webView.stopLoading()
-            webView.loadUrl("about:blank")
-            webView.destroy()
-        }
-    }
-
-    AndroidView(
-        factory = { webView },
-        modifier = Modifier.fillMaxSize()
-    )
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        IconButton(onClick = onBack, modifier = Modifier.statusBarsPadding()) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
         }
     }
 }
