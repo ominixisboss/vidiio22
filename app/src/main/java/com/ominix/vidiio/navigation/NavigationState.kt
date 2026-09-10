@@ -1,6 +1,7 @@
 package com.ominix.vidiio.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,8 +94,15 @@ fun NavigationState.toEntries(
         if (stack.isEmpty()) {
             stack.add(key)
         }
+        // Without the ViewModelStore decorator, viewModel() inside an entry resolves to
+        // the Activity's ViewModelStore: nothing is ever scoped to the entry, so nothing
+        // is cleared when the entry is popped and onCleared() never runs. That leaked
+        // every DetailsViewModel (and its scraping jobs) for the life of the Activity,
+        // and once PlayerViewModel took ownership of the ExoPlayer it meant playback
+        // carried on after backing out of the player.
         val decorators = listOf(
             rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
+            rememberViewModelStoreNavEntryDecorator<NavKey>(),
         )
         rememberDecoratedNavEntries(
             backStack = stack,

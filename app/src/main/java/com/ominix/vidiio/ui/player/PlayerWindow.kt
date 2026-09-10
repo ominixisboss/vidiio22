@@ -121,15 +121,13 @@ class PlayerDeviceControls internal constructor(
             audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         // Seed brightness from the window override if set, else from the system setting.
         val windowBrightness = activity?.window?.attributes?.screenBrightness ?: -1f
-        brightness = if (windowBrightness in 0f..1f) {
-            windowBrightness
-        } else {
-            runCatching {
-                Settings.System.getInt(
-                    activity?.contentResolver ?: return@runCatching 128,
-                    Settings.System.SCREEN_BRIGHTNESS
-                ) / 255f
-            }.getOrDefault(0.5f)
+        val resolver = activity?.contentResolver
+        brightness = when {
+            windowBrightness in 0f..1f -> windowBrightness
+            resolver == null -> DEFAULT_BRIGHTNESS
+            else -> runCatching {
+                Settings.System.getInt(resolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
+            }.getOrDefault(DEFAULT_BRIGHTNESS)
         }
     }
 
@@ -158,6 +156,11 @@ class PlayerDeviceControls internal constructor(
     fun hideHuds() {
         showVolumeHud = false
         showBrightnessHud = false
+    }
+
+    private companion object {
+        /** Mid-scale fallback when neither the window nor the system reports a brightness. */
+        const val DEFAULT_BRIGHTNESS = 0.5f
     }
 }
 

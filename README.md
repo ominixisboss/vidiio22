@@ -37,7 +37,7 @@ release assets under their original names, e.g. `TorrServer-android-arm64`.
 ./gradlew :app:assembleRelease
 ```
 
-Release builds run R8. Keep rules live in `app/src/main/keepRules/*.pro` — R8 failures
+Release builds run R8. Keep rules live in `app/src/main/keepRules/*.keep` — R8 failures
 show up at runtime rather than at build time, so smoke-test an actual release APK
 (browse, search, play, subtitles, a download, torrent streaming) rather than trusting a
 green build. `build/outputs/mapping/release/mapping.txt` deobfuscates release stack
