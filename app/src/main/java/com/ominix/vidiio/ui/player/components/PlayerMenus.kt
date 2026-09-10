@@ -29,6 +29,18 @@ fun SubtitleMenu(
     onDisable: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val grouped = remember(subtitles) { subtitles.groupBy { it.source } }
+
+    // Which provider sections are open. Seeded with the section holding the current
+    // selection, so reopening the menu shows what is playing rather than hiding it.
+    val expandedSources = remember(subtitles) {
+        mutableStateListOf<String>().apply {
+            grouped.entries
+                .firstOrNull { (_, tracks) -> tracks.any { it.url == selectedUrl } }
+                ?.let { add(it.key) }
+        }
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Subtitles", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -89,27 +101,59 @@ fun SubtitleMenu(
 
                 // Grouped by provider so it is obvious where each subtitle came from, and
                 // so two providers offering the same film are told apart.
-                subtitles.groupBy { it.source }.forEach { (source, tracks) ->
+                //
+                // Collapsed by default: a provider can return a hundred tracks for one
+                // film, which buries every other provider and the Off/embedded rows above
+                // them. The header carries the count so a collapsed group still tells you
+                // whether it is worth opening.
+                grouped.forEach { (source, tracks) ->
+                    val expanded = expandedSources.contains(source)
                     item(key = "header-$source") {
-                        Text(
-                            text = source,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (expanded) expandedSources.remove(source)
+                                    else expandedSources.add(source)
+                                }
+                                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)
+                        ) {
+                            Text(
+                                text = source,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = tracks.size.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Icon(
+                                imageVector = if (expanded) Icons.Rounded.ExpandLess
+                                else Icons.Rounded.ExpandMore,
+                                contentDescription = if (expanded) "Collapse $source"
+                                else "Expand $source",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
                     }
-                    items(tracks, key = { it.id }) { sub ->
-                        ListItem(
-                            headlineContent = { Text(sub.languageLabel) },
-                            supportingContent = { Text(sub.label) },
-                            leadingContent = {
-                                RadioButton(
-                                    selected = subtitlesEnabled && sub.url == selectedUrl,
-                                    onClick = null
-                                )
-                            },
-                            modifier = Modifier.clickable { onSubtitleSelect(sub); onDismiss() }
-                        )
+                    if (expanded) {
+                        items(tracks, key = { it.id }) { sub ->
+                            ListItem(
+                                headlineContent = { Text(sub.languageLabel) },
+                                supportingContent = { Text(sub.label) },
+                                leadingContent = {
+                                    RadioButton(
+                                        selected = subtitlesEnabled && sub.url == selectedUrl,
+                                        onClick = null
+                                    )
+                                },
+                                modifier = Modifier.clickable { onSubtitleSelect(sub); onDismiss() }
+                            )
+                        }
                     }
                 }
             }
