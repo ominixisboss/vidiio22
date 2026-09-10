@@ -58,14 +58,55 @@ data class SubtitleTrack(
     }
 }
 
-/** Maps SubDL's wire model onto the shared shape. */
-fun SubdlSubtitle.toSubtitleTrack(): SubtitleTrack? {
-    val href = url ?: return null
-    return SubtitleTrack(
-        id = "subdl:$id",
-        url = href,
-        language = language,
-        label = releaseName ?: name,
-        source = "SubDL",
+/**
+ * SubDL's download host. The API returns paths like "/subtitle/123-456.zip" relative to
+ * this - handing that straight to the player, as the old code did, is not a usable URL.
+ */
+private const val SUBDL_DOWNLOAD_BASE = "https://dl.subdl.com"
+
+private fun subdlUrl(path: String): String =
+    if (path.startsWith("http", ignoreCase = true)) path else SUBDL_DOWNLOAD_BASE + path
+
+/**
+ * Maps one SubDL hit onto zero or more playable tracks.
+ *
+ * Zero is a real outcome: SubDL's top-level `url` is a .zip and ExoPlayer cannot read
+ * one, so a result with no unpacked files has nothing playable in it. Offering it anyway
+ * would put an entry in the menu that silently fails when selected, which is worse than
+ * not listing it.
+ */
+fun SubdlSubtitle.toSubtitleTracks(): List<SubtitleTrack> {
+    val language = language ?: lang ?: ""
+
+    val unpacked = unpackFiles.orEmpty().mapNotNull { file ->
+        val href = file.url ?: return@mapNotNull null
+        SubtitleTrack(
+            id = "subdl:${file.fileNId ?: href}",
+            url = subdlUrl(href),
+            language = file.language ?: language,
+            label = buildString {
+                append(file.releaseName ?: file.name ?: releaseName ?: "SubDL")
+                if (file.hi == true) append(" (HI)")
+            },
+            source = "SubDL",
+        )
+    }
+    if (unpacked.isNotEmpty()) return unpacked
+
+    val href = url ?: return emptyList()
+    // A packed upload with nothing unpacked out of it is not playable.
+    if (href.endsWith(".zip", ignoreCase = true)) return emptyList()
+
+    return listOf(
+        SubtitleTrack(
+            id = "subdl:${id ?: href}",
+            url = subdlUrl(href),
+            language = language,
+            label = buildString {
+                append(releaseName ?: name ?: "SubDL")
+                if (hi == true) append(" (HI)")
+            },
+            source = "SubDL",
+        )
     )
 }

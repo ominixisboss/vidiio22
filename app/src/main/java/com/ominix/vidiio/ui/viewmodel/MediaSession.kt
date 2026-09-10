@@ -8,7 +8,7 @@ import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.model.StreamSource
 import com.ominix.vidiio.data.model.MovieType
 import com.ominix.vidiio.data.model.subtitles.SubtitleTrack
-import com.ominix.vidiio.data.model.subtitles.toSubtitleTrack
+import com.ominix.vidiio.data.model.subtitles.toSubtitleTracks
 import com.ominix.vidiio.data.stremio.AddonManager
 import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.MovieRepository
@@ -233,7 +233,7 @@ class MediaSession(
                 .distinctUntilChanged()
                 .collectLatest { (movie, episode, languages) ->
                     _subtitles.value = emptyList()
-                    val fromSubdl = scope.async { fetchSubdlSubtitles(movie, languages) }
+                    val fromSubdl = scope.async { fetchSubdlSubtitles(movie, episode, languages) }
                     val fromAddons = scope.async { fetchAddonSubtitles(movie, episode) }
                     val all = (fromSubdl.await() + fromAddons.await()).distinctBy { it.url }
 
@@ -289,21 +289,38 @@ class MediaSession(
         }
     }
 
-    private suspend fun fetchSubdlSubtitles(movie: Movie, languages: List<String>): List<SubtitleTrack> {
-        val apiKey = settingsRepository.subdlApiKeyFlow.first() ?: return emptyList()
+    private suspend fun fetchSubdlSubtitles(
+        movie: Movie,
+        episode: Episode?,
+        languages: List<String>,
+    ): List<SubtitleTrack> {
+        val apiKey = settingsRepository.subdlApiKeyFlow.first()?.takeIf { it.isNotBlank() }
+            ?: return emptyList()
         return try {
             val imdbId = if (movie.id.startsWith("tt")) movie.id else movie.imdbId
             val tmdbId = movie.id.toIntOrNull()
+            val isSeries = movie.type == MovieType.TV_SHOW
 
             val response = withTimeoutOrNull(SUBTITLE_TIMEOUT_MS) {
                 subdlService.searchSubtitles(
                     apiKey = apiKey,
                     tmdbId = if (imdbId == null) tmdbId else null,
                     imdbId = imdbId,
-                    languages = languages.joinToString(",")
+                    // SubDL expects upper-case codes ("EN,FR").
+                    languages = languages.joinToString(",") { it.uppercase() },
+                    type = if (isSeries) "tv" else "movie",
+                    // Without these a series query returns results for the whole show,
+                    // so every episode offered the same season-agnostic subtitles.
+                    seasonNumber = episode?.seasonNumber.takeIf { isSeries },
+                    episodeNumber = episode?.episodeNumber.takeIf { isSeries },
                 )
             }
-            response?.subtitles.orEmpty().mapNotNull { it.toSubtitleTrack() }
+
+            val tracks = response?.subtitles.orEmpty().flatMap { it.toSubtitleTracks() }
+            if (response != null && response.subtitles.orEmpty().isNotEmpty() && tracks.isEmpty()) {
+                Log.w(TAG, "SubDL returned results but none were playable (packed .zip only)")
+            }
+            tracks
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.w(TAG, "MediaSession.fetchSubdlSubtitles() failed", e)
