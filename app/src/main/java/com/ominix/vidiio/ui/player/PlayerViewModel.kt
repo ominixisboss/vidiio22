@@ -484,7 +484,11 @@ class PlayerViewModel(
         // Only look at the last path segment - hosts have dots in them too, so taking the
         // extension off the whole URL finds ".io" in "subs5.strem.io".
         val path = url.substringBefore('?').substringBefore('#')
-        val lastSegment = path.substringAfterLast('/')
+        // Last *non-empty* segment: opensubtitles PRO serves ".../sub.vtt/?lang_code=en",
+        // where a plain substringAfterLast('/') is the empty string after the trailing
+        // slash - which would silently fall through to the SubRip default and fail to
+        // parse a WebVTT file.
+        val lastSegment = path.split('/').lastOrNull { it.isNotEmpty() }.orEmpty()
         val extension = if (lastSegment.contains('.')) {
             lastSegment.substringAfterLast('.').lowercase()
         } else {

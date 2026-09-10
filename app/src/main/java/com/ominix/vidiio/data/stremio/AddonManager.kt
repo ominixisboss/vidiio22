@@ -166,7 +166,13 @@ class AddonManager(
             // Deliberately not dexter21767's opensubtitles addon, which sets
             // behaviorHints.configurationRequired and returns an empty list for every
             // query until it is configured through its own web page.
-            "https://opensubtitles-v3.strem.io/manifest.json"
+            "https://opensubtitles-v3.strem.io/manifest.json",
+            // opensubtitles PRO, pre-configured for English. Its config segment holds
+            // only preferences ({"langs":["english"],"source":"all",...}) and no
+            // credential, so it is safe to ship. Verified: 56 results for tt0133093,
+            // 11 for tt26657236, 15 for a series episode. It 302s to another host,
+            // which OkHttp follows.
+            "https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIl0sInNvdXJjZSI6ImFsbCIsImFpVHJhbnNsYXRlZCI6dHJ1ZSwiYXV0b0FkanVzdG1lbnQiOnRydWV9/manifest.json"
         )
     }
 }
