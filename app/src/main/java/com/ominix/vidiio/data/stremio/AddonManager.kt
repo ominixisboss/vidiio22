@@ -172,7 +172,17 @@ class AddonManager(
             // credential, so it is safe to ship. Verified: 56 results for tt0133093,
             // 11 for tt26657236, 15 for a series episode. It 302s to another host,
             // which OkHttp follows.
-            "https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIl0sInNvdXJjZSI6ImFsbCIsImFpVHJhbnNsYXRlZCI6dHJ1ZSwiYXV0b0FkanVzdG1lbnQiOnRydWV9/manifest.json"
+            "https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIl0sInNvdXJjZSI6ImFsbCIsImFpVHJhbnNsYXRlZCI6dHJ1ZSwiYXV0b0FkanVzdG1lbnQiOnRydWV9/manifest.json",
+            // SubSource, pre-configured for English. Verified: 134 results for
+            // tt0133093, 7 for tt26657236.
+            //
+            // NOTE: unlike the two above, this URL's config segment carries an account
+            // key, not just preferences. Bundled at the owner's explicit request. It is
+            // therefore public - in this repo's history and in every APK - so rotating it
+            // means editing this line and shipping a new build, and anyone with the APK
+            // can use it. If that stops being acceptable, drop this entry and add the
+            // addon per-device in Settings instead, where it lives only in DataStore.
+            "https://subsource.strem.top/c2tfMGE1MWViZmRmNjA0MzVmZWEwNDdlYWQzYTQ3ZmFmYTZjNGRjY2E3NWE3OTMyZTQ0NDVlMWJlZTIwMGQ2NTcyYy9lbmdsaXNoL2hpSW5jbHVkZS90eXBlOjAv/manifest.json"
         )
     }
 }
