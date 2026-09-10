@@ -130,7 +130,18 @@ class MediaSession(
     private fun loadDetails() {
         scope.launch {
             try {
-                val fullMovie = movieRepository.getMovieDetails(initialMovie)
+                val details = movieRepository.getMovieDetails(initialMovie)
+
+                // Resolve the IMDb id onto the Movie itself. MovieRepository resolved it
+                // for the scraper fan-out but only onto a local copy, so the Movie the
+                // rest of the app holds kept imdbId = null. Subtitle addons key on IMDb
+                // ids, so without this every TMDB-sourced title - which is nearly all of
+                // them - produced no id to query with, and no subtitles at all.
+                val fullMovie = if (details.imdbId == null) {
+                    details.copy(imdbId = movieRepository.getImdbId(details))
+                } else {
+                    details
+                }
                 _movie.value = fullMovie
 
                 val allEpisodes = fullMovie.seasons.flatMap { it.episodes }

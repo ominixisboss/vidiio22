@@ -51,6 +51,20 @@ android {
             ?: System.getenv("TMDB_API_KEY")
             ?: "13385ad4858c3f8568ce182c7287d9a9"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
+
+        // Short commit the build came from, surfaced in Settings > About so a bug report
+        // can name an exact build. providers.exec is configuration-cache safe; a missing
+        // git or a source zip without history degrades to "unknown" rather than failing.
+        //
+        // Deliberately no build timestamp: it would differ on every invocation, which
+        // invalidates BuildConfig and forces a rebuild each time for no real benefit.
+        val gitSha: String = runCatching {
+            providers.exec {
+                commandLine("git", "rev-parse", "--short", "HEAD")
+                isIgnoreExitValue = true
+            }.standardOutput.asText.get().trim()
+        }.getOrNull()?.takeIf { it.isNotEmpty() } ?: "unknown"
+        buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
     }
 
     // Release signing. Reads app/keystore.properties (gitignored) or, for CI, the

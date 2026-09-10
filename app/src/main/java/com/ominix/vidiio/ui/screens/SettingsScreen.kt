@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.selection.SelectionContainer
+import com.ominix.vidiio.BuildConfig
 import com.ominix.vidiio.data.repository.AppTheme
 import com.ominix.vidiio.data.repository.ColorTheme
 import com.ominix.vidiio.data.repository.HomeStyle
@@ -296,7 +298,24 @@ fun SettingsScreen(
                 GlassCard {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Vidiio V3", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text("Version 3.0.0-alpha", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                        // Read from BuildConfig, not typed in. The previous hardcoded
+                        // "3.0.0-alpha" had drifted from the actual build - it read the
+                        // same no matter what was installed, which makes a version string
+                        // worse than useless in a bug report.
+                        SelectionContainer {
+                            Column {
+                                Text(
+                                    "Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    "Commit ${BuildConfig.GIT_SHA}${if (BuildConfig.DEBUG) " · debug" else ""}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             "The app was made by OOZI 'for family and friends' enjoy!",

@@ -328,7 +328,14 @@ class MovieRepository(
         }
     }
 
-    private suspend fun getImdbId(movie: Movie): String? {
+    /**
+     * Resolves a TMDB id to an IMDb id, or returns the id unchanged if it already is one.
+     *
+     * Public because subtitle lookup needs it too: Stremio subtitle addons key on IMDb
+     * ids (OpenSubtitles v3 declares idPrefixes ["tt"]), and a Movie that came from TMDB
+     * carries a numeric id and a null imdbId until something resolves it.
+     */
+    suspend fun getImdbId(movie: Movie): String? {
         return try {
             if (movie.id.startsWith("tt")) return movie.id
             val id = movie.id.toIntOrNull() ?: return null
