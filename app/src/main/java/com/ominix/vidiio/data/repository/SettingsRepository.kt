@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -21,7 +23,13 @@ enum class AppTheme {
 }
 
 enum class ColorTheme {
-    RED, BLUE, GREEN, PURPLE, ORANGE, TEAL, PINK, INDIGO, GOLD, MONO
+    RED, BLUE, GREEN, PURPLE, ORANGE, TEAL, PINK, INDIGO, GOLD, MONO,
+
+    /**
+     * Material You: colours derived from the device wallpaper. Android 12+ only;
+     * falls back to RED below that, since there is no wallpaper palette to read.
+     */
+    DYNAMIC
 }
 
 /** Home-screen layout preset. Restyles the hero, cards, rows and accent of the Home tab. */
@@ -30,6 +38,22 @@ enum class HomeStyle {
 }
 
 enum class ProxyType { SOCKS5, HTTP }
+
+/** Outline style drawn around subtitle glyphs, for legibility over bright video. */
+enum class SubtitleEdge { NONE, OUTLINE, DROP_SHADOW, RAISED, DEPRESSED }
+
+/**
+ * How subtitles are drawn. Applied to the player's SubtitleView.
+ *
+ * Colours are ARGB packed into a Long because DataStore has no colour type and Int
+ * preferences cannot hold 0xFF------ without overflowing into negatives on read.
+ */
+data class SubtitleStyle(
+    val textScale: Float = 1.0f,
+    val textColor: Long = 0xFFFFFFFF,
+    val backgroundColor: Long = 0x00000000,
+    val edge: SubtitleEdge = SubtitleEdge.OUTLINE,
+)
 
 /** Proxy ("VPN") config applied to all app HTTP traffic and the torrent engine. */
 data class ProxyConfig(
@@ -62,6 +86,10 @@ class SettingsRepository(private val context: Context) {
         val STREMIO_ADDONS = stringSetPreferencesKey("stremio_addons")
         val SUBDL_API_KEY = stringPreferencesKey("subdl_api_key")
         val SUBTITLE_LANGUAGES = stringPreferencesKey("subtitle_languages")
+        val SUBTITLE_TEXT_SCALE = floatPreferencesKey("subtitle_text_scale")
+        val SUBTITLE_TEXT_COLOR = longPreferencesKey("subtitle_text_color")
+        val SUBTITLE_BG_COLOR = longPreferencesKey("subtitle_bg_color")
+        val SUBTITLE_EDGE = stringPreferencesKey("subtitle_edge")
         val PROXY_ENABLED = booleanPreferencesKey("proxy_enabled")
         val PROXY_TYPE = stringPreferencesKey("proxy_type")
         val PROXY_HOST = stringPreferencesKey("proxy_host")
@@ -240,6 +268,27 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { preferences ->
             val cleaned = languages.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
             preferences[PreferencesKeys.SUBTITLE_LANGUAGES] = cleaned.joinToString(",")
+        }
+    }
+
+    /** How subtitles should be drawn. Defaults match the player's previous fixed look. */
+    val subtitleStyleFlow: Flow<SubtitleStyle> = context.dataStore.data.map { preferences ->
+        SubtitleStyle(
+            textScale = preferences[PreferencesKeys.SUBTITLE_TEXT_SCALE] ?: 1.0f,
+            textColor = preferences[PreferencesKeys.SUBTITLE_TEXT_COLOR] ?: 0xFFFFFFFF,
+            backgroundColor = preferences[PreferencesKeys.SUBTITLE_BG_COLOR] ?: 0x00000000,
+            edge = runCatching {
+                SubtitleEdge.valueOf(preferences[PreferencesKeys.SUBTITLE_EDGE] ?: "OUTLINE")
+            }.getOrDefault(SubtitleEdge.OUTLINE),
+        )
+    }
+
+    suspend fun setSubtitleStyle(style: SubtitleStyle) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SUBTITLE_TEXT_SCALE] = style.textScale
+            preferences[PreferencesKeys.SUBTITLE_TEXT_COLOR] = style.textColor
+            preferences[PreferencesKeys.SUBTITLE_BG_COLOR] = style.backgroundColor
+            preferences[PreferencesKeys.SUBTITLE_EDGE] = style.edge.name
         }
     }
 

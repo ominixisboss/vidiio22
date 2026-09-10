@@ -11,6 +11,7 @@ import com.ominix.vidiio.data.repository.HomeStyle
 import com.ominix.vidiio.data.repository.ProxyConfig
 import com.ominix.vidiio.data.repository.ProxyType
 import com.ominix.vidiio.data.repository.SettingsRepository
+import com.ominix.vidiio.data.repository.SubtitleStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -67,6 +68,14 @@ class SettingsViewModel(
 
     val subdlApiKey: StateFlow<String?> = settingsRepository.subdlApiKeyFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Subtitle appearance, applied to the player's SubtitleView. */
+    val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyleFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SubtitleStyle())
+
+    fun setSubtitleStyle(style: SubtitleStyle) {
+        viewModelScope.launch { settingsRepository.setSubtitleStyle(style) }
+    }
 
     /** Preferred subtitle languages, most-wanted first. */
     val subtitleLanguages: StateFlow<List<String>> = settingsRepository.subtitleLanguagesFlow

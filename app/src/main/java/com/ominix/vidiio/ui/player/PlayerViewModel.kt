@@ -28,6 +28,8 @@ import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.SettingsRepository
+import com.ominix.vidiio.data.repository.SubtitleEdge
+import com.ominix.vidiio.data.repository.SubtitleStyle
 import com.ominix.vidiio.data.repository.WatchProgressRepository
 import com.ominix.vidiio.download.DownloadManager
 import com.ominix.vidiio.torrent.TorrentFileInfo
@@ -38,6 +40,8 @@ import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -132,6 +136,10 @@ class PlayerViewModel(
     val movie: StateFlow<Movie?> = session.movie
     val selectedEpisode: StateFlow<Episode?> = session.selectedEpisode
     val subtitles: StateFlow<List<SubtitleTrack>> = session.subtitles
+
+    /** User's subtitle appearance, applied to the player's SubtitleView by the screen. */
+    val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyleFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SubtitleStyle())
 
     fun selectEpisode(episode: Episode) = session.selectEpisode(episode)
     fun downloadSource(source: StreamSource) = session.downloadSource(source)

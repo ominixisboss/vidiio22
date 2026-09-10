@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.selection.SelectionContainer
 import com.ominix.vidiio.BuildConfig
+import com.ominix.vidiio.data.repository.SubtitleEdge
+import com.ominix.vidiio.data.repository.SubtitleStyle
 import com.ominix.vidiio.data.repository.AppTheme
 import com.ominix.vidiio.data.repository.ColorTheme
 import com.ominix.vidiio.data.repository.HomeStyle
@@ -50,6 +52,7 @@ fun SettingsScreen(
     val stremioAddons by viewModel.stremioAddons.collectAsState()
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
     val subtitleLanguages by viewModel.subtitleLanguages.collectAsState()
+    val subtitleStyle by viewModel.subtitleStyle.collectAsState()
     val proxyEnabled by viewModel.proxyEnabled.collectAsState()
     val proxyType by viewModel.proxyType.collectAsState()
     val proxyHost by viewModel.proxyHost.collectAsState()
@@ -187,6 +190,11 @@ fun SettingsScreen(
                             }
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        SubtitleAppearanceSection(
+                            style = subtitleStyle,
+                            onStyleChange = { viewModel.setSubtitleStyle(it) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         SwitchPreferenceItem(
                             title = "Keep camera hole clear",
                             summary = "Player fills the screen but stops short of the front camera",
@@ -297,7 +305,6 @@ fun SettingsScreen(
             item {
                 GlassCard {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Vidiio V3", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         // Read from BuildConfig, not typed in. The previous hardcoded
                         // "3.0.0-alpha" had drifted from the actual build - it read the
                         // same no matter what was installed, which makes a version string
@@ -618,6 +625,9 @@ fun ColorThemeSelectionRow(
                 ColorTheme.INDIGO -> VidiioIndigo
                 ColorTheme.GOLD -> VidiioGold
                 ColorTheme.MONO -> VidiioMono
+                // Preview uses the live wallpaper-derived primary, so the swatch shows
+                // what selecting it will actually produce.
+                ColorTheme.DYNAMIC -> MaterialTheme.colorScheme.primary
             }
             
             Box(
@@ -819,3 +829,124 @@ fun SourceToggleItem(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
     )
 }
+
+/**
+ * Subtitle appearance controls, with a live preview.
+ *
+ * The preview sits on a dark strip rather than the settings background, because subtitle
+ * legibility is a question of how the text reads over video, not over a panel.
+ */
+@Composable
+private fun SubtitleAppearanceSection(
+    style: SubtitleStyle,
+    onStyleChange: (SubtitleStyle) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(
+            "Subtitle appearance",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium,
+            fontSize = 15.sp
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF101010), RoundedCornerShape(8.dp))
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "The quick brown fox",
+                color = Color(style.textColor),
+                fontSize = (14 * style.textScale).sp,
+                modifier = Modifier
+                    .background(Color(style.backgroundColor), RoundedCornerShape(3.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "Text size  " + (style.textScale * 100).toInt() + "%",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp
+        )
+        Slider(
+            value = style.textScale,
+            onValueChange = { onStyleChange(style.copy(textScale = it)) },
+            valueRange = 0.5f..2.5f,
+            steps = 7
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Text colour", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SUBTITLE_TEXT_COLORS.forEach { argb ->
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(Color(argb), RoundedCornerShape(6.dp))
+                        .clickable { onStyleChange(style.copy(textColor = argb)) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (style.textColor == argb) {
+                        Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = "Selected",
+                            tint = if (argb == 0xFFFFFFFFL) Color.Black else Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Background", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SUBTITLE_BACKGROUNDS.forEach { entry ->
+                FilterChip(
+                    selected = style.backgroundColor == entry.second,
+                    onClick = { onStyleChange(style.copy(backgroundColor = entry.second)) },
+                    label = { Text(entry.first, fontSize = 12.sp) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Edge style", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState())
+        ) {
+            SubtitleEdge.entries.forEach { edge ->
+                FilterChip(
+                    selected = style.edge == edge,
+                    onClick = { onStyleChange(style.copy(edge = edge)) },
+                    label = { Text(subtitleEdgeLabel(edge), fontSize = 12.sp) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(onClick = { onStyleChange(SubtitleStyle()) }) { Text("Reset to defaults") }
+    }
+}
+
+private fun subtitleEdgeLabel(edge: SubtitleEdge): String =
+    edge.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+private val SUBTITLE_TEXT_COLORS = listOf(
+    0xFFFFFFFFL, 0xFFFFEB3BL, 0xFF00E5FFL, 0xFF69F0AEL, 0xFFFF8A80L, 0xFF000000L
+)
+
+private val SUBTITLE_BACKGROUNDS = listOf(
+    "None" to 0x00000000L,
+    "Dim" to 0x80000000L,
+    "Solid" to 0xFF000000L
+)

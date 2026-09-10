@@ -28,6 +28,8 @@ private fun getColorScheme(
         ColorTheme.INDIGO -> VidiioIndigo
         ColorTheme.GOLD -> VidiioGold
         ColorTheme.MONO -> VidiioMono
+        // Unreachable: DYNAMIC is handled before this runs.
+        ColorTheme.DYNAMIC -> VidiioRed
     }
 
     // Light accent colors need dark text/icons on top of them for contrast.
@@ -78,8 +80,9 @@ fun VidiioTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val wantsDynamic = colorTheme == ColorTheme.DYNAMIC || dynamicColor
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        wantsDynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }

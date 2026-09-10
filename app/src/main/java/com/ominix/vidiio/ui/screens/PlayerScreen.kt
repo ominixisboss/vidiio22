@@ -37,9 +37,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import com.ominix.vidiio.data.model.DownloadStatus
 import com.ominix.vidiio.data.model.StreamSource
+import com.ominix.vidiio.data.repository.SubtitleEdge
+import com.ominix.vidiio.data.repository.SubtitleStyle
 import com.ominix.vidiio.torrent.TorrentService
 import com.ominix.vidiio.ui.player.PlayerViewModel
 import com.ominix.vidiio.ui.player.PlayerWindowEffects
@@ -81,6 +85,7 @@ fun PlayerScreen(
     val movie by playerViewModel.movie.collectAsState()
     val selectedEpisode by playerViewModel.selectedEpisode.collectAsState()
     val subtitles by playerViewModel.subtitles.collectAsState()
+    val subtitleStyle by playerViewModel.subtitleStyle.collectAsState()
 
     val permissionsState = rememberMultiplePermissionsState(
         permissions = PermissionUtils.getRequiredPermissions()
@@ -242,7 +247,34 @@ fun PlayerScreen(
                         )
                     }
                 },
-                update = { view -> view.resizeMode = state.resizeMode },
+                update = { view ->
+                    view.resizeMode = state.resizeMode
+                    view.subtitleView?.apply {
+                        // setApplyEmbeddedStyles(false) makes the user's choices win over
+                        // styling baked into the subtitle file. It does not affect libass
+                        // ASS tracks, which arrive already rendered as bitmap cues.
+                        setApplyEmbeddedStyles(subtitleStyle != SubtitleStyle())
+                        setStyle(
+                            CaptionStyleCompat(
+                                subtitleStyle.textColor.toInt(),
+                                subtitleStyle.backgroundColor.toInt(),
+                                android.graphics.Color.TRANSPARENT,
+                                when (subtitleStyle.edge) {
+                                    SubtitleEdge.NONE -> CaptionStyleCompat.EDGE_TYPE_NONE
+                                    SubtitleEdge.OUTLINE -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
+                                    SubtitleEdge.DROP_SHADOW -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+                                    SubtitleEdge.RAISED -> CaptionStyleCompat.EDGE_TYPE_RAISED
+                                    SubtitleEdge.DEPRESSED -> CaptionStyleCompat.EDGE_TYPE_DEPRESSED
+                                },
+                                android.graphics.Color.BLACK,
+                                null
+                            )
+                        )
+                        setFractionalTextSize(
+                            SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * subtitleStyle.textScale
+                        )
+                    }
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
