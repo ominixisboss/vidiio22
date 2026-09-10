@@ -162,12 +162,20 @@ fun VidiioApp() {
                 }
             }
         ) { key ->
+            val playerKey = "player_${key.movie.id}_${key.episodeId ?: ""}"
             val viewModel: com.ominix.vidiio.ui.viewmodel.DetailsViewModel = viewModel(
-                key = "player_${key.movie.id}_${key.episodeId ?: ""}",
+                key = playerKey,
                 factory = VidiioViewModelFactories.details(application, key.movie, key.episodeId)
+            )
+            // Distinct key: ViewModelStore is keyed by string alone, so reusing playerKey
+            // for a second ViewModel class would hand back the DetailsViewModel.
+            val playerViewModel: com.ominix.vidiio.ui.player.PlayerViewModel = viewModel(
+                key = "$playerKey#player",
+                factory = VidiioViewModelFactories.player(application)
             )
             PlayerScreen(
                 viewModel = viewModel,
+                playerViewModel = playerViewModel,
                 initialSource = key.source,
                 onBack = { navigator.goBack() },
                 modifier = Modifier.fillMaxSize()

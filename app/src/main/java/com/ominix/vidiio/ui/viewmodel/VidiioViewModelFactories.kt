@@ -5,6 +5,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.ominix.vidiio.VidiioApplication
 import com.ominix.vidiio.data.model.Movie
+import com.ominix.vidiio.ui.player.PlayerViewModel
 
 /**
  * Factories for every screen's ViewModel.
@@ -48,6 +49,15 @@ object VidiioViewModelFactories {
         // Application context, not the Activity's: this only reaches Coil's caches, and a
         // ViewModel outliving an Activity context is a leak.
         initializer { SettingsViewModel(app.settingsRepository, app) }
+    }
+
+    /**
+     * Owns the ExoPlayer and the playback session. Keyed alongside [details] so the two
+     * ViewModels for one screen share a lifetime.
+     */
+    @androidx.media3.common.util.UnstableApi
+    fun player(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
+        initializer { PlayerViewModel(app, app.settingsRepository) }
     }
 
     /**
