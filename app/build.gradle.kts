@@ -9,15 +9,27 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
 }
 
+// local.properties is gitignored; it is where per-developer secrets live.
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
+}
+
 android {
-    namespace = "com.example.vidiio"
+    namespace = "com.ominix.vidiio"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
+        // Deliberately still com.example.vidiio while the source package is com.ominix.vidiio.
+        // applicationId is the install identity: changing it orphans every existing
+        // install (no update path, local library gone). Change it in the same release
+        // that first ships to Play, not before.
         applicationId = "com.example.vidiio"
-        minSdk = 23
+
+        // 24, not 23: res/xml/network_security_config.xml is only honoured from API 24,
+        // so on 23 the cleartext lockdown silently does nothing.
+        minSdk = 24
         targetSdk = 37
         // Single source of truth for the shipped version. CI can override without
         // editing the file: -PversionCode=42 -PversionName=1.4.2
@@ -29,6 +41,16 @@ android {
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
+
+        // TMDB key. Set tmdb.apiKey in local.properties (gitignored) or TMDB_API_KEY in
+        // the environment. The fallback is the key that was previously hardcoded into
+        // eleven TMDBService method signatures - it is already public in every published
+        // APK, so this changes nothing about its exposure, it only makes it rotatable
+        // from one place. Replace it and drop the fallback once a new key is issued.
+        val tmdbApiKey = localProps.getProperty("tmdb.apiKey")
+            ?: System.getenv("TMDB_API_KEY")
+            ?: "13385ad4858c3f8568ce182c7287d9a9"
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     }
 
     // Release signing. Reads app/keystore.properties (gitignored) or, for CI, the
@@ -93,6 +115,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // Committed Room schemas (app/schemas) are what MigrationTestHelper replays against,

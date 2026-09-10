@@ -5,8 +5,8 @@
 # to the model's class name — so both the model and its generated adapter must
 # keep their names, or every API response fails to parse in release only.
 
--keep class com.example.vidiio.data.model.** { *; }
--keep class com.example.vidiio.torrent.Ts** { *; }
+-keep class com.ominix.vidiio.data.model.** { *; }
+-keep class com.ominix.vidiio.torrent.Ts** { *; }
 
 # Generated adapters, wherever they landed.
 -keep class **JsonAdapter { <init>(...); *; }
