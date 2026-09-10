@@ -278,6 +278,10 @@ class VidiioApplication : Application() {
         super.onCreate()
         Rive.init(this)
 
+        // One-time: fold the old dynamic-colour flag into ColorTheme. Cheap, and it must
+        // happen before the first frame reads colorThemeFlow to avoid a visible flip.
+        applicationScope.launch { settingsRepository.migrateDynamicThemeIfNeeded() }
+
         applicationScope.launch {
             settingsRepository.proxyConfigFlow.collectLatest { cfg ->
                 proxyConfig = cfg

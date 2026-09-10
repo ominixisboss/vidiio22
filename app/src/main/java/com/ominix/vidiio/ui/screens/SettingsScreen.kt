@@ -145,9 +145,11 @@ fun SettingsScreen(
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         SwitchPreferenceItem(
                             title = "Dynamic Color",
-                            summary = "Colors based on wallpaper",
+                            summary = "Colors based on wallpaper (Android 12+)",
                             icon = Icons.Rounded.ColorLens,
-                            checked = dynamicColorEnabled,
+                            // Reflects the selected theme, so the switch and the colour
+                            // picker cannot disagree about what is in effect.
+                            checked = colorTheme == ColorTheme.DYNAMIC,
                             onCheckedChange = { viewModel.setDynamicColor(it) }
                         )
                     }

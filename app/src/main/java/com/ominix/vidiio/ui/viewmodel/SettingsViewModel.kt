@@ -109,8 +109,16 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * Selects or leaves the DYNAMIC theme.
+     *
+     * Writes the same preference the colour picker writes, rather than a second flag that
+     * competes with it. Turning it off falls back to RED - the picker sits directly above
+     * for anything else.
+     */
     fun setDynamicColor(enabled: Boolean) {
         viewModelScope.launch {
+            settingsRepository.setColorTheme(if (enabled) ColorTheme.DYNAMIC else ColorTheme.RED)
             settingsRepository.setDynamicColor(enabled)
         }
     }

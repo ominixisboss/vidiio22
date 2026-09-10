@@ -75,14 +75,13 @@ private fun getColorScheme(
 fun VidiioTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     colorTheme: ColorTheme = ColorTheme.RED,
-    // Dynamic color is available on Android 12+
-    // Setting default to false to maintain Netflix-style brand colors
-    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val wantsDynamic = colorTheme == ColorTheme.DYNAMIC || dynamicColor
+    // ColorTheme is the only input. There used to be a separate "dynamic colour" flag
+    // that defaulted to on and won over this, which made the colour picker inert on
+    // Android 12+ - every swatch produced the same wallpaper palette.
     val colorScheme = when {
-        wantsDynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        colorTheme == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }

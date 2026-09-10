@@ -29,7 +29,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val theme by settingsRepository.themeFlow.collectAsState(initial = AppTheme.SYSTEM)
             val colorTheme by settingsRepository.colorThemeFlow.collectAsState(initial = ColorTheme.RED)
-            val dynamicColor by settingsRepository.dynamicColorFlow.collectAsState(initial = true)
 
             val darkTheme = when (theme) {
                 AppTheme.DARK -> true
@@ -39,8 +38,7 @@ class MainActivity : ComponentActivity() {
 
             VidiioTheme(
                 darkTheme = darkTheme,
-                colorTheme = colorTheme,
-                dynamicColor = dynamicColor
+                colorTheme = colorTheme
             ) {
                 VidiioApp()
             }
