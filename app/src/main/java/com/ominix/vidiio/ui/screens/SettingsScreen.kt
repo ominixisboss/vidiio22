@@ -47,6 +47,7 @@ fun SettingsScreen(
     val selectedSources by viewModel.selectedSources.collectAsState()
     val stremioAddons by viewModel.stremioAddons.collectAsState()
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
+    val subtitleLanguages by viewModel.subtitleLanguages.collectAsState()
     val proxyEnabled by viewModel.proxyEnabled.collectAsState()
     val proxyType by viewModel.proxyType.collectAsState()
     val proxyHost by viewModel.proxyHost.collectAsState()
@@ -59,6 +60,8 @@ fun SettingsScreen(
     var addonUrlToAdd by rememberSaveable { mutableStateOf("") }
     var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
     var apiKeyToSet by rememberSaveable { mutableStateOf("") }
+    var showSubtitleLanguagesDialog by rememberSaveable { mutableStateOf(false) }
+    var subtitleLanguagesToSet by rememberSaveable { mutableStateOf("") }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -169,6 +172,16 @@ fun SettingsScreen(
                             onClick = { 
                                 apiKeyToSet = subdlApiKey ?: ""
                                 showApiKeyDialog = true 
+                            }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        PreferenceItem(
+                            title = "Subtitle languages",
+                            summary = subtitleLanguages.joinToString(", ") { it.uppercase() },
+                            icon = Icons.Rounded.Subtitles,
+                            onClick = {
+                                subtitleLanguagesToSet = subtitleLanguages.joinToString(", ")
+                                showSubtitleLanguagesDialog = true
                             }
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -346,6 +359,54 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showAddAddonDialog = false }) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
+    }
+
+    if (showSubtitleLanguagesDialog) {
+        AlertDialog(
+            onDismissRequest = { showSubtitleLanguagesDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text("Subtitle languages") },
+            text = {
+                Column {
+                    Text(
+                        "Two-letter codes, most wanted first. The order decides what " +
+                            "providers are asked for and how the subtitle list is sorted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = subtitleLanguagesToSet,
+                        onValueChange = { subtitleLanguagesToSet = it },
+                        label = { Text("e.g. en, es, fr") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color.Gray,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = Color.Gray
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.setSubtitleLanguages(subtitleLanguagesToSet)
+                        showSubtitleLanguagesDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSubtitleLanguagesDialog = false }) {
                     Text("Cancel", color = Color.Gray)
                 }
             }

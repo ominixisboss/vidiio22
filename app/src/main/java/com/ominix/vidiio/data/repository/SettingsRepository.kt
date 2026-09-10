@@ -61,6 +61,7 @@ class SettingsRepository(private val context: Context) {
         val SOURCES = stringSetPreferencesKey("sources")
         val STREMIO_ADDONS = stringSetPreferencesKey("stremio_addons")
         val SUBDL_API_KEY = stringPreferencesKey("subdl_api_key")
+        val SUBTITLE_LANGUAGES = stringPreferencesKey("subtitle_languages")
         val PROXY_ENABLED = booleanPreferencesKey("proxy_enabled")
         val PROXY_TYPE = stringPreferencesKey("proxy_type")
         val PROXY_HOST = stringPreferencesKey("proxy_host")
@@ -215,6 +216,35 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SUBDL_API_KEY] = apiKey
         }
+    }
+
+    /**
+     * Preferred subtitle languages, most-wanted first, as ISO 639-1 codes.
+     *
+     * Stored as a comma-separated string rather than a string set because order is the
+     * whole point - it decides which language a provider is asked for first and how the
+     * subtitle menu is sorted, and DataStore's string set is unordered.
+     *
+     * Defaults to English, which is what the code did unconditionally before this existed.
+     */
+    val subtitleLanguagesFlow: Flow<List<String>> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.SUBTITLE_LANGUAGES]
+            ?.split(",")
+            ?.map { it.trim().lowercase() }
+            ?.filter { it.isNotEmpty() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_SUBTITLE_LANGUAGES
+    }
+
+    suspend fun setSubtitleLanguages(languages: List<String>) {
+        context.dataStore.edit { preferences ->
+            val cleaned = languages.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+            preferences[PreferencesKeys.SUBTITLE_LANGUAGES] = cleaned.joinToString(",")
+        }
+    }
+
+    companion object {
+        val DEFAULT_SUBTITLE_LANGUAGES = listOf("en")
     }
 }
 

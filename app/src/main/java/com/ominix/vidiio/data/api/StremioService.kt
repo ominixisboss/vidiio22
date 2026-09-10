@@ -4,6 +4,7 @@ import com.ominix.vidiio.data.model.stremio.CatalogResponse
 import com.ominix.vidiio.data.model.stremio.Manifest
 import com.ominix.vidiio.data.model.stremio.MetaResponse
 import com.ominix.vidiio.data.model.stremio.StreamResponse
+import com.ominix.vidiio.data.model.stremio.SubtitleResponse
 import retrofit2.http.GET
 import retrofit2.http.Url
 
@@ -13,6 +14,9 @@ interface StremioService {
 
     @GET
     suspend fun getStreams(@Url url: String): StreamResponse
+
+    @GET
+    suspend fun getSubtitles(@Url url: String): SubtitleResponse
 
     @GET
     suspend fun getCatalog(@Url url: String): CatalogResponse

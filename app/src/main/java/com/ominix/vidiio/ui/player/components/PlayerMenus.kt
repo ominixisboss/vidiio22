@@ -13,18 +13,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.ominix.vidiio.data.model.subtitles.SubdlSubtitle
+import com.ominix.vidiio.data.model.subtitles.SubtitleTrack
 import com.ominix.vidiio.ui.player.AudioTrackInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubtitleMenu(
-    subtitles: List<SubdlSubtitle>,
+    subtitles: List<SubtitleTrack>,
     selectedUrl: String?,
     offsetMs: Long,
     subtitlesEnabled: Boolean = true,
     onOffsetChange: (Long) -> Unit,
-    onSubtitleSelect: (SubdlSubtitle) -> Unit,
+    onSubtitleSelect: (SubtitleTrack) -> Unit,
     onUseEmbedded: () -> Unit = {},
     onDisable: () -> Unit,
     onDismiss: () -> Unit
@@ -73,13 +73,44 @@ fun SubtitleMenu(
                         modifier = Modifier.clickable { onUseEmbedded(); onDismiss() }
                     )
                 }
-                items(subtitles) { sub ->
-                    ListItem(
-                        headlineContent = { Text(sub.releaseName ?: sub.language) },
-                        supportingContent = { Text(sub.language) },
-                        leadingContent = { RadioButton(selected = subtitlesEnabled && sub.url == selectedUrl, onClick = null) },
-                        modifier = Modifier.clickable { onSubtitleSelect(sub); onDismiss() }
-                    )
+                if (subtitles.isEmpty()) {
+                    item {
+                        ListItem(
+                            headlineContent = { Text("No external subtitles found") },
+                            supportingContent = {
+                                Text(
+                                    "Install a Stremio addon that provides subtitles, or add a " +
+                                        "SubDL API key in Settings."
+                                )
+                            }
+                        )
+                    }
+                }
+
+                // Grouped by provider so it is obvious where each subtitle came from, and
+                // so two providers offering the same film are told apart.
+                subtitles.groupBy { it.source }.forEach { (source, tracks) ->
+                    item(key = "header-$source") {
+                        Text(
+                            text = source,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(tracks, key = { it.id }) { sub ->
+                        ListItem(
+                            headlineContent = { Text(sub.languageLabel) },
+                            supportingContent = { Text(sub.label) },
+                            leadingContent = {
+                                RadioButton(
+                                    selected = subtitlesEnabled && sub.url == selectedUrl,
+                                    onClick = null
+                                )
+                            },
+                            modifier = Modifier.clickable { onSubtitleSelect(sub); onDismiss() }
+                        )
+                    }
                 }
             }
         }

@@ -6,7 +6,10 @@ import com.ominix.vidiio.data.model.DownloadStatus
 import com.ominix.vidiio.data.model.Episode
 import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.model.StreamSource
-import com.ominix.vidiio.data.model.subtitles.SubdlSubtitle
+import com.ominix.vidiio.data.model.MovieType
+import com.ominix.vidiio.data.model.subtitles.SubtitleTrack
+import com.ominix.vidiio.data.model.subtitles.toSubtitleTrack
+import com.ominix.vidiio.data.stremio.AddonManager
 import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.SettingsRepository
@@ -14,6 +17,7 @@ import com.ominix.vidiio.data.repository.WatchProgressRepository
 import com.ominix.vidiio.download.DownloadManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +56,7 @@ class MediaSession(
     private val subdlService: SubdlService,
     private val settingsRepository: SettingsRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val addonManager: AddonManager,
     private val initialMovie: Movie,
     private val initialEpisodeId: String? = null,
 ) {
@@ -67,8 +72,8 @@ class MediaSession(
     private val _isSearchingSources = MutableStateFlow(true)
     val isSearchingSources: StateFlow<Boolean> = _isSearchingSources.asStateFlow()
 
-    private val _subtitles = MutableStateFlow<List<SubdlSubtitle>>(emptyList())
-    val subtitles: StateFlow<List<SubdlSubtitle>> = _subtitles.asStateFlow()
+    private val _subtitles = MutableStateFlow<List<SubtitleTrack>>(emptyList())
+    val subtitles: StateFlow<List<SubtitleTrack>> = _subtitles.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -101,6 +106,7 @@ class MediaSession(
     init {
         loadDetails()
         observeSettings()
+        observeSubtitles()
     }
 
     private fun observeSettings() {
@@ -145,8 +151,8 @@ class MediaSession(
                     }
                 }
 
-                _subtitles.value = fetchSubtitles(fullMovie)
                 // Scraping is kicked off by observeSettings() once _movie is set.
+                // Subtitles follow the selected episode, so they are collected separately.
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _error.value = e.message ?: "Unknown error"
@@ -210,22 +216,97 @@ class MediaSession(
     fun getDownloadStatus(url: String): Flow<DownloadStatus?> =
         downloadRepository.getDownloadByUrlFlow(url).map { it?.status }
 
-    private suspend fun fetchSubtitles(movie: Movie): List<SubdlSubtitle> {
+    /**
+     * Subtitles for whatever is currently selected, refreshed when the episode changes.
+     *
+     * Providers run concurrently and independently: one failing or timing out must not
+     * cost the user the results from the others, which is why each is wrapped rather than
+     * letting a failure propagate out of the awaitAll.
+     */
+    private fun observeSubtitles() {
+        scope.launch {
+            combine(
+                _movie.filterNotNull(),
+                _selectedEpisode,
+                settingsRepository.subtitleLanguagesFlow,
+            ) { movie, episode, languages -> Triple(movie, episode, languages) }
+                .distinctUntilChanged()
+                .collectLatest { (movie, episode, languages) ->
+                    _subtitles.value = emptyList()
+                    val fromSubdl = scope.async { fetchSubdlSubtitles(movie, languages) }
+                    val fromAddons = scope.async { fetchAddonSubtitles(movie, episode) }
+                    val all = (fromSubdl.await() + fromAddons.await()).distinctBy { it.url }
+
+                    // Preferred languages first, in the order the user listed them, then
+                    // everything else - so a French-first user does not have to scroll
+                    // past forty English entries.
+                    _subtitles.value = all.sortedWith(
+                        compareBy(
+                            { languagePriority(it.language, languages) },
+                            { it.source },
+                            { it.label },
+                        )
+                    )
+                }
+        }
+    }
+
+    /** Index in the preferred list, or a value past the end for anything unlisted. */
+    private fun languagePriority(language: String, preferred: List<String>): Int {
+        val code = language.trim().lowercase()
+        val idx = preferred.indexOfFirst { p -> code == p || code.startsWith(p) || p.startsWith(code) }
+        return if (idx >= 0) idx else preferred.size
+    }
+
+    private suspend fun fetchAddonSubtitles(movie: Movie, episode: Episode?): List<SubtitleTrack> {
+        val stremioType = if (movie.type == MovieType.MOVIE) "movie" else "series"
+        // Same id scheme the stream lookup uses: the addon-native id where the item came
+        // from an addon, plus the IMDb-keyed id the large public addons expect.
+        val nativeId = when {
+            movie.source != "stremio" -> null
+            movie.type == MovieType.TV_SHOW && episode != null -> episode.id
+            else -> movie.id
+        }
+        val imdb = movie.imdbId ?: movie.id.takeIf { it.startsWith("tt") }
+        val imdbId = imdb?.let { tt ->
+            if (movie.type == MovieType.TV_SHOW && episode != null) {
+                "$tt:${episode.seasonNumber}:${episode.episodeNumber}"
+            } else {
+                tt
+            }
+        }
+
+        return listOfNotNull(nativeId, imdbId).distinct().flatMap { id ->
+            try {
+                withTimeoutOrNull(SUBTITLE_TIMEOUT_MS) {
+                    addonManager.getSubtitles(stremioType, id)
+                }.orEmpty()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "MediaSession.fetchAddonSubtitles() failed for $id", e)
+                emptyList()
+            }
+        }
+    }
+
+    private suspend fun fetchSubdlSubtitles(movie: Movie, languages: List<String>): List<SubtitleTrack> {
         val apiKey = settingsRepository.subdlApiKeyFlow.first() ?: return emptyList()
         return try {
-            val imdbId = if (movie.id.startsWith("tt")) movie.id else null
+            val imdbId = if (movie.id.startsWith("tt")) movie.id else movie.imdbId
             val tmdbId = movie.id.toIntOrNull()
 
-            val response = subdlService.searchSubtitles(
-                apiKey = apiKey,
-                tmdbId = if (imdbId == null) tmdbId else null,
-                imdbId = imdbId,
-                languages = "en"
-            )
-            response.subtitles ?: emptyList()
+            val response = withTimeoutOrNull(SUBTITLE_TIMEOUT_MS) {
+                subdlService.searchSubtitles(
+                    apiKey = apiKey,
+                    tmdbId = if (imdbId == null) tmdbId else null,
+                    imdbId = imdbId,
+                    languages = languages.joinToString(",")
+                )
+            }
+            response?.subtitles.orEmpty().mapNotNull { it.toSubtitleTrack() }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            Log.w(TAG, "MediaSession.fetchSubtitles() failed", e)
+            Log.w(TAG, "MediaSession.fetchSubdlSubtitles() failed", e)
             emptyList()
         }
     }
@@ -233,6 +314,9 @@ class MediaSession(
     private companion object {
         /** Overall wall-clock budget for one source search across all scrapers + Stremio. */
         const val SCRAPE_TIMEOUT_MS = 45_000L
+
+        /** Per-provider budget for a subtitle lookup. */
+        const val SUBTITLE_TIMEOUT_MS = 15_000L
         const val TAG = "MediaSession"
     }
 }

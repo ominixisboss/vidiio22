@@ -68,6 +68,14 @@ class SettingsViewModel(
     val subdlApiKey: StateFlow<String?> = settingsRepository.subdlApiKeyFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    /** Preferred subtitle languages, most-wanted first. */
+    val subtitleLanguages: StateFlow<List<String>> = settingsRepository.subtitleLanguagesFlow
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            SettingsRepository.DEFAULT_SUBTITLE_LANGUAGES
+        )
+
     fun setPlaybackQuality(quality: String) {
         viewModelScope.launch {
             settingsRepository.setPlaybackQuality(quality)
@@ -182,6 +190,13 @@ class SettingsViewModel(
     fun setSubdlApiKey(apiKey: String) {
         viewModelScope.launch {
             settingsRepository.setSubdlApiKey(apiKey)
+        }
+    }
+
+    /** Accepts a comma-separated list, e.g. "en, es, fr". Order is the preference order. */
+    fun setSubtitleLanguages(raw: String) {
+        viewModelScope.launch {
+            settingsRepository.setSubtitleLanguages(raw.split(","))
         }
     }
 

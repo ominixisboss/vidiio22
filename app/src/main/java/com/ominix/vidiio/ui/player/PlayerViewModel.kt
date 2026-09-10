@@ -19,7 +19,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.ominix.vidiio.VidiioApplication
 import com.ominix.vidiio.data.model.StreamSource
-import com.ominix.vidiio.data.model.subtitles.SubdlSubtitle
+import com.ominix.vidiio.data.model.subtitles.SubtitleTrack
+import com.ominix.vidiio.data.stremio.AddonManager
 import com.ominix.vidiio.data.api.SubdlService
 import com.ominix.vidiio.data.model.DownloadStatus
 import com.ominix.vidiio.data.model.Episode
@@ -103,6 +104,7 @@ class PlayerViewModel(
     downloadManager: DownloadManager,
     subdlService: SubdlService,
     watchProgressRepository: WatchProgressRepository,
+    addonManager: AddonManager,
     movie: Movie,
     initialEpisodeId: String? = null,
 ) : AndroidViewModel(application) {
@@ -122,13 +124,14 @@ class PlayerViewModel(
         subdlService = subdlService,
         settingsRepository = settingsRepository,
         watchProgressRepository = watchProgressRepository,
+        addonManager = addonManager,
         initialMovie = movie,
         initialEpisodeId = initialEpisodeId
     )
 
     val movie: StateFlow<Movie?> = session.movie
     val selectedEpisode: StateFlow<Episode?> = session.selectedEpisode
-    val subtitles: StateFlow<List<SubdlSubtitle>> = session.subtitles
+    val subtitles: StateFlow<List<SubtitleTrack>> = session.subtitles
 
     fun selectEpisode(episode: Episode) = session.selectEpisode(episode)
     fun downloadSource(source: StreamSource) = session.downloadSource(source)
@@ -421,13 +424,12 @@ class PlayerViewModel(
         setTextTrackDisabled(false)
     }
 
-    fun selectSubtitle(subtitle: SubdlSubtitle) {
+    fun selectSubtitle(subtitle: SubtitleTrack) {
         _state.update { it.copy(selectedSubtitleUrl = subtitle.url, subtitlesEnabled = true) }
         setTextTrackDisabled(false)
 
-        val url = subtitle.url ?: return
-        val subConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(url))
-            .setMimeType(MimeTypes.TEXT_VTT)
+        val subConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.url))
+            .setMimeType(subtitleMimeType(subtitle.url))
             .setLanguage(subtitle.language)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
@@ -449,6 +451,33 @@ class PlayerViewModel(
     }
 
     fun setSubtitleOffset(offsetMs: Long) = _state.update { it.copy(subtitleOffsetMs = offsetMs) }
+
+    /**
+     * Guesses the subtitle format from the URL, defaulting to SubRip.
+     *
+     * This used to be hardcoded to TEXT_VTT, which silently broke every provider that
+     * serves anything else - OpenSubtitles v3, for one, returns application/x-subrip from
+     * URLs with no file extension at all, so nothing it offered would ever have rendered.
+     * SubRip is the right default: it is what the subtitle addons overwhelmingly serve,
+     * and it is what an extensionless URL almost always turns out to be.
+     */
+    private fun subtitleMimeType(url: String): String {
+        // Only look at the last path segment - hosts have dots in them too, so taking the
+        // extension off the whole URL finds ".io" in "subs5.strem.io".
+        val path = url.substringBefore('?').substringBefore('#')
+        val lastSegment = path.substringAfterLast('/')
+        val extension = if (lastSegment.contains('.')) {
+            lastSegment.substringAfterLast('.').lowercase()
+        } else {
+            ""
+        }
+        return when (extension) {
+            "vtt", "webvtt" -> MimeTypes.TEXT_VTT
+            "ass", "ssa" -> MimeTypes.TEXT_SSA
+            "ttml", "dfxp", "xml" -> MimeTypes.APPLICATION_TTML
+            else -> MimeTypes.APPLICATION_SUBRIP
+        }
+    }
 
     // ── Audio ────────────────────────────────────────────────────────────────
 

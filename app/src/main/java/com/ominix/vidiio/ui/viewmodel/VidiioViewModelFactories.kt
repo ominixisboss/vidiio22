@@ -70,6 +70,7 @@ object VidiioViewModelFactories {
                 app.downloadManager,
                 app.subdlService,
                 app.watchProgressRepository,
+                app.addonManager,
                 movie,
                 initialEpisodeId
             )
@@ -94,6 +95,7 @@ object VidiioViewModelFactories {
                 app.subdlService,
                 app.settingsRepository,
                 app.watchProgressRepository,
+                app.addonManager,
                 movie,
                 initialEpisodeId
             )

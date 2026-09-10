@@ -6,7 +6,8 @@ import com.ominix.vidiio.data.api.SubdlService
 import com.ominix.vidiio.data.model.Episode
 import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.model.StreamSource
-import com.ominix.vidiio.data.model.subtitles.SubdlSubtitle
+import com.ominix.vidiio.data.model.subtitles.SubtitleTrack
+import com.ominix.vidiio.data.stremio.AddonManager
 import com.ominix.vidiio.data.model.toFavoriteMovie
 import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.FavoriteRepository
@@ -29,7 +30,7 @@ sealed interface DetailsUiState {
     data class Success(
         val movie: Movie,
         val streamSources: List<StreamSource>,
-        val subtitles: List<SubdlSubtitle> = emptyList(),
+        val subtitles: List<SubtitleTrack> = emptyList(),
         val isFavorite: Boolean = false,
         val selectedEpisode: Episode? = null,
         val isSearchingSources: Boolean = true
@@ -54,6 +55,7 @@ class DetailsViewModel(
     subdlService: SubdlService,
     private val settingsRepository: SettingsRepository,
     watchProgressRepository: WatchProgressRepository,
+    addonManager: AddonManager,
     movie: Movie,
     initialEpisodeId: String? = null
 ) : ViewModel() {
@@ -66,6 +68,7 @@ class DetailsViewModel(
         subdlService = subdlService,
         settingsRepository = settingsRepository,
         watchProgressRepository = watchProgressRepository,
+        addonManager = addonManager,
         initialMovie = movie,
         initialEpisodeId = initialEpisodeId
     )

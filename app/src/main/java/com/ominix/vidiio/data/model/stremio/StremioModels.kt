@@ -44,6 +44,24 @@ data class StreamResponse(
     val streams: List<StremioStream>
 )
 
+/** Response of the addon `subtitles` resource. */
+@JsonClass(generateAdapter = true)
+data class SubtitleResponse(
+    val subtitles: List<StremioSubtitle>? = null
+)
+
+/**
+ * A subtitle offered by an addon. `lang` is ISO 639-2 ("eng") by convention, though
+ * addons are not consistent about it.
+ */
+@JsonClass(generateAdapter = true)
+data class StremioSubtitle(
+    val id: String? = null,
+    val url: String? = null,
+    val lang: String? = null,
+    @Json(name = "SubEncoding") val subEncoding: String? = null
+)
+
 @JsonClass(generateAdapter = true)
 data class CatalogResponse(
     val metas: List<StremioMeta>
