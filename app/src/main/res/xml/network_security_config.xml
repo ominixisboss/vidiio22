@@ -1,8 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Default-deny cleartext. Every scraper response we parse decides what the player
+  loads next, so an unencrypted one is a remote-control channel for anyone on the
+  same network. HTTPS is required everywhere except the loopback exceptions below.
+
+  If a source you need is HTTP-only, add its host to the domain-config below
+  rather than re-enabling cleartext globally.
+-->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+
+    <!--
+      The embedded TorrServer engine listens on loopback (see TorrServerEngine.baseUrl)
+      and speaks plain HTTP. Traffic never leaves the device, so this is safe.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+
+    <!--
+      Debug builds additionally trust user-installed CAs so mitmproxy/Charles can be
+      used to inspect scraper traffic. Never applies to release.
+    -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
 </network-security-config>

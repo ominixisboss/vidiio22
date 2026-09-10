@@ -1,7 +1,0 @@
-- [ ] Update `StreamSource` model to include `headers`
-- [ ] Implement `VidSrcScraper.kt` (Port from PlayTorrioV3)
-- [ ] Implement `KnabenScraper.kt` (Port from PlayTorrioV3)
-- [ ] Update `DetailsViewModel` to support real-time source scraping
-- [ ] Create `SourceSelectorBottomSheet` component
-- [ ] Integrate `SourceSelectorBottomSheet` into `DetailsScreen.kt`
-- [ ] Verify build and functionality

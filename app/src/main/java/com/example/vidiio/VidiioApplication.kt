@@ -2,7 +2,6 @@ package com.example.vidiio
 
 import android.app.Application
 import app.rive.runtime.kotlin.core.Rive
-import androidx.room.Room
 import com.example.vidiio.data.db.VidiioDatabase
 import com.example.vidiio.data.repository.DownloadRepository
 import com.example.vidiio.data.repository.FavoriteRepository
@@ -93,10 +92,7 @@ class VidiioApplication : Application() {
         proxyConfig = kotlinx.coroutines.runBlocking { settingsRepository.proxyConfigFlow.first() }
         applyProxyAuthenticator(proxyConfig)
 
-        val database = Room.databaseBuilder(
-            applicationContext,
-            VidiioDatabase::class.java, "vidiio-database"
-        ).fallbackToDestructiveMigration().build()
+        val database = VidiioDatabase.build(this)
 
         favoriteRepository = FavoriteRepository(database.favoriteDao())
         downloadRepository = DownloadRepository(database.downloadDao())
