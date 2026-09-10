@@ -53,6 +53,7 @@ fun SettingsScreen(
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
     val subtitleLanguages by viewModel.subtitleLanguages.collectAsState()
     val subtitleStyle by viewModel.subtitleStyle.collectAsState()
+    val assNativeStyling by viewModel.assNativeStyling.collectAsState()
     val proxyEnabled by viewModel.proxyEnabled.collectAsState()
     val proxyType by viewModel.proxyType.collectAsState()
     val proxyHost by viewModel.proxyHost.collectAsState()
@@ -195,6 +196,19 @@ fun SettingsScreen(
                         SubtitleAppearanceSection(
                             style = subtitleStyle,
                             onStyleChange = { viewModel.setSubtitleStyle(it) }
+                        )
+                        SwitchPreferenceItem(
+                            title = "Keep ASS/SSA styling",
+                            summary = if (assNativeStyling) {
+                                "Fancy subtitles keep their own fonts and positioning. " +
+                                    "The appearance settings above will not affect them."
+                            } else {
+                                "Fancy subtitles are shown as plain text so the appearance " +
+                                    "settings apply. Positioning and effects are lost."
+                            },
+                            icon = Icons.Rounded.Subtitles,
+                            checked = assNativeStyling,
+                            onCheckedChange = { viewModel.setAssNativeStyling(it) }
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         SwitchPreferenceItem(

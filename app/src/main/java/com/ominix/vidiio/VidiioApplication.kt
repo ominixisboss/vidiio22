@@ -100,6 +100,14 @@ class VidiioApplication : Application() {
     var proxyConfig: ProxyConfig? = null
         private set
 
+    /**
+     * Whether ASS tracks are rendered by libass. Read at player construction, which is
+     * not a suspending context, so it is cached here the same way proxyConfig is.
+     */
+    @Volatile
+    var assNativeStyling: Boolean = true
+        private set
+
     /** Completes on the first emission, so no request can race ahead of the setting. */
     private val proxyLoaded = CompletableDeferred<Unit>()
 
@@ -281,6 +289,10 @@ class VidiioApplication : Application() {
         // One-time: fold the old dynamic-colour flag into ColorTheme. Cheap, and it must
         // happen before the first frame reads colorThemeFlow to avoid a visible flip.
         applicationScope.launch { settingsRepository.migrateDynamicThemeIfNeeded() }
+
+        applicationScope.launch {
+            settingsRepository.assNativeStylingFlow.collect { assNativeStyling = it }
+        }
 
         applicationScope.launch {
             settingsRepository.proxyConfigFlow.collectLatest { cfg ->

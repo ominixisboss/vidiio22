@@ -73,6 +73,14 @@ class SettingsViewModel(
     val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SubtitleStyle())
 
+    /** True: ASS tracks keep their own styling. False: they follow the settings above. */
+    val assNativeStyling: StateFlow<Boolean> = settingsRepository.assNativeStylingFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setAssNativeStyling(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAssNativeStyling(enabled) }
+    }
+
     fun setSubtitleStyle(style: SubtitleStyle) {
         viewModelScope.launch { settingsRepository.setSubtitleStyle(style) }
     }

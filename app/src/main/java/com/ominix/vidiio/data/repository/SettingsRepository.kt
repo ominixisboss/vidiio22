@@ -92,6 +92,7 @@ class SettingsRepository(private val context: Context) {
         val SUBTITLE_BG_COLOR = longPreferencesKey("subtitle_bg_color")
         val SUBTITLE_EDGE = stringPreferencesKey("subtitle_edge")
         val DYNAMIC_THEME_MIGRATED = booleanPreferencesKey("dynamic_theme_migrated")
+        val ASS_NATIVE_STYLING = booleanPreferencesKey("ass_native_styling")
         val PROXY_ENABLED = booleanPreferencesKey("proxy_enabled")
         val PROXY_TYPE = stringPreferencesKey("proxy_type")
         val PROXY_HOST = stringPreferencesKey("proxy_host")
@@ -288,6 +289,26 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { preferences ->
             val cleaned = languages.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
             preferences[PreferencesKeys.SUBTITLE_LANGUAGES] = cleaned.joinToString(",")
+        }
+    }
+
+    /**
+     * Whether ASS/SSA tracks keep their own styling (libass) or are rendered as plain
+     * text the appearance settings can restyle.
+     *
+     * These are mutually exclusive and not a matter of implementation effort: libass
+     * rasterises ASS to bitmaps, positioning, fonts and karaoke included, so there is no
+     * text left for the player to restyle. Rendering ASS as plain text means giving all
+     * of that up. Defaults to true - faithful styling - which is what the player did
+     * before this was a choice.
+     */
+    val assNativeStylingFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.ASS_NATIVE_STYLING] ?: true
+    }
+
+    suspend fun setAssNativeStyling(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ASS_NATIVE_STYLING] = enabled
         }
     }
 

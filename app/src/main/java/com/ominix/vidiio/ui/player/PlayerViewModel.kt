@@ -16,6 +16,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.ominix.vidiio.VidiioApplication
 import com.ominix.vidiio.data.model.StreamSource
@@ -236,16 +237,26 @@ class PlayerViewModel(
             )
             .build()
 
-        // buildWithAssSupport installs a libass-backed ASS/SSA subtitle renderer
-        // (styled positioning/fonts/colours). CUES mode pre-renders to bitmap cues the
-        // existing SubtitleView draws — no extra overlay view to wire up.
-        ExoPlayer.Builder(application)
+        val builder = ExoPlayer.Builder(application)
             .setLoadControl(loadControl)
-            .buildWithAssSupport(
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+
+        if ((application as VidiioApplication).assNativeStyling) {
+            // buildWithAssSupport installs a libass-backed ASS/SSA subtitle renderer
+            // (styled positioning/fonts/colours). CUES mode pre-renders to bitmap cues the
+            // existing SubtitleView draws — no extra overlay view to wire up.
+            builder.buildWithAssSupport(
                 context = application,
                 renderType = AssRenderType.CUES,
                 dataSourceFactory = dataSourceFactory
             )
+        } else {
+            // Without libass, media3's own SSA decoder emits ordinary text cues, which
+            // SubtitleView can restyle. That is the whole point of the setting: bitmaps
+            // cannot be restyled, so keeping ASS styling and applying your own are
+            // mutually exclusive.
+            builder.build()
+        }
     }
 
     private var notchSafeSeeded = false
