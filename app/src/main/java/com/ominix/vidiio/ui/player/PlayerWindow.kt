@@ -1,6 +1,9 @@
 package com.ominix.vidiio.ui.player
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
@@ -14,8 +17,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -90,6 +95,38 @@ fun PlayerWindowEffects(notchSafe: Boolean, showControls: Boolean) {
         } else {
             controller.hide(WindowInsetsCompat.Type.systemBars())
         }
+    }
+}
+
+/**
+ * Runs [onScreenOff] when the device screen is turned off.
+ *
+ * The player holds FLAG_KEEP_SCREEN_ON, so the screen only goes off because the user
+ * pressed the power button - which is a clear "stop" that the player was ignoring,
+ * leaving audio playing in a pocket.
+ *
+ * Deliberately a screen-off broadcast rather than a lifecycle observer: ON_PAUSE also
+ * fires for permission dialogs and other transient windows, which should not stop
+ * playback.
+ */
+@Composable
+fun PauseOnScreenOff(onScreenOff: () -> Unit) {
+    val context = LocalContext.current
+    val currentOnScreenOff by rememberUpdatedState(onScreenOff)
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_SCREEN_OFF) currentOnScreenOff()
+            }
+        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
 }
 

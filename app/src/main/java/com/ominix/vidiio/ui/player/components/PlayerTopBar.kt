@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,6 +30,8 @@ fun PlayerTopBar(
     onBack: () -> Unit,
     onDownload: (() -> Unit)?,
     onToggleEpisodes: (() -> Unit)?,
+    /** Shown only when an external player is available to hand off to. */
+    onPlayExternal: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -96,6 +99,22 @@ fun PlayerTopBar(
                         color = Color.White,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+
+            if (onPlayExternal != null) {
+                IconButton(
+                    onClick = onPlayExternal,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.1f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.OpenInNew,
+                        contentDescription = "Play in VLC"
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))

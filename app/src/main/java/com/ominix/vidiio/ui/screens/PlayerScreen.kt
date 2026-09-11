@@ -45,6 +45,8 @@ import com.ominix.vidiio.data.model.StreamSource
 import com.ominix.vidiio.data.repository.SubtitleEdge
 import com.ominix.vidiio.data.repository.SubtitleStyle
 import com.ominix.vidiio.torrent.TorrentService
+import com.ominix.vidiio.ui.player.ExternalPlayer
+import com.ominix.vidiio.ui.player.PauseOnScreenOff
 import com.ominix.vidiio.ui.player.PlayerViewModel
 import com.ominix.vidiio.ui.player.PlayerWindowEffects
 import com.ominix.vidiio.ui.player.components.*
@@ -104,6 +106,11 @@ fun PlayerScreen(
     LaunchedEffect(initialSource) { initialSource?.let(playerViewModel::selectSource) }
 
     PlayerWindowEffects(notchSafe = state.notchSafe, showControls = showControls)
+
+    // Power button means stop, not "keep playing in my pocket".
+    PauseOnScreenOff { playerViewModel.pause() }
+
+    val vlcAvailable = remember { ExternalPlayer.isVlcInstalled(context) }
 
     // ── Torrent service binding ──────────────────────────────────────────────
     var torrentService by remember { mutableStateOf<TorrentService?>(null) }
@@ -304,7 +311,27 @@ fun PlayerScreen(
                             playerViewModel.downloadSource(source)
                         }
                     },
-                    onToggleEpisodes = { showEpisodesSidebar = !showEpisodesSidebar }
+                    onToggleEpisodes = { showEpisodesSidebar = !showEpisodesSidebar },
+                    onPlayExternal = if (vlcAvailable) {
+                        {
+                            // Pause first: VLC takes over audio, and coming back to a
+                            // still-running ExoPlayer would mean two players and a
+                            // watch-progress position that kept advancing unwatched.
+                            playerViewModel.pause()
+                            state.selectedSource?.let { source ->
+                                ExternalPlayer.playInVlc(
+                                    context = context,
+                                    url = source.url,
+                                    title = movie?.title,
+                                    positionMs = state.positionMs,
+                                    subtitleUrl = state.selectedSubtitleUrl,
+                                    headers = source.headers,
+                                )
+                            }
+                        }
+                    } else {
+                        null
+                    }
                 )
 
                 PlayerTransport(
