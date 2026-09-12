@@ -35,8 +35,11 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircleFilled
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -73,6 +76,9 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val continueWatching by viewModel.continueWatching.collectAsState()
     val homeStyle by viewModel.homeStyle.collectAsState()
+    val showVpnReminder by viewModel.showVpnReminder.collectAsState()
+    var vpnDialogDismissed by rememberSaveable { mutableStateOf(false) }
+
     val scrollState = rememberLazyListState()
 
     val themeAccent = MaterialTheme.colorScheme.primary
@@ -124,9 +130,11 @@ fun HomeScreen(
             )
         }
 
+        val isRefreshing by viewModel.isRefreshing.collectAsState()
+
         when (val state = uiState) {
             is HomeUiState.Loading -> {
-                RiveLoader(modifier = Modifier.align(Alignment.Center))
+                HomeSkeletonLoading(spec)
             }
             is HomeUiState.Success -> {
                 var selectedFilter by remember { mutableStateOf("All") }
@@ -147,52 +155,58 @@ fun HomeScreen(
                     }
                 }
 
-                LazyColumn(
-                    state = scrollState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(spec.rowGap)
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.refresh(isPullToRefresh = true) },
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    if (heroMovies.isNotEmpty()) {
-                        item {
-                            if (spec.heroKind == HeroKind.CAROUSEL) {
-                                HeroCarousel(heroMovies, spec, onNavigateToDetails)
-                            } else {
-                                HeroStatic(heroMovies.first(), spec, onNavigateToDetails)
+                    LazyColumn(
+                        state = scrollState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 32.dp),
+                        verticalArrangement = Arrangement.spacedBy(spec.rowGap)
+                    ) {
+                        if (heroMovies.isNotEmpty()) {
+                            item {
+                                if (spec.heroKind == HeroKind.CAROUSEL) {
+                                    HeroCarousel(heroMovies, spec, onNavigateToDetails)
+                                } else {
+                                    HeroStatic(heroMovies.first(), spec, onNavigateToDetails)
+                                }
                             }
                         }
-                    }
-                    if (spec.style == HomeStyle.DISNEY) {
-                        item {
-                            DisneyBrandHubsRow(onBrandClick = { brand ->
-                                val query = when (brand) {
-                                    "DISNEY" -> "Disney"
-                                    "PIXAR" -> "Pixar"
-                                    "MARVEL" -> "Marvel"
-                                    "STAR WARS" -> "Star Wars"
-                                    "NAT GEO" -> "National Geographic"
-                                    else -> brand
-                                }
-                                onSearchQuery(query)
-                            })
+                        if (spec.style == HomeStyle.DISNEY) {
+                            item {
+                                DisneyBrandHubsRow(onBrandClick = { brand ->
+                                    val query = when (brand) {
+                                        "DISNEY" -> "Disney"
+                                        "PIXAR" -> "Pixar"
+                                        "MARVEL" -> "Marvel"
+                                        "STAR WARS" -> "Star Wars"
+                                        "NAT GEO" -> "National Geographic"
+                                        else -> brand
+                                    }
+                                    onSearchQuery(query)
+                                })
+                            }
                         }
-                    }
-                    if (continueWatching.isNotEmpty()) {
-                        item {
-                            ContinueWatchingRow(
-                                entries = continueWatching,
-                                spec = spec,
-                                onResume = onResumeWatching,
-                                onRemove = { viewModel.removeContinueWatching(it) }
-                            )
+                        if (continueWatching.isNotEmpty()) {
+                            item {
+                                ContinueWatchingRow(
+                                    entries = continueWatching,
+                                    spec = spec,
+                                    onResume = onResumeWatching,
+                                    onRemove = { viewModel.removeContinueWatching(it) }
+                                )
+                            }
                         }
-                    }
-                    items(rows) { category ->
-                        when {
-                            category.name == TOP10_LABEL && spec.showTop10 ->
-                                Top10Section(category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery("Popular Movies") })
-                            category.name == TOP10_LABEL -> Unit // hidden for this style
-                            else -> CategorySection(category.name, category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery(category.name) })
+                        items(rows) { category ->
+                            when {
+                                category.name == TOP10_LABEL && spec.showTop10 ->
+                                    Top10Section(category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery("Popular Movies") })
+                                category.name == TOP10_LABEL -> Unit // hidden for this style
+                                else -> CategorySection(category.name, category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery(category.name) })
+                            }
                         }
                     }
                 }
@@ -224,6 +238,129 @@ fun HomeScreen(
                 ) {
                     Text(text = "Error: ${state.message}", color = MaterialTheme.colorScheme.error)
                     Button(onClick = { viewModel.refresh() }) { Text("Retry") }
+                }
+            }
+        }
+
+        if (showVpnReminder && !vpnDialogDismissed) {
+            VpnReminderDialog(
+                onDismiss = { dontShowAgain ->
+                    vpnDialogDismissed = true
+                    viewModel.dismissVpnReminder(dontShowAgain)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun VpnReminderDialog(
+    onDismiss: (dontShowAgain: Boolean) -> Unit
+) {
+    var dontShowAgain by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { onDismiss(dontShowAgain) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
+        icon = {
+            Icon(
+                Icons.Rounded.VpnKey,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp)
+            )
+        },
+        title = {
+            Text(
+                "VPN & Privacy Reminder",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "For your privacy and security while streaming content, we strongly recommend using an active VPN or configuring a SOCKS5/HTTP Proxy in Settings.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { dontShowAgain = !dontShowAgain }
+                ) {
+                    Checkbox(
+                        checked = dontShowAgain,
+                        onCheckedChange = { dontShowAgain = it },
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Don't show again",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onDismiss(dontShowAgain) },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("I Understand", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+fun HomeSkeletonLoading(spec: HomeStyleSpec) {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.45f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmerAlpha"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(spec.rowGap)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(spec.heroHeight)
+                .background(Color.White.copy(alpha = alpha))
+        )
+        repeat(2) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .width(140.dp)
+                        .height(20.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.White.copy(alpha = alpha))
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(4) {
+                        Box(
+                            modifier = Modifier
+                                .width(spec.cardWidth)
+                                .height(spec.cardHeight)
+                                .clip(RoundedCornerShape(spec.cardCorner))
+                                .background(Color.White.copy(alpha = alpha))
+                        )
+                    }
                 }
             }
         }
@@ -670,10 +807,12 @@ fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie)
     val pagerState = rememberPagerState(pageCount = { movies.size })
     val scrim = spec.background ?: Color.Black
 
-    LaunchedEffect(movies.size) {
-        while (true) {
-            delay(6000)
-            pagerState.animateScrollToPage((pagerState.currentPage + 1) % movies.size)
+    LaunchedEffect(pagerState.isScrollInProgress, movies.size) {
+        if (!pagerState.isScrollInProgress && movies.isNotEmpty()) {
+            while (true) {
+                delay(6000)
+                pagerState.animateScrollToPage((pagerState.currentPage + 1) % movies.size)
+            }
         }
     }
 
@@ -1002,6 +1141,21 @@ fun ContinueWatchingRow(
                             contentScale = ContentScale.Crop
                         )
                         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(6.dp)
+                        ) {
+                            Text(
+                                text = "${(entry.progressFraction * 100).toInt()}%",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                         Icon(
                             Icons.Rounded.PlayCircleFilled,
                             contentDescription = "Resume",

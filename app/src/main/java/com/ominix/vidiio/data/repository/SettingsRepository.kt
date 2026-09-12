@@ -100,6 +100,7 @@ class SettingsRepository(private val context: Context) {
         val DYNAMIC_THEME_MIGRATED = booleanPreferencesKey("dynamic_theme_migrated")
         val ASS_NATIVE_STYLING = booleanPreferencesKey("ass_native_styling")
         val MOUSE_TOGGLE = booleanPreferencesKey("mouse_toggle")
+        val SHOW_VPN_REMINDER = booleanPreferencesKey("show_vpn_reminder")
         val PROXY_ENABLED = booleanPreferencesKey("proxy_enabled")
         val PROXY_TYPE = stringPreferencesKey("proxy_type")
         val PROXY_HOST = stringPreferencesKey("proxy_host")
@@ -166,6 +167,16 @@ class SettingsRepository(private val context: Context) {
     suspend fun setMouseToggle(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.MOUSE_TOGGLE] = enabled
+        }
+    }
+
+    val showVpnReminderFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.SHOW_VPN_REMINDER] ?: true
+    }
+
+    suspend fun setShowVpnReminder(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SHOW_VPN_REMINDER] = show
         }
     }
 

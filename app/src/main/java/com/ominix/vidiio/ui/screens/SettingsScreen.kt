@@ -26,8 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1102,11 +1104,40 @@ private fun SubtitleAppearanceSection(
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium
         )
+        var isSliderFocused by remember { mutableStateOf(false) }
+
         Slider(
             value = style.textScale,
             onValueChange = { onStyleChange(style.copy(textScale = it)) },
             valueRange = 0.5f..2.5f,
-            steps = 7
+            steps = 7,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isSliderFocused = it.isFocused }
+                .then(
+                    if (isSliderFocused) {
+                        Modifier
+                            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    } else Modifier
+                )
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && isSliderFocused) {
+                        when (event.key) {
+                            Key.DirectionLeft -> {
+                                val newScale = (style.textScale - 0.25f).coerceIn(0.5f, 2.5f)
+                                onStyleChange(style.copy(textScale = newScale))
+                                true
+                            }
+                            Key.DirectionRight -> {
+                                val newScale = (style.textScale + 0.25f).coerceIn(0.5f, 2.5f)
+                                onStyleChange(style.copy(textScale = newScale))
+                                true
+                            }
+                            else -> false
+                        }
+                    } else false
+                }
         )
 
         Spacer(modifier = Modifier.height(8.dp))

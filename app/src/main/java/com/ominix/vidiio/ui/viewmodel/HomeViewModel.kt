@@ -32,6 +32,9 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     val continueWatching: StateFlow<List<WatchProgress>> =
         watchProgressRepository.continueWatching
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -39,20 +42,39 @@ class HomeViewModel(
     val homeStyle: StateFlow<HomeStyle> = settingsRepository.homeStyleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeStyle.VIDIIO)
 
+    val showVpnReminder: StateFlow<Boolean> = settingsRepository.showVpnReminderFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun dismissVpnReminder(dontShowAgain: Boolean) {
+        if (dontShowAgain) {
+            viewModelScope.launch {
+                settingsRepository.setShowVpnReminder(false)
+            }
+        }
+    }
+
     init {
         refresh()
     }
 
-    fun refresh() {
+    fun refresh(isPullToRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = HomeUiState.Loading
+            if (isPullToRefresh) {
+                _isRefreshing.value = true
+            } else {
+                _uiState.value = HomeUiState.Loading
+            }
             try {
                 val categories = movieRepository.getHomeCategories()
                 _uiState.value = HomeUiState.Success(categories)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(TAG, "HomeViewModel.refresh() failed", e)
-                _uiState.value = HomeUiState.Error(e.message ?: "Unknown error")
+                if (!isPullToRefresh) {
+                    _uiState.value = HomeUiState.Error(e.message ?: "Unknown error")
+                }
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }

@@ -161,6 +161,14 @@ class PlayerViewModel(
                 _state.update { it.copy(mediaPlayerChoice = choice) }
             }
         }
+        viewModelScope.launch {
+            subtitles.collect { subTracks ->
+                if (subTracks.isNotEmpty() && _state.value.subtitlesEnabled && _state.value.selectedSubtitleUrl == null) {
+                    val bestTrack = subTracks.first()
+                    selectSubtitle(bestTrack)
+                }
+            }
+        }
     }
 
     /** Resume point from Continue Watching. Applied once, when the media is ready. */
