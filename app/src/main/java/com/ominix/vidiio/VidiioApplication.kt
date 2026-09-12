@@ -213,7 +213,14 @@ class VidiioApplication : Application() {
      * playback request slip past a configured proxy.
      */
     val playbackHttpClient: OkHttpClient by lazy {
-        baseClientBuilder().dns(dns).build()
+        baseClientBuilder()
+            .dns(dns)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
     }
 
     // ── API services and repositories ────────────────────────────────────────────

@@ -14,12 +14,16 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.window.core.layout.WindowSizeClass
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -38,7 +42,7 @@ import com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactories
 fun VidiioApp() {
     val navigationState = rememberNavigationState(
         startRoute = VidiioRoute.Splash,
-        topLevelRoutes = setOf(VidiioRoute.Home, VidiioRoute.Search, VidiioRoute.Favorites, VidiioRoute.Downloads, VidiioRoute.Settings, VidiioRoute.Splash)
+        topLevelRoutes = setOf(VidiioRoute.Home, VidiioRoute.Search(), VidiioRoute.Favorites, VidiioRoute.Downloads, VidiioRoute.Settings, VidiioRoute.Splash)
     )
 
     val navigator = remember { Navigator(navigationState) }
@@ -51,6 +55,9 @@ fun VidiioApp() {
 
     val homeStyle by settingsRepository.homeStyleFlow
         .collectAsState(initial = com.ominix.vidiio.data.repository.HomeStyle.VIDIIO)
+
+    val themeAccent = MaterialTheme.colorScheme.primary
+    val spec = remember(homeStyle, themeAccent) { homeStyle.spec(themeAccent) }
 
     val entryProvider = entryProvider<NavKey> {
         entry<VidiioRoute.Splash> {
@@ -71,6 +78,7 @@ fun VidiioApp() {
             HomeScreen(
                 viewModel = viewModel,
                 onNavigateToDetails = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                onSearchQuery = { query -> navigator.navigate(VidiioRoute.Search(query)) },
                 onResumeWatching = { wp ->
                     navigator.navigate(VidiioRoute.Player(wp.toMovie(), wp.episodeId, null))
                 },
@@ -81,10 +89,17 @@ fun VidiioApp() {
             metadata = metadata {
                 put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
             }
-        ) {
+        ) { key ->
             val viewModel: com.ominix.vidiio.ui.viewmodel.SearchViewModel = viewModel(
+                key = "search_${key.query}",
                 factory = VidiioViewModelFactories.search(application)
             )
+            LaunchedEffect(key.query) {
+                if (key.query.isNotBlank()) {
+                    viewModel.onQueryChange(key.query)
+                    viewModel.search()
+                }
+            }
             SearchScreen(
                 viewModel = viewModel,
                 onNavigateToDetails = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
@@ -191,6 +206,23 @@ fun VidiioApp() {
         }
     }
 
+    val navItemColors = NavigationSuiteDefaults.itemColors(
+        navigationBarItemColors = NavigationBarItemDefaults.colors(
+            selectedIconColor = Color.White,
+            selectedTextColor = spec.accent,
+            indicatorColor = spec.accent.copy(alpha = 0.35f),
+            unselectedIconColor = Color.White.copy(alpha = 0.6f),
+            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+        ),
+        navigationRailItemColors = NavigationRailItemDefaults.colors(
+            selectedIconColor = Color.White,
+            selectedTextColor = spec.accent,
+            indicatorColor = spec.accent.copy(alpha = 0.35f),
+            unselectedIconColor = Color.White.copy(alpha = 0.6f),
+            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+        )
+    )
+
     NavigationSuiteScaffold(
         layoutType = layoutType,
         containerColor = MaterialTheme.colorScheme.background,
@@ -199,31 +231,36 @@ fun VidiioApp() {
                 selected = navigationState.topLevelRoute == VidiioRoute.Home,
                 onClick = { navigator.navigate(VidiioRoute.Home) },
                 icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
-                label = { Text("Home") }
+                label = { Text("Home", fontWeight = FontWeight.Bold) },
+                colors = navItemColors
             )
             item(
-                selected = navigationState.topLevelRoute == VidiioRoute.Search,
-                onClick = { navigator.navigate(VidiioRoute.Search) },
+                selected = navigationState.topLevelRoute is VidiioRoute.Search,
+                onClick = { navigator.navigate(VidiioRoute.Search()) },
                 icon = { Icon(Icons.Rounded.Search, contentDescription = "Search") },
-                label = { Text("Search") }
+                label = { Text("Search", fontWeight = FontWeight.Bold) },
+                colors = navItemColors
             )
             item(
                 selected = navigationState.topLevelRoute == VidiioRoute.Favorites,
                 onClick = { navigator.navigate(VidiioRoute.Favorites) },
                 icon = { Icon(Icons.Rounded.Favorite, contentDescription = "Favorites") },
-                label = { Text("My List") }
+                label = { Text("My List", fontWeight = FontWeight.Bold) },
+                colors = navItemColors
             )
             item(
                 selected = navigationState.topLevelRoute == VidiioRoute.Downloads,
                 onClick = { navigator.navigate(VidiioRoute.Downloads) },
                 icon = { Icon(Icons.Rounded.Download, contentDescription = "Downloads") },
-                label = { Text("Downloads") }
+                label = { Text("Downloads", fontWeight = FontWeight.Bold) },
+                colors = navItemColors
             )
             item(
                 selected = navigationState.topLevelRoute == VidiioRoute.Settings,
                 onClick = { navigator.navigate(VidiioRoute.Settings) },
                 icon = { Icon(Icons.Rounded.Settings, contentDescription = "Settings") },
-                label = { Text("Settings") }
+                label = { Text("Settings", fontWeight = FontWeight.Bold) },
+                colors = navItemColors
             )
         }
     ) {

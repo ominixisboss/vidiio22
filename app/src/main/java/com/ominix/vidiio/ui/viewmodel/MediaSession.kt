@@ -278,7 +278,7 @@ class MediaSession(
             movie.type == MovieType.TV_SHOW && episode != null -> episode.id
             else -> movie.id
         }
-        val imdb = movie.imdbId ?: movie.id.takeIf { it.startsWith("tt") }
+        val imdb = movie.imdbId ?: movie.id.takeIf { it.startsWith("tt") } ?: movieRepository.getImdbId(movie)
         val imdbId = imdb?.let { tt ->
             if (movie.type == MovieType.TV_SHOW && episode != null) {
                 "$tt:${episode.seasonNumber}:${episode.episodeNumber}"
@@ -286,8 +286,9 @@ class MediaSession(
                 tt
             }
         }
+        val seriesImdbId = imdb.takeIf { movie.type == MovieType.TV_SHOW && episode != null }
 
-        return listOfNotNull(nativeId, imdbId).distinct().flatMap { id ->
+        return listOfNotNull(nativeId, imdbId, seriesImdbId).distinct().flatMap { id ->
             try {
                 withTimeoutOrNull(SUBTITLE_TIMEOUT_MS) {
                     addonManager.getSubtitles(stremioType, id)

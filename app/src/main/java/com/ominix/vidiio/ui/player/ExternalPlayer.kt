@@ -35,6 +35,36 @@ object ExternalPlayer {
         false
     }
 
+    /** Opens Google Play Store to install VLC. */
+    fun openVlcInPlayStore(context: Context) {
+        val marketUri = Uri.parse("market://details?id=$VLC_PACKAGE")
+        val marketIntent = Intent(Intent.ACTION_VIEW, marketUri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(marketIntent)
+        } catch (e: Exception) {
+            val webUri = Uri.parse("https://play.google.com/store/apps/details?id=$VLC_PACKAGE")
+            val webIntent = Intent(Intent.ACTION_VIEW, webUri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(webIntent)
+            } catch (ex: Exception) {
+                Log.w(TAG, "Could not open Play Store for VLC", ex)
+                Toast.makeText(context, "Could not open Play Store", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Copies stream URL to system clipboard for external use. */
+    fun copyStreamUrlToClipboard(context: Context, url: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Vidiio Stream URL", url)
+        clipboard?.setPrimaryClip(clip)
+        Toast.makeText(context, "Stream URL copied to clipboard", Toast.LENGTH_SHORT).show()
+    }
+
     /**
      * Opens [url] in VLC, resuming at [positionMs] and side-loading [subtitleUrl] if given.
      *
@@ -49,40 +79,77 @@ object ExternalPlayer {
         subtitleUrl: String? = null,
         headers: Map<String, String>? = null,
     ): Boolean {
+        if (!isVlcInstalled(context)) {
+            Log.w(TAG, "VLC is not installed on this device")
+            Toast.makeText(context, "VLC Player is not installed. Opening Play Store...", Toast.LENGTH_LONG).show()
+            openVlcInPlayStore(context)
+            return false
+        }
+
+        val uri = if (url.startsWith("/")) {
+            Uri.fromFile(java.io.File(url))
+        } else {
+            Uri.parse(url)
+        }
+
+        val effectiveHeaders = buildMap {
+            put(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            )
+            headers?.let { putAll(it) }
+        }
+
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setPackage(VLC_PACKAGE)
-            // VLC keys off the MIME type; without it a URL with no file extension - which
-            // is most torrent and addon streams - opens as an unknown type.
-            setDataAndTypeAndNormalize(Uri.parse(url), "video/*")
+            setDataAndType(uri, "video/*")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-            title?.let { putExtra("title", it) }
+            title?.takeIf { it.isNotBlank() }?.let { putExtra("title", it) }
+            putExtra("sticky", true)
+
             if (positionMs > 0) {
-                // VLC reads the resume point as milliseconds, as a long.
                 putExtra("from_start", false)
                 putExtra("position", positionMs)
             } else {
                 putExtra("from_start", true)
             }
-            subtitleUrl?.let { putExtra("subtitles_location", it) }
 
-            // Scraped sources often 403 without the Referer/User-Agent they were found
-            // with. VLC accepts them as a string array of alternating key/value.
-            headers?.takeIf { it.isNotEmpty() }?.let { map ->
-                putExtra(
-                    "http-headers",
-                    map.flatMap { (k, v) -> listOf(k, v) }.toTypedArray()
-                )
+            subtitleUrl?.takeIf { it.isNotBlank() }?.let {
+                putExtra("subtitles_location", it)
+                putExtra("subtitles_encoding", "UTF-8")
             }
+
+            putExtra(
+                "http-headers",
+                effectiveHeaders.flatMap { (k, v) -> listOf(k, v) }.toTypedArray()
+            )
         }
 
         return try {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            Log.w(TAG, "Could not hand playback to VLC", e)
-            Toast.makeText(context, "Could not open VLC", Toast.LENGTH_SHORT).show()
-            false
+            Log.w(TAG, "Primary VLC intent failed, trying fallback", e)
+            val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+                setPackage(VLC_PACKAGE)
+                setData(uri)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                title?.takeIf { it.isNotBlank() }?.let { putExtra("title", it) }
+                if (positionMs > 0) {
+                    putExtra("from_start", false)
+                    putExtra("position", positionMs)
+                }
+            }
+            try {
+                context.startActivity(fallbackIntent)
+                true
+            } catch (ex: Exception) {
+                Log.e(TAG, "Could not open VLC", ex)
+                Toast.makeText(context, "Could not open VLC Player (${ex.localizedMessage})", Toast.LENGTH_SHORT).show()
+                false
+            }
         }
     }
 

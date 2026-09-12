@@ -21,7 +21,8 @@ sealed interface VidiioRoute : NavKey {
     }
 
     @Serializable
-    data object Search : VidiioRoute {
+    data class Search(val query: String = "") : VidiioRoute {
+        @kotlinx.serialization.Transient
         val icon = Icons.Rounded.Search
         val label = "Search"
     }

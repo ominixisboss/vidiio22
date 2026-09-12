@@ -38,6 +38,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
+import com.ominix.vidiio.data.repository.MediaPlayerChoice
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import com.ominix.vidiio.data.model.DownloadStatus
@@ -133,6 +134,7 @@ fun PlayerScreen(
             Context.BIND_AUTO_CREATE
         )
         onDispose {
+            playerViewModel.pause()
             torrentService?.stopStreaming()
             context.unbindService(serviceConnection)
         }
@@ -194,6 +196,9 @@ fun PlayerScreen(
                             playerViewModel.startPlayback(
                                 StreamSource(serverName = source.serverName, url = streamUrl, isM3u8 = false)
                             )
+                            if (state.mediaPlayerChoice == MediaPlayerChoice.VLC && vlcAvailable) {
+                                playerViewModel.playInVlc(context)
+                            }
                         } else {
                             playerViewModel.showError("Failed to load torrent. No peers found or timeout.")
                         }
@@ -203,7 +208,14 @@ fun PlayerScreen(
         } else if (!source.url.contains("embed")) {
             playerViewModel.setTorrentStream(false)
             playerViewModel.startPlayback(source)
+            if (state.mediaPlayerChoice == MediaPlayerChoice.VLC && vlcAvailable) {
+                playerViewModel.playInVlc(context)
+            }
         }
+    }
+
+    LaunchedEffect(vlcAvailable) {
+        playerViewModel.setVlcAvailable(vlcAvailable)
     }
 
     // Controls auto-hide during playback.
@@ -312,25 +324,24 @@ fun PlayerScreen(
                         }
                     },
                     onToggleEpisodes = { showEpisodesSidebar = !showEpisodesSidebar },
-                    onPlayExternal = if (vlcAvailable) {
-                        {
-                            // Pause first: VLC takes over audio, and coming back to a
-                            // still-running ExoPlayer would mean two players and a
-                            // watch-progress position that kept advancing unwatched.
-                            playerViewModel.pause()
-                            state.selectedSource?.let { source ->
-                                ExternalPlayer.playInVlc(
-                                    context = context,
-                                    url = source.url,
-                                    title = movie?.title,
-                                    positionMs = state.positionMs,
-                                    subtitleUrl = state.selectedSubtitleUrl,
-                                    headers = source.headers,
-                                )
+                    activePlayer = state.mediaPlayerChoice,
+                    onTogglePlayer = {
+                        if (!vlcAvailable) {
+                            ExternalPlayer.openVlcInPlayStore(context)
+                        } else {
+                            val nextChoice = if (state.mediaPlayerChoice == MediaPlayerChoice.VLC) {
+                                MediaPlayerChoice.INTERNAL
+                            } else {
+                                MediaPlayerChoice.VLC
+                            }
+                            playerViewModel.setMediaPlayerChoice(nextChoice)
+                            if (nextChoice == MediaPlayerChoice.VLC) {
+                                playerViewModel.playInVlc(context)
+                            } else {
+                                playerViewModel.setVlcActive(false)
+                                playerViewModel.play()
                             }
                         }
-                    } else {
-                        null
                     }
                 )
 
@@ -490,10 +501,27 @@ fun PlayerScreen(
                             playerViewModel.startPlayback(
                                 StreamSource(serverName = file.name, url = streamUrl, isM3u8 = false)
                             )
+                            if (state.mediaPlayerChoice == MediaPlayerChoice.VLC && vlcAvailable) {
+                                playerViewModel.playInVlc(context)
+                            }
                         } else {
                             playerViewModel.showError("Failed to load torrent. No peers found or timeout.")
                         }
                     }
+                }
+            )
+        }
+
+        if (state.isVlcActive) {
+            VlcActiveOverlay(
+                title = movie?.title ?: "Video Stream",
+                subtitle = selectedEpisode?.let { "S${it.seasonNumber}:E${it.episodeNumber} - ${it.name}" },
+                onReopenVlc = { playerViewModel.playInVlc(context) },
+                onCopyLink = { playerViewModel.copyStreamUrlToClipboard(context) },
+                onSwitchToInternal = {
+                    playerViewModel.setMediaPlayerChoice(MediaPlayerChoice.INTERNAL)
+                    playerViewModel.setVlcActive(false)
+                    playerViewModel.play()
                 }
             )
         }

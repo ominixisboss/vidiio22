@@ -8,10 +8,12 @@ import coil.imageLoader
 import com.ominix.vidiio.data.repository.AppTheme
 import com.ominix.vidiio.data.repository.ColorTheme
 import com.ominix.vidiio.data.repository.HomeStyle
+import com.ominix.vidiio.data.repository.MediaPlayerChoice
 import com.ominix.vidiio.data.repository.ProxyConfig
 import com.ominix.vidiio.data.repository.ProxyType
 import com.ominix.vidiio.data.repository.SettingsRepository
 import com.ominix.vidiio.data.repository.SubtitleStyle
+import com.ominix.vidiio.ui.player.ExternalPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,6 +30,9 @@ class SettingsViewModel(
 
     val playbackQuality: StateFlow<String> = settingsRepository.playbackQualityFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Auto")
+
+    val mediaPlayer: StateFlow<MediaPlayerChoice> = settingsRepository.mediaPlayerFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MediaPlayerChoice.INTERNAL)
 
     val theme: StateFlow<AppTheme> = settingsRepository.themeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppTheme.SYSTEM)
@@ -98,6 +103,16 @@ class SettingsViewModel(
             settingsRepository.setPlaybackQuality(quality)
         }
     }
+
+    fun setMediaPlayer(choice: MediaPlayerChoice) {
+        viewModelScope.launch {
+            settingsRepository.setMediaPlayer(choice)
+        }
+    }
+
+    fun isVlcInstalled(): Boolean = ExternalPlayer.isVlcInstalled(context)
+
+    fun openVlcInPlayStore() = ExternalPlayer.openVlcInPlayStore(context)
 
     fun setTheme(theme: AppTheme) {
         viewModelScope.launch {

@@ -3,6 +3,7 @@ package com.ominix.vidiio.ui.screens
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,7 @@ import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.model.MovieType
 import com.ominix.vidiio.ui.components.GlassCard
 import com.ominix.vidiio.ui.components.RiveAnimation
+import com.ominix.vidiio.ui.components.tvClickable
 import com.ominix.vidiio.ui.viewmodel.DownloadsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +40,7 @@ fun DownloadsScreen(
 ) {
     val downloads by viewModel.downloads.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var selectedFilter by remember { mutableStateOf("All") }
 
     val storagePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -60,7 +63,26 @@ fun DownloadsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Downloads", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Downloads", fontWeight = FontWeight.Bold)
+                        if (downloads.isNotEmpty()) {
+                            Spacer(Modifier.width(10.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "${downloads.size}",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     titleContentColor = MaterialTheme.colorScheme.onBackground
@@ -71,6 +93,16 @@ fun DownloadsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier
     ) { padding ->
+        val filteredDownloads = remember(downloads, selectedFilter) {
+            downloads.filter { task ->
+                when (selectedFilter) {
+                    "Downloading" -> task.status == DownloadStatus.DOWNLOADING || task.status == DownloadStatus.QUEUED || task.status == DownloadStatus.PAUSED
+                    "Completed" -> task.status == DownloadStatus.COMPLETED
+                    else -> true
+                }
+            }
+        }
+
         if (downloads.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -101,6 +133,7 @@ fun DownloadsScreen(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "Downloads will appear here once you start saving content for offline viewing.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -110,35 +143,67 @@ fun DownloadsScreen(
                 }
             }
         } else {
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(padding)
             ) {
-                items(downloads) { task ->
-                    DownloadItem(
-                        task = task,
-                        onPause = { viewModel.pauseDownload(task.id) },
-                        onResume = { viewModel.resumeDownload(task.id) },
-                        onCancel = { viewModel.cancelDownload(task.id) },
-                        onDelete = { viewModel.deleteDownload(task.id) },
-                        onExport = { viewModel.exportDownload(task.id) },
-                        onPlay = { 
-                            task.filePath?.let { path ->
-                                // Create a dummy movie object for the player
-                                val movie = Movie(
-                                    id = "local_${task.id}",
-                                    title = task.title,
-                                    posterUrl = "",
-                                    type = MovieType.MOVIE,
-                                    source = "local"
-                                )
-                                onPlayLocal(movie, path)
-                            }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("All", "Downloading", "Completed").forEach { filter ->
+                        val isSelected = selectedFilter == filter
+                        Surface(
+                            modifier = Modifier.tvClickable(
+                                onClick = { selectedFilter = filter },
+                                shape = RoundedCornerShape(16.dp),
+                                focusScale = 1.05f
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
+                            border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
+                        ) {
+                            Text(
+                                text = filter,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.8f),
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
                         }
-                    )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(filteredDownloads) { task ->
+                        DownloadItem(
+                            task = task,
+                            onPause = { viewModel.pauseDownload(task.id) },
+                            onResume = { viewModel.resumeDownload(task.id) },
+                            onCancel = { viewModel.cancelDownload(task.id) },
+                            onDelete = { viewModel.deleteDownload(task.id) },
+                            onExport = { viewModel.exportDownload(task.id) },
+                            onPlay = { 
+                                task.filePath?.let { path ->
+                                    val movie = Movie(
+                                        id = "local_${task.id}",
+                                        title = task.title,
+                                        posterUrl = "",
+                                        type = MovieType.MOVIE,
+                                        source = "local"
+                                    )
+                                    onPlayLocal(movie, path)
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

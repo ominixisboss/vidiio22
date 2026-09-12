@@ -38,6 +38,11 @@ enum class HomeStyle {
     VIDIIO, NETFLIX, HULU, PRIME, DISNEY
 }
 
+/** Preferred media player engine. Internal uses ExoPlayer; VLC uses external VLC app. */
+enum class MediaPlayerChoice {
+    INTERNAL, VLC
+}
+
 enum class ProxyType { SOCKS5, HTTP }
 
 /** Outline style drawn around subtitle glyphs, for legibility over bright video. */
@@ -78,6 +83,7 @@ class SettingsRepository(private val context: Context) {
 
     private object PreferencesKeys {
         val PLAYBACK_QUALITY = stringPreferencesKey("playback_quality")
+        val MEDIA_PLAYER = stringPreferencesKey("media_player")
         val THEME = stringPreferencesKey("theme")
         val COLOR_THEME = stringPreferencesKey("color_theme")
         val HOME_STYLE = stringPreferencesKey("home_style")
@@ -103,6 +109,17 @@ class SettingsRepository(private val context: Context) {
 
     val playbackQualityFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[PreferencesKeys.PLAYBACK_QUALITY] ?: "Auto"
+    }
+
+    val mediaPlayerFlow: Flow<MediaPlayerChoice> = context.dataStore.data.map { preferences ->
+        val raw = preferences[PreferencesKeys.MEDIA_PLAYER] ?: MediaPlayerChoice.INTERNAL.name
+        try {
+            MediaPlayerChoice.valueOf(raw)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "SettingsRepository failed to parse media player choice", e)
+            MediaPlayerChoice.INTERNAL
+        }
     }
 
     val themeFlow: Flow<AppTheme> = context.dataStore.data.map { preferences ->
@@ -156,6 +173,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setPlaybackQuality(quality: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.PLAYBACK_QUALITY] = quality
+        }
+    }
+
+    suspend fun setMediaPlayer(choice: MediaPlayerChoice) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MEDIA_PLAYER] = choice.name
         }
     }
 

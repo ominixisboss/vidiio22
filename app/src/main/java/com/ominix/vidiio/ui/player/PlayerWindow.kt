@@ -24,6 +24,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ominix.vidiio.MainActivity
 
 /**
@@ -99,21 +102,16 @@ fun PlayerWindowEffects(notchSafe: Boolean, showControls: Boolean) {
 }
 
 /**
- * Runs [onScreenOff] when the device screen is turned off.
- *
- * The player holds FLAG_KEEP_SCREEN_ON, so the screen only goes off because the user
- * pressed the power button - which is a clear "stop" that the player was ignoring,
- * leaving audio playing in a pocket.
- *
- * Deliberately a screen-off broadcast rather than a lifecycle observer: ON_PAUSE also
- * fires for permission dialogs and other transient windows, which should not stop
- * playback.
+ * Runs [onScreenOff] when the device screen is turned off or when the user leaves the app
+ * (home button, app switcher, opening another app, screen lock/timeout).
  */
 @Composable
 fun PauseOnScreenOff(onScreenOff: () -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnScreenOff by rememberUpdatedState(onScreenOff)
 
+    // 1. Screen off receiver (power button / screen lock / timeout)
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -127,6 +125,19 @@ fun PauseOnScreenOff(onScreenOff: () -> Unit) {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         onDispose { runCatching { context.unregisterReceiver(receiver) } }
+    }
+
+    // 2. Lifecycle observer: ON_STOP / ON_PAUSE fire when leaving the app or backgrounding
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP || event == Lifecycle.Event.ON_PAUSE) {
+                currentOnScreenOff()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 }
 

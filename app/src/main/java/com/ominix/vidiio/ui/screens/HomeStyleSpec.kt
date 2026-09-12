@@ -37,6 +37,7 @@ enum class HeroKind {
 enum class CardKind { PORTRAIT, LANDSCAPE }
 
 data class HomeStyleSpec(
+    val style: HomeStyle,
     val label: String,
     val accent: Color,
     /** null → use the app theme background. */
@@ -112,6 +113,7 @@ fun HomeStyle.detailTransition(): ContentTransform = when (this) {
  */
 fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
     HomeStyle.VIDIIO -> HomeStyleSpec(
+        style = this,
         label = "Vidiio",
         accent = defaultAccent,
         background = null,
@@ -131,6 +133,7 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         cardPressScale = 0.95f
     )
     HomeStyle.NETFLIX -> HomeStyleSpec(
+        style = this,
         label = "Netflix",
         accent = Color(0xFFE50914),
         background = Color(0xFF141414),
@@ -151,6 +154,7 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         cardPressScale = 0.93f
     )
     HomeStyle.HULU -> HomeStyleSpec(
+        style = this,
         label = "Hulu",
         accent = Color(0xFF1CE783),
         background = Color(0xFF0B0C0F),
@@ -170,6 +174,7 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         cardPressScale = 1f
     )
     HomeStyle.PRIME -> HomeStyleSpec(
+        style = this,
         label = "Prime",
         accent = Color(0xFF00A8E1),
         background = Color(0xFF0F171E),
@@ -189,6 +194,7 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         cardPressScale = 0.96f
     )
     HomeStyle.DISNEY -> HomeStyleSpec(
+        style = this,
         label = "Disney+",
         accent = Color(0xFF0063E5),
         background = Color(0xFF1A1D29),

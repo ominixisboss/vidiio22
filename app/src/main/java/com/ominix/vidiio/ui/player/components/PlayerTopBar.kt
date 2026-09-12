@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ominix.vidiio.data.repository.MediaPlayerChoice
 
 @Composable
 fun PlayerTopBar(
@@ -30,7 +31,11 @@ fun PlayerTopBar(
     onBack: () -> Unit,
     onDownload: (() -> Unit)?,
     onToggleEpisodes: (() -> Unit)?,
-    /** Shown only when an external player is available to hand off to. */
+    /** Active player choice (INTERNAL or VLC). */
+    activePlayer: MediaPlayerChoice = MediaPlayerChoice.INTERNAL,
+    /** Toggles or selects media player engine. */
+    onTogglePlayer: (() -> Unit)? = null,
+    /** Legacy external player launch. */
     onPlayExternal: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -104,7 +109,27 @@ fun PlayerTopBar(
                 Spacer(modifier = Modifier.width(12.dp))
             }
 
-            if (onPlayExternal != null) {
+            if (onTogglePlayer != null) {
+                Surface(
+                    onClick = onTogglePlayer,
+                    color = if (activePlayer == MediaPlayerChoice.VLC) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = IconButtonDefaults.outlinedIconButtonBorder(true)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (activePlayer == MediaPlayerChoice.VLC) "VLC PLAYER" else "INTERNAL",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+            } else if (onPlayExternal != null) {
                 IconButton(
                     onClick = onPlayExternal,
                     colors = IconButtonDefaults.iconButtonColors(

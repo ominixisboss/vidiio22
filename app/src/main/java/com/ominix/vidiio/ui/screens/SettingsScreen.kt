@@ -30,10 +30,10 @@ import com.ominix.vidiio.data.repository.SubtitleStyle
 import com.ominix.vidiio.data.repository.AppTheme
 import com.ominix.vidiio.data.repository.ColorTheme
 import com.ominix.vidiio.data.repository.HomeStyle
+import com.ominix.vidiio.data.repository.MediaPlayerChoice
 import com.ominix.vidiio.ui.theme.*
 import com.ominix.vidiio.ui.components.GlassCard
 import com.ominix.vidiio.ui.viewmodel.SettingsViewModel
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,9 +43,10 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val playbackQuality by viewModel.playbackQuality.collectAsState()
+    val mediaPlayer by viewModel.mediaPlayer.collectAsState()
+    val isVlcInstalled = remember { viewModel.isVlcInstalled() }
     val theme by viewModel.theme.collectAsState()
     val colorTheme by viewModel.colorTheme.collectAsState()
-    val dynamicColorEnabled by viewModel.dynamicColorEnabled.collectAsState()
     val homeStyle by viewModel.homeStyle.collectAsState()
     val avoidCameraCutout by viewModel.avoidCameraCutout.collectAsState()
     val selectedSources by viewModel.selectedSources.collectAsState()
@@ -162,6 +163,22 @@ fun SettingsScreen(
             item {
                 GlassCard {
                     Column {
+                        PreferenceItem(
+                            title = "Preferred Media Player",
+                            summary = when (mediaPlayer) {
+                                MediaPlayerChoice.INTERNAL -> "Internal Player (ExoPlayer)"
+                                MediaPlayerChoice.VLC -> if (isVlcInstalled) "VLC Media Player" else "VLC Media Player (Not Installed)"
+                            },
+                            icon = Icons.Rounded.Tv,
+                            onClick = {}
+                        )
+                        MediaPlayerSelectionRow(
+                            currentChoice = mediaPlayer,
+                            isVlcInstalled = isVlcInstalled,
+                            onChoiceSelected = { choice -> viewModel.setMediaPlayer(choice) },
+                            onInstallVlc = { viewModel.openVlcInPlayStore() }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         PreferenceItem(
                             title = "Default Quality",
                             summary = playbackQuality,
@@ -774,13 +791,78 @@ fun ThemeSelectionRow(
                 border = if (isSelected) null else BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
             ) {
                 Text(
-                    text = theme.name.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
+                    text = theme.name.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
                     modifier = Modifier.padding(vertical = 8.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun MediaPlayerSelectionRow(
+    currentChoice: MediaPlayerChoice,
+    isVlcInstalled: Boolean,
+    onChoiceSelected: (MediaPlayerChoice) -> Unit,
+    onInstallVlc: () -> Unit
+) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val options = listOf(
+                MediaPlayerChoice.INTERNAL to "Internal (ExoPlayer)",
+                MediaPlayerChoice.VLC to "VLC Player"
+            )
+            options.forEach { (choice, label) ->
+                val isSelected = currentChoice == choice
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onChoiceSelected(choice) },
+                    shape = RoundedCornerShape(24.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                    border = if (isSelected) null else BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
+                ) {
+                    Text(
+                        text = label,
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        if (currentChoice == MediaPlayerChoice.VLC && !isVlcInstalled) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.error)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "VLC app is not installed on this device",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    TextButton(onClick = onInstallVlc) {
+                        Text("Install VLC", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

@@ -228,10 +228,10 @@ val torrServerAssets = mapOf(
 )
 // sha256 of each raw release asset for torrServerVersion (empty => integrity check skipped).
 val torrServerSha256 = mapOf(
-    "TorrServer-android-arm64" to "bb7e9b4d0dc894f8da3e32496e7487be93b8f8b04ada549396a7ab4dc85ea63b",
-    "TorrServer-android-arm7" to "dd6c9dcfa11a450bff6ebaa8992b1823c32e3b9417657f93c8852271ded3949e",
-    "TorrServer-android-amd64" to "58f3152471d01a86454b74f49029e62cdc2b3844451151d950cb40130a81ccb3",
-    "TorrServer-android-386" to "70373fd25e9aaa42d8904e296bb8dca24c2037afebd4d8771a1bc1f2bfdc47c9",
+    "TorrServer-android-arm64" to "fe5418b53ec9dfc1b9b0e5428ebf62fce0e277034dd4ab037bfcceafaf76903d",
+    "TorrServer-android-arm7" to "5bee8786fab5c30ac9db20ef5c9d3236ab2fdb181564ea97a351b7c02b7ca2c6",
+    "TorrServer-android-amd64" to "d59181dcf623ebc74e7f0ee3ad4f9f287b3849997d35500aa661ebff2e091e5a",
+    "TorrServer-android-386" to "2782c91fca27fd4fb7daa3816b222e623bef07d6fd8d6b1da0a0ed66eb23d833",
 )
 
 val downloadTorrServer = tasks.register("downloadTorrServer") {

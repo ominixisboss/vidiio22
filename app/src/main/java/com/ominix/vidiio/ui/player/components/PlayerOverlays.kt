@@ -227,3 +227,103 @@ fun AutoNextOverlay(
         }
     }
 }
+
+@Composable
+fun VlcActiveOverlay(
+    title: String,
+    subtitle: String?,
+    onReopenVlc: () -> Unit,
+    onSwitchToInternal: () -> Unit,
+    onCopyLink: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.88f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                shape = CircleShape,
+                modifier = Modifier.size(72.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.Tv,
+                        contentDescription = "VLC Player",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = "Playing in VLC Media Player",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.9f),
+                fontWeight = FontWeight.Medium
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+            }
+            Spacer(modifier = Modifier.height(28.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.widthIn(max = 300.dp)
+            ) {
+                Button(
+                    onClick = onReopenVlc,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open VLC", fontWeight = FontWeight.Bold)
+                }
+
+                if (onCopyLink != null) {
+                    OutlinedButton(
+                        onClick = onCopyLink,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Copy Stream Link", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = onSwitchToInternal,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Text("Use Internal Player", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}

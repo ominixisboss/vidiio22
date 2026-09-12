@@ -27,6 +27,7 @@ import com.ominix.vidiio.data.model.DownloadStatus
 import com.ominix.vidiio.data.model.Episode
 import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.repository.DownloadRepository
+import com.ominix.vidiio.data.repository.MediaPlayerChoice
 import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.SettingsRepository
 import com.ominix.vidiio.data.repository.SubtitleEdge
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Everything PlayerScreen renders. One object so the screen has a single subscription. */
+@UnstableApi
 data class PlayerUiState(
     val selectedSource: StreamSource? = null,
     val isPlaying: Boolean = false,
@@ -80,6 +82,10 @@ data class PlayerUiState(
     val torrentFiles: List<TorrentFileInfo>? = null,
     val showTorrentFileSheet: Boolean = false,
     val pickedTorrentFileIndex: Int? = null,
+
+    val mediaPlayerChoice: MediaPlayerChoice = MediaPlayerChoice.INTERNAL,
+    val isVlcAvailable: Boolean = false,
+    val isVlcActive: Boolean = false,
 ) {
     val isEmbed: Boolean
         get() = selectedSource?.url?.let { it.contains("embed") || it.contains("vidsrc") } == true
@@ -148,6 +154,14 @@ class PlayerViewModel(
 
     private val _state = MutableStateFlow(PlayerUiState())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.mediaPlayerFlow.collect { choice ->
+                _state.update { it.copy(mediaPlayerChoice = choice) }
+            }
+        }
+    }
 
     /** Resume point from Continue Watching. Applied once, when the media is ready. */
     private var resumePositionMs: Long = 0L
@@ -230,16 +244,20 @@ class PlayerViewModel(
     val player: ExoPlayer = run {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                60000, // minBufferMs
+                50000, // minBufferMs
                 120000, // maxBufferMs
-                10000, // bufferForPlaybackMs
-                15000 // bufferForPlaybackAfterRebufferMs
+                2500, // bufferForPlaybackMs (Fast start!)
+                5000 // bufferForPlaybackAfterRebufferMs
             )
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
         val builder = ExoPlayer.Builder(application)
             .setLoadControl(loadControl)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
 
         if ((application as VidiioApplication).assNativeStyling) {
             // buildWithAssSupport installs a libass-backed ASS/SSA subtitle renderer
@@ -362,9 +380,56 @@ class PlayerViewModel(
     fun selectSource(source: StreamSource) {
         // A new source is a new torrent session: forget the picked file and retry count.
         _state.update {
-            it.copy(selectedSource = source, pickedTorrentFileIndex = null)
+            it.copy(selectedSource = source, pickedTorrentFileIndex = null, isVlcActive = false)
         }
         torrentPrepareRetries = 0
+    }
+
+    fun setMediaPlayerChoice(choice: MediaPlayerChoice) {
+        viewModelScope.launch {
+            settingsRepository.setMediaPlayer(choice)
+        }
+    }
+
+    fun setVlcAvailable(available: Boolean) {
+        _state.update { it.copy(isVlcAvailable = available) }
+    }
+
+    fun setVlcActive(active: Boolean) {
+        _state.update { it.copy(isVlcActive = active) }
+    }
+
+    fun playInVlc(context: android.content.Context) {
+        val source = state.value.selectedSource ?: return
+        if (source.url.startsWith("magnet:")) {
+            android.widget.Toast.makeText(context, "Preparing torrent stream for VLC...", android.widget.Toast.LENGTH_SHORT).show()
+            _state.update { it.copy(isVlcActive = true) }
+            return
+        }
+        pause()
+        session.saveWatchProgress(state.value.positionMs, state.value.durationMs)
+
+        val launched = ExternalPlayer.playInVlc(
+            context = context,
+            url = source.url,
+            title = movie.value?.title,
+            positionMs = state.value.positionMs,
+            subtitleUrl = state.value.selectedSubtitleUrl,
+            headers = source.headers,
+        )
+
+        if (launched) {
+            _state.update { it.copy(isVlcActive = true) }
+        } else {
+            _state.update { it.copy(isVlcActive = false) }
+            play()
+        }
+    }
+
+    fun copyStreamUrlToClipboard(context: android.content.Context) {
+        state.value.selectedSource?.url?.let { url ->
+            ExternalPlayer.copyStreamUrlToClipboard(context, url)
+        }
     }
 
     /** Starts playback of a directly playable URL. */
@@ -396,9 +461,12 @@ class PlayerViewModel(
 
     // ── Transport ────────────────────────────────────────────────────────────
 
-    fun togglePlayPause() = if (player.isPlaying) player.pause() else player.play()
+    fun togglePlayPause() = if (player.isPlaying) pause() else play()
     fun play() = player.play()
-    fun pause() = player.pause()
+    fun pause() {
+        player.pause()
+        runCatching { session.saveWatchProgress(player.currentPosition, player.duration) }
+    }
     fun seekTo(positionMs: Long) = player.seekTo(positionMs)
 
     fun seekBy(deltaMs: Long) {

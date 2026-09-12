@@ -79,13 +79,16 @@ class AddonManager(
                         .orEmpty()
                         .mapNotNull { sub ->
                             val url = sub.url ?: return@mapNotNull null
+                            val subId = sub.id ?: url.substringAfterLast('/')
+                            val trackLabel = when {
+                                sub.id != null && sub.id.length > 3 && !sub.id.all { it.isDigit() } -> sub.id
+                                else -> addon.manifest.name
+                            }
                             SubtitleTrack(
-                                id = "stremio:${addon.manifest.id}:${sub.id ?: url}",
+                                id = "stremio:${addon.manifest.id}:${subId}",
                                 url = url,
                                 language = sub.lang.orEmpty(),
-                                // Addons rarely give a release name; the id is usually the
-                                // most identifying thing available.
-                                label = sub.id ?: addon.manifest.name,
+                                label = trackLabel,
                                 source = addon.manifest.name,
                             )
                         }
