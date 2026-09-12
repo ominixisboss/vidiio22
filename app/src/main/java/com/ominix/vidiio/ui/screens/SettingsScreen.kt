@@ -24,12 +24,15 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import com.ominix.vidiio.BuildConfig
 import com.ominix.vidiio.data.repository.AppTheme
 import com.ominix.vidiio.data.repository.ColorTheme
@@ -598,6 +601,15 @@ fun ExpandableSettingsSection(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(24.dp)
+    val contentFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            delay(120)
+            runCatching { contentFocusRequester.requestFocus() }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -657,7 +669,7 @@ fun ExpandableSettingsSection(
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically()
                 ) {
-                    Column {
+                    Column(modifier = Modifier.focusRequester(contentFocusRequester)) {
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)

@@ -1,5 +1,6 @@
 package com.ominix.vidiio.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
@@ -44,9 +45,13 @@ fun Modifier.tvClickable(
         },
         label = "tvScale"
     )
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) Color.White else Color.Transparent,
+        label = "tvBorderColor"
+    )
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
+        .border(3.dp, borderColor, shape)
         .clip(shape)
         .combinedClickable(
             interactionSource = interaction,

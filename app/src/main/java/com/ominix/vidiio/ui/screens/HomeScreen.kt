@@ -838,12 +838,8 @@ fun HomeCard(
             modifier = Modifier
                 .width(spec.cardWidth)
                 .height(spec.cardHeight)
-                .graphicsLayer {
-                    alpha = appear
-                    translationY = (1f - appear) * 28.dp.toPx()
-                }
+                .graphicsLayer { alpha = appear }
                 .tvClickable(onClick = onClick, shape = shape, focusScale = 1.08f)
-                .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape)
         ) {
             AsyncImage(
                 model = if (spec.card == CardKind.LANDSCAPE) (movie.backdropUrl ?: movie.posterUrl) else movie.posterUrl,
