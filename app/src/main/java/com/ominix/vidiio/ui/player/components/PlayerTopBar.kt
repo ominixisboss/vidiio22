@@ -2,6 +2,7 @@ package com.ominix.vidiio.ui.player.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ominix.vidiio.data.repository.MediaPlayerChoice
+import com.ominix.vidiio.ui.components.tvClickable
 
 @Composable
 fun PlayerTopBar(
@@ -57,14 +59,22 @@ fun PlayerTopBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
-            IconButton(
-                onClick = onBack,
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.White.copy(alpha = 0.1f),
-                    contentColor = Color.White
+            Box(
+                modifier = Modifier.tvClickable(
+                    onClick = onBack,
+                    shape = CircleShape,
+                    focusScale = 1.15f
                 )
             ) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                IconButton(
+                    onClick = onBack,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.1f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                }
             }
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -110,66 +120,98 @@ fun PlayerTopBar(
             }
 
             if (onTogglePlayer != null) {
-                Surface(
-                    onClick = onTogglePlayer,
-                    color = if (activePlayer == MediaPlayerChoice.VLC) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = IconButtonDefaults.outlinedIconButtonBorder(true)
+                val playerShape = RoundedCornerShape(8.dp)
+                Box(
+                    modifier = Modifier.tvClickable(
+                        onClick = onTogglePlayer,
+                        shape = playerShape,
+                        focusScale = 1.08f
+                    )
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        color = if (activePlayer == MediaPlayerChoice.VLC) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.15f),
+                        shape = playerShape,
+                        border = IconButtonDefaults.outlinedIconButtonBorder(true)
                     ) {
-                        Text(
-                            text = if (activePlayer == MediaPlayerChoice.VLC) "VLC PLAYER" else "INTERNAL",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (activePlayer == MediaPlayerChoice.VLC) "VLC PLAYER" else "INTERNAL",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
             } else if (onPlayExternal != null) {
-                IconButton(
-                    onClick = onPlayExternal,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color.White.copy(alpha = 0.1f),
-                        contentColor = Color.White
+                Box(
+                    modifier = Modifier.tvClickable(
+                        onClick = onPlayExternal,
+                        shape = CircleShape,
+                        focusScale = 1.15f
                     )
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.OpenInNew,
-                        contentDescription = "Play in VLC"
-                    )
+                    IconButton(
+                        onClick = onPlayExternal,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.White.copy(alpha = 0.1f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = "Play in VLC"
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
             }
 
             if (onDownload != null) {
-                IconButton(
-                    onClick = onDownload,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = if (isDownloading) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
-                        contentColor = if (isDownloading) MaterialTheme.colorScheme.primary else Color.White
+                Box(
+                    modifier = Modifier.tvClickable(
+                        onClick = onDownload,
+                        shape = CircleShape,
+                        focusScale = 1.15f
                     )
                 ) {
-                    Icon(
-                        if (isDownloading) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
-                        contentDescription = "Download"
-                    )
+                    IconButton(
+                        onClick = onDownload,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = if (isDownloading) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
+                            contentColor = if (isDownloading) MaterialTheme.colorScheme.primary else Color.White
+                        )
+                    ) {
+                        Icon(
+                            if (isDownloading) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
+                            contentDescription = "Download"
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
             }
 
             if (onToggleEpisodes != null) {
-                IconButton(
-                    onClick = onToggleEpisodes,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = if (isEpisodesActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
-                        contentColor = if (isEpisodesActive) MaterialTheme.colorScheme.primary else Color.White
+                Box(
+                    modifier = Modifier.tvClickable(
+                        onClick = onToggleEpisodes,
+                        shape = CircleShape,
+                        focusScale = 1.15f
                     )
                 ) {
-                    Icon(Icons.Rounded.PlaylistPlay, contentDescription = "Episodes")
+                    IconButton(
+                        onClick = onToggleEpisodes,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = if (isEpisodesActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
+                            contentColor = if (isEpisodesActive) MaterialTheme.colorScheme.primary else Color.White
+                        )
+                    ) {
+                        Icon(Icons.Rounded.PlaylistPlay, contentDescription = "Episodes")
+                    }
                 }
             }
         }

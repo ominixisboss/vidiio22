@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.ominix.vidiio.ui.components.tvClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -72,7 +74,7 @@ fun SubtitleMenu(
                         headlineContent = { Text("Off") },
                         supportingContent = { Text("Hide all subtitles, including the video's own") },
                         leadingContent = { RadioButton(selected = !subtitlesEnabled, onClick = null) },
-                        modifier = Modifier.clickable { onDisable(); onDismiss() }
+                        modifier = Modifier.tvClickable(onClick = { onDisable(); onDismiss() }, shape = RoundedCornerShape(8.dp))
                     )
                 }
                 item {
@@ -82,7 +84,7 @@ fun SubtitleMenu(
                         leadingContent = {
                             RadioButton(selected = subtitlesEnabled && selectedUrl == null, onClick = null)
                         },
-                        modifier = Modifier.clickable { onUseEmbedded(); onDismiss() }
+                        modifier = Modifier.tvClickable(onClick = { onUseEmbedded(); onDismiss() }, shape = RoundedCornerShape(8.dp))
                     )
                 }
                 if (subtitles.isEmpty()) {
@@ -101,11 +103,6 @@ fun SubtitleMenu(
 
                 // Grouped by provider so it is obvious where each subtitle came from, and
                 // so two providers offering the same film are told apart.
-                //
-                // Collapsed by default: a provider can return a hundred tracks for one
-                // film, which buries every other provider and the Off/embedded rows above
-                // them. The header carries the count so a collapsed group still tells you
-                // whether it is worth opening.
                 grouped.forEach { (source, tracks) ->
                     val expanded = expandedSources.contains(source)
                     item(key = "header-$source") {
@@ -113,10 +110,13 @@ fun SubtitleMenu(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    if (expanded) expandedSources.remove(source)
-                                    else expandedSources.add(source)
-                                }
+                                .tvClickable(
+                                    onClick = {
+                                        if (expanded) expandedSources.remove(source)
+                                        else expandedSources.add(source)
+                                    },
+                                    shape = RoundedCornerShape(8.dp)
+                                )
                                 .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)
                         ) {
                             Text(
@@ -151,7 +151,7 @@ fun SubtitleMenu(
                                         onClick = null
                                     )
                                 },
-                                modifier = Modifier.clickable { onSubtitleSelect(sub); onDismiss() }
+                                modifier = Modifier.tvClickable(onClick = { onSubtitleSelect(sub); onDismiss() }, shape = RoundedCornerShape(8.dp))
                             )
                         }
                     }
@@ -180,7 +180,7 @@ fun AudioMenu(
                         headlineContent = { Text(track.name) },
                         supportingContent = { Text("${track.format.sampleMimeType} • ${track.format.channelCount}ch") },
                         leadingContent = { RadioButton(selected = track == selectedTrack, onClick = null) },
-                        modifier = Modifier.clickable { onTrackSelect(track); onDismiss() }
+                        modifier = Modifier.tvClickable(onClick = { onTrackSelect(track); onDismiss() }, shape = RoundedCornerShape(8.dp))
                     )
                 }
             }
@@ -206,7 +206,7 @@ fun SpeedMenu(
                     ListItem(
                         headlineContent = { Text("${speed}x") },
                         leadingContent = { RadioButton(selected = speed == currentSpeed, onClick = null) },
-                        modifier = Modifier.clickable { onSpeedSelect(speed); onDismiss() }
+                        modifier = Modifier.tvClickable(onClick = { onSpeedSelect(speed); onDismiss() }, shape = RoundedCornerShape(8.dp))
                     )
                 }
             }
@@ -254,7 +254,7 @@ fun AspectMenu(
                 ListItem(
                     headlineContent = { Text(label) },
                     leadingContent = { RadioButton(selected = mode == currentMode, onClick = null) },
-                    modifier = Modifier.clickable { onModeSelect(mode); onDismiss() }
+                    modifier = Modifier.tvClickable(onClick = { onModeSelect(mode); onDismiss() }, shape = RoundedCornerShape(8.dp))
                 )
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }

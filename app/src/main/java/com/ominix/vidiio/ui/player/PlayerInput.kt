@@ -28,22 +28,40 @@ fun Modifier.playerRemoteControls(
 ): Modifier = onPreviewKeyEvent { event ->
     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
     when (event.key) {
-        Key.DirectionCenter, Key.Enter, Key.MediaPlayPause -> {
+        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
             viewModel.togglePlayPause()
             onShowControls(); true
         }
 
-        Key.DirectionLeft, Key.MediaRewind -> {
+        Key.MediaRewind -> {
             viewModel.seekBy(-SEEK_STEP_MS)
             onShowControls(); true
         }
 
-        Key.DirectionRight, Key.MediaFastForward -> {
+        Key.MediaFastForward -> {
             viewModel.seekBy(SEEK_STEP_MS)
             onShowControls(); true
         }
 
-        Key.DirectionUp, Key.DirectionDown -> {
+        Key.DirectionLeft -> {
+            if (!controlsVisible) {
+                viewModel.seekBy(-SEEK_STEP_MS)
+                onShowControls(); true
+            } else {
+                false
+            }
+        }
+
+        Key.DirectionRight -> {
+            if (!controlsVisible) {
+                viewModel.seekBy(SEEK_STEP_MS)
+                onShowControls(); true
+            } else {
+                false
+            }
+        }
+
+        Key.DirectionUp, Key.DirectionDown, Key.Menu -> {
             // Reveal the transport so the remote can move onto its buttons.
             if (!controlsVisible) {
                 onShowControls(); true

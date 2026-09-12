@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -107,6 +108,20 @@ fun PlayerScreen(
     LaunchedEffect(initialSource) { initialSource?.let(playerViewModel::selectSource) }
 
     PlayerWindowEffects(notchSafe = state.notchSafe, showControls = showControls)
+
+    // Fire TV remote / D-Pad back button handling
+    BackHandler {
+        when {
+            showSubtitleMenu -> showSubtitleMenu = false
+            showAudioMenu -> showAudioMenu = false
+            showSpeedMenu -> showSpeedMenu = false
+            showAspectMenu -> showAspectMenu = false
+            showEpisodesSidebar -> showEpisodesSidebar = false
+            state.showTorrentFileSheet -> playerViewModel.dismissTorrentFilePicker()
+            showControls -> showControls = false
+            else -> onBack()
+        }
+    }
 
     // Power button means stop, not "keep playing in my pocket".
     PauseOnScreenOff { playerViewModel.pause() }

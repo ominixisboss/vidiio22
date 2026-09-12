@@ -20,6 +20,7 @@ local.properties
 /app/src/main/jniLibs/
 
 # Build outputs — publish these as GitHub Releases, not git objects.
+/release/
 /app/release/
 /app/*/release/
 

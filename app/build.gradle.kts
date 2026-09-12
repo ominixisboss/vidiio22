@@ -102,7 +102,7 @@ android {
             }
             isShrinkResources = true
 
-            signingConfig = signingConfigs.findByName("release")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
 
         debug {
@@ -241,7 +241,7 @@ val downloadTorrServer = tasks.register("downloadTorrServer") {
     val jniDir = layout.projectDirectory.dir("src/main/jniLibs").asFile
     val versionMarker = File(jniDir, ".torrserver-version")
     val wantedAbis = ((project.findProperty("torrserver.abis") as String?)
-        ?: "arm64-v8a,armeabi-v7a")
+        ?: "arm64-v8a,armeabi-v7a,x86,x86_64")
         .split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
     // Everything the execution-time lambdas below touch must be captured here, at

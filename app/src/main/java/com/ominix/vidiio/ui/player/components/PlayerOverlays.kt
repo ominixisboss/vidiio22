@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ominix.vidiio.ui.components.tvClickable
 import kotlinx.coroutines.delay
 
 @Composable
@@ -133,13 +134,15 @@ fun SkipButton(
     onSkip: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val shape = RoundedCornerShape(16.dp)
     Surface(
-        onClick = onSkip,
-        shape = RoundedCornerShape(16.dp),
+        shape = shape,
         color = Color.White.copy(alpha = 0.15f),
         contentColor = Color.White,
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-        modifier = Modifier.padding(16.dp)
+        modifier = Modifier
+            .padding(16.dp)
+            .tvClickable(onClick = onSkip, shape = shape, focusScale = 1.08f)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),

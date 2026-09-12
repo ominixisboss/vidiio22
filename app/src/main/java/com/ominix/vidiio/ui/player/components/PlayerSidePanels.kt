@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.ominix.vidiio.ui.components.tvClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -117,7 +118,7 @@ fun EpisodeItem(
                 }
             }
         },
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.tvClickable(onClick = onClick, shape = RoundedCornerShape(8.dp)),
         colors = ListItemDefaults.colors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent
         )
@@ -149,7 +150,7 @@ fun SourcesPanel(
                             Text("${source.sourceName} • ${info.joinToString(" • ")}") 
                         },
                         leadingContent = { RadioButton(selected = source == selectedSource, onClick = null) },
-                        modifier = Modifier.clickable { onSourceSelect(source); onDismiss() }
+                        modifier = Modifier.tvClickable(onClick = { onSourceSelect(source); onDismiss() }, shape = RoundedCornerShape(8.dp))
                     )
                 }
             }

@@ -49,6 +49,9 @@ class SettingsViewModel(
     val avoidCameraCutout: StateFlow<Boolean> = settingsRepository.avoidCameraCutoutFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val mouseToggle: StateFlow<Boolean> = settingsRepository.mouseToggleFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     val proxyEnabled: StateFlow<Boolean> = settingsRepository.proxyEnabledFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val proxyType: StateFlow<ProxyType> = settingsRepository.proxyTypeFlow
@@ -149,6 +152,12 @@ class SettingsViewModel(
     fun setAvoidCameraCutout(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAvoidCameraCutout(enabled)
+        }
+    }
+
+    fun setMouseToggle(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setMouseToggle(enabled)
         }
     }
 

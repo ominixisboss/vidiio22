@@ -99,6 +99,7 @@ class SettingsRepository(private val context: Context) {
         val SUBTITLE_EDGE = stringPreferencesKey("subtitle_edge")
         val DYNAMIC_THEME_MIGRATED = booleanPreferencesKey("dynamic_theme_migrated")
         val ASS_NATIVE_STYLING = booleanPreferencesKey("ass_native_styling")
+        val MOUSE_TOGGLE = booleanPreferencesKey("mouse_toggle")
         val PROXY_ENABLED = booleanPreferencesKey("proxy_enabled")
         val PROXY_TYPE = stringPreferencesKey("proxy_type")
         val PROXY_HOST = stringPreferencesKey("proxy_host")
@@ -156,6 +157,16 @@ class SettingsRepository(private val context: Context) {
     /** When true, the video player is inset so the front-camera cutout never covers the picture. */
     val avoidCameraCutoutFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[PreferencesKeys.AVOID_CAMERA_CUTOUT] ?: false
+    }
+
+    val mouseToggleFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.MOUSE_TOGGLE] ?: false
+    }
+
+    suspend fun setMouseToggle(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MOUSE_TOGGLE] = enabled
+        }
     }
 
     val sourcesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->

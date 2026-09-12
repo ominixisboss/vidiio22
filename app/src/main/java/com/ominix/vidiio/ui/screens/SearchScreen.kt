@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -43,6 +44,7 @@ fun SearchScreen(
     val uiState by viewModel.uiState.collectAsState()
     val query by viewModel.query.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") }
+    var isSearchFocused by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
@@ -59,7 +61,12 @@ fun SearchScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(end = 16.dp)
-                            .border(0.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
+                            .onFocusChanged { isSearchFocused = it.isFocused }
+                            .border(
+                                width = if (isSearchFocused) 2.dp else 0.5.dp,
+                                color = if (isSearchFocused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(24.dp)
+                            ),
                         placeholder = { Text("Search movies, shows...") },
                         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                         trailingIcon = {

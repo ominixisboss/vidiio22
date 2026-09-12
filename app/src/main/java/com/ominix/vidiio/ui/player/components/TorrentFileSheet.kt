@@ -1,9 +1,9 @@
 package com.ominix.vidiio.ui.player.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material3.*
@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ominix.vidiio.torrent.TorrentFileInfo
+import com.ominix.vidiio.ui.components.tvClickable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,7 +31,7 @@ fun TorrentFileSheet(
                         headlineContent = { Text(file.name) },
                         supportingContent = { Text("%.2f MB".format(file.size / (1024.0 * 1024.0))) },
                         leadingContent = { Icon(Icons.Rounded.Description, contentDescription = null) },
-                        modifier = Modifier.clickable { onFileSelect(file) }
+                        modifier = Modifier.tvClickable(onClick = { onFileSelect(file) }, shape = RoundedCornerShape(8.dp))
                     )
                 }
             }
