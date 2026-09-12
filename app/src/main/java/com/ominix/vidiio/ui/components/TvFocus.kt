@@ -2,6 +2,7 @@ package com.ominix.vidiio.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -31,7 +32,7 @@ fun Modifier.tvClickable(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     shape: Shape = RoundedCornerShape(12.dp),
-    focusScale: Float = 1.06f,
+    focusScale: Float = 1.02f,
     enabled: Boolean = true,
 ): Modifier {
     val interaction = remember { MutableInteractionSource() }
@@ -40,13 +41,15 @@ fun Modifier.tvClickable(
     val scale by animateFloatAsState(
         targetValue = when {
             focused -> focusScale
-            pressed -> 0.96f
+            pressed -> 0.98f
             else -> 1f
         },
+        animationSpec = tween(150),
         label = "tvScale"
     )
     val borderColor by animateColorAsState(
         targetValue = if (focused) Color.White else Color.Transparent,
+        animationSpec = tween(150),
         label = "tvBorderColor"
     )
     return this

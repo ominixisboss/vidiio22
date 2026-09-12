@@ -82,29 +82,25 @@ fun HomeStyle.topLevelTransition(): ContentTransform = when (this) {
         fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it / 12 } togetherWith
             fadeOut(tween(300)) + slideOutHorizontally(tween(300)) { -it / 12 }
     HomeStyle.DISNEY ->
-        fadeIn(tween(400)) + scaleIn(
-            initialScale = 0.85f,
-            animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow)
-        ) togetherWith fadeOut(tween(300)) + scaleOut(targetScale = 1.08f, animationSpec = tween(300))
+        fadeIn(tween(300)) + scaleIn(initialScale = 0.92f, animationSpec = tween(300)) togetherWith
+            fadeOut(tween(250)) + scaleOut(targetScale = 1.04f, animationSpec = tween(250))
 }
 
 /** Navigation transition for opening a Details screen. */
 fun HomeStyle.detailTransition(): ContentTransform = when (this) {
     HomeStyle.VIDIIO ->
-        slideInHorizontally(tween(400)) { it } + fadeIn(tween(400)) togetherWith
-            slideOutHorizontally(tween(400)) { -it } + fadeOut(tween(400))
+        slideInHorizontally(tween(350)) { it } + fadeIn(tween(350)) togetherWith
+            slideOutHorizontally(tween(350)) { -it } + fadeOut(tween(350))
     HomeStyle.NETFLIX ->
-        fadeIn(tween(320)) + scaleIn(initialScale = 1.08f, animationSpec = tween(320)) togetherWith
-            fadeOut(tween(320)) + scaleOut(targetScale = 1.08f, animationSpec = tween(320))
+        fadeIn(tween(280)) + scaleIn(initialScale = 1.05f, animationSpec = tween(280)) togetherWith
+            fadeOut(tween(280)) + scaleOut(targetScale = 1.05f, animationSpec = tween(280))
     HomeStyle.HULU ->
         fadeIn(tween(180)) togetherWith fadeOut(tween(180))
     HomeStyle.PRIME ->
-        slideInVertically(tween(320)) { it / 6 } + fadeIn(tween(320)) togetherWith fadeOut(tween(240))
+        slideInVertically(tween(280)) { it / 6 } + fadeIn(tween(280)) togetherWith fadeOut(tween(220))
     HomeStyle.DISNEY ->
-        scaleIn(
-            initialScale = 0.8f,
-            animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow)
-        ) + fadeIn(tween(300)) togetherWith fadeOut(tween(260)) + scaleOut(targetScale = 0.92f)
+        scaleIn(initialScale = 0.92f, animationSpec = tween(250)) + fadeIn(tween(250)) togetherWith
+            fadeOut(tween(220)) + scaleOut(targetScale = 0.95f)
 }
 
 /**
@@ -212,8 +208,8 @@ fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
         uppercaseHeaders = false,
         showTop10 = true,
         kenBurns = true,
-        cardPressScale = 0.9f,
-        bouncyCards = true,
-        staggerIn = true
+        cardPressScale = 0.95f,
+        bouncyCards = false,
+        staggerIn = false
     )
 }
