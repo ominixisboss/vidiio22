@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -156,6 +158,11 @@ fun PlayerTransport(
             )
 
             // Continuous single focus row for all transport & secondary control buttons
+            val playPauseFocusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) {
+                runCatching { playPauseFocusRequester.requestFocus() }
+            }
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -163,11 +170,13 @@ fun PlayerTransport(
                 TransportIconButton(Icons.Rounded.Replay10, "Rewind", onClick = onRewind)
                 
                 Box(
-                    modifier = Modifier.tvClickable(
-                        onClick = onPlayPause,
-                        shape = CircleShape,
-                        focusScale = 1.12f
-                    ),
+                    modifier = Modifier
+                        .focusRequester(playPauseFocusRequester)
+                        .tvClickable(
+                            onClick = onPlayPause,
+                            shape = CircleShape,
+                            focusScale = 1.12f
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     IconButton(
