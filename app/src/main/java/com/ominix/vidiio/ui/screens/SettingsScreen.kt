@@ -126,30 +126,11 @@ fun SettingsScreen(
             item {
                 ExpandableSettingsSection(
                     title = "Appearance",
-                    summary = when (theme) {
-                        AppTheme.DARK -> "Dark"
-                        AppTheme.LIGHT -> "Light"
-                        AppTheme.SYSTEM -> "System default"
-                    } + " · " + colorTheme.name.lowercase().replaceFirstChar { it.titlecase() },
+                    summary = colorTheme.name.lowercase().replaceFirstChar { it.titlecase() } + " · " + homeStyle.spec(MaterialTheme.colorScheme.primary).label,
                     icon = Icons.Rounded.Palette,
                     expanded = isAppearanceExpanded,
                     onExpandedChange = { isAppearanceExpanded = it }
                 ) {
-                    PreferenceItem(
-                        title = "Theme",
-                        summary = when (theme) {
-                            AppTheme.DARK -> "Dark"
-                            AppTheme.LIGHT -> "Light"
-                            AppTheme.SYSTEM -> "System default"
-                        },
-                        icon = Icons.Rounded.Brightness4,
-                        onClick = { }
-                    )
-                    ThemeSelectionRow(
-                        currentTheme = theme,
-                        onThemeSelected = { viewModel.setTheme(it) }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     PreferenceItem(
                         title = "Color Theme",
                         summary = colorTheme.name.lowercase().replaceFirstChar { it.titlecase() },
@@ -899,40 +880,7 @@ fun SwitchPreferenceItem(
     )
 }
 
-@Composable
-fun ThemeSelectionRow(
-    currentTheme: AppTheme,
-    onThemeSelected: (AppTheme) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        AppTheme.entries.forEach { theme ->
-            val isSelected = currentTheme == theme
-            val shape = RoundedCornerShape(24.dp)
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .tvClickable(onClick = { onThemeSelected(theme) }, shape = shape, focusScale = 1.05f),
-                shape = shape,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
-                border = if (isSelected) null else BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
-            ) {
-                Text(
-                    text = theme.name.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                )
-            }
-        }
-    }
-}
+
 
 @Composable
 fun MediaPlayerSelectionRow(
@@ -1098,47 +1046,84 @@ private fun SubtitleAppearanceSection(
         }
 
         Spacer(modifier = Modifier.height(14.dp))
-        Text(
-            "Text size  " + (style.textScale * 100).toInt() + "%",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium
+        val textSizeOptions = listOf(
+            0.75f to "Small (75%)",
+            1.00f to "Normal (100%)",
+            1.25f to "Large (125%)",
+            1.50f to "Extra Large (150%)",
+            2.00f to "Huge (200%)"
         )
-        var isSliderFocused by remember { mutableStateOf(false) }
+        var expandedTextSize by remember { mutableStateOf(false) }
+        val currentOptionLabel = textSizeOptions.find { (scale, _) ->
+            kotlin.math.abs(scale - style.textScale) < 0.08f
+        }?.second ?: "${(style.textScale * 100).toInt()}%"
 
-        Slider(
-            value = style.textScale,
-            onValueChange = { onStyleChange(style.copy(textScale = it)) },
-            valueRange = 0.5f..2.5f,
-            steps = 7,
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isSliderFocused = it.isFocused }
-                .then(
-                    if (isSliderFocused) {
-                        Modifier
-                            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    } else Modifier
-                )
-                .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && isSliderFocused) {
-                        when (event.key) {
-                            Key.DirectionLeft -> {
-                                val newScale = (style.textScale - 0.25f).coerceIn(0.5f, 2.5f)
-                                onStyleChange(style.copy(textScale = newScale))
-                                true
-                            }
-                            Key.DirectionRight -> {
-                                val newScale = (style.textScale + 0.25f).coerceIn(0.5f, 2.5f)
-                                onStyleChange(style.copy(textScale = newScale))
-                                true
-                            }
-                            else -> false
-                        }
-                    } else false
+        Column {
+            Text(
+                "Text size",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Box {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .tvClickable(
+                            onClick = { expandedTextSize = !expandedTextSize },
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = currentOptionLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Icon(
+                            imageVector = if (expandedTextSize) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                            contentDescription = "Text size dropdown",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-        )
+
+                DropdownMenu(
+                    expanded = expandedTextSize,
+                    onDismissRequest = { expandedTextSize = false },
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                ) {
+                    textSizeOptions.forEach { (scale, label) ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = label,
+                                    fontWeight = if (kotlin.math.abs(scale - style.textScale) < 0.08f) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (kotlin.math.abs(scale - style.textScale) < 0.08f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            onClick = {
+                                onStyleChange(style.copy(textScale = scale))
+                                expandedTextSize = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
         Text("Text colour", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.Medium)

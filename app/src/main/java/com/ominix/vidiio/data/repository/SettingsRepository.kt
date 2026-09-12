@@ -17,10 +17,12 @@ import kotlinx.coroutines.flow.map
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 
+import kotlinx.coroutines.flow.flowOf
+
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 enum class AppTheme {
-    DARK, LIGHT, SYSTEM
+    DARK
 }
 
 enum class ColorTheme {
@@ -124,10 +126,7 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    val themeFlow: Flow<AppTheme> = context.dataStore.data.map { preferences ->
-        val themeString = preferences[PreferencesKeys.THEME] ?: AppTheme.SYSTEM.name
-        AppTheme.valueOf(themeString)
-    }
+    val themeFlow: Flow<AppTheme> = flowOf(AppTheme.DARK)
 
     val colorThemeFlow: Flow<ColorTheme> = context.dataStore.data.map { preferences ->
         val themeString = preferences[PreferencesKeys.COLOR_THEME] ?: ColorTheme.RED.name

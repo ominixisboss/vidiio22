@@ -35,7 +35,7 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MediaPlayerChoice.INTERNAL)
 
     val theme: StateFlow<AppTheme> = settingsRepository.themeFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppTheme.SYSTEM)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppTheme.DARK)
 
     val colorTheme: StateFlow<ColorTheme> = settingsRepository.colorThemeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ColorTheme.RED)

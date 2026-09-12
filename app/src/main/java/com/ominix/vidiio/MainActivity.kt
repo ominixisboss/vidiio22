@@ -7,10 +7,8 @@ import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.ominix.vidiio.data.repository.AppTheme
 import com.ominix.vidiio.data.repository.ColorTheme
 import com.ominix.vidiio.ui.VidiioApp
 import com.ominix.vidiio.ui.theme.VidiioTheme
@@ -27,17 +25,10 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            val theme by settingsRepository.themeFlow.collectAsState(initial = AppTheme.SYSTEM)
             val colorTheme by settingsRepository.colorThemeFlow.collectAsState(initial = ColorTheme.RED)
 
-            val darkTheme = when (theme) {
-                AppTheme.DARK -> true
-                AppTheme.LIGHT -> false
-                AppTheme.SYSTEM -> isSystemInDarkTheme()
-            }
-
             VidiioTheme(
-                darkTheme = darkTheme,
+                darkTheme = true,
                 colorTheme = colorTheme
             ) {
                 VidiioApp()
