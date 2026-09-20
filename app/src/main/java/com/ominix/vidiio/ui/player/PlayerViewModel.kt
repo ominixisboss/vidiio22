@@ -143,6 +143,7 @@ class PlayerViewModel(
     val movie: StateFlow<Movie?> = session.movie
     val selectedEpisode: StateFlow<Episode?> = session.selectedEpisode
     val subtitles: StateFlow<List<SubtitleTrack>> = session.subtitles
+    val streamSources: StateFlow<List<StreamSource>> = session.streamSources
 
     /** User's subtitle appearance, applied to the player's SubtitleView by the screen. */
     val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyleFlow

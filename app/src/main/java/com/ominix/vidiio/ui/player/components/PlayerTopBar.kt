@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +69,7 @@ fun PlayerTopBar(
             ) {
                 IconButton(
                     onClick = onBack,
+                    modifier = Modifier.focusProperties { canFocus = false },
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = Color.White.copy(alpha = 0.1f),
                         contentColor = Color.White
@@ -157,6 +159,7 @@ fun PlayerTopBar(
                 ) {
                     IconButton(
                         onClick = onPlayExternal,
+                        modifier = Modifier.focusProperties { canFocus = false },
                         colors = IconButtonDefaults.iconButtonColors(
                             containerColor = Color.White.copy(alpha = 0.1f),
                             contentColor = Color.White
@@ -181,6 +184,7 @@ fun PlayerTopBar(
                 ) {
                     IconButton(
                         onClick = onDownload,
+                        modifier = Modifier.focusProperties { canFocus = false },
                         colors = IconButtonDefaults.iconButtonColors(
                             containerColor = if (isDownloading) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
                             contentColor = if (isDownloading) MaterialTheme.colorScheme.primary else Color.White
@@ -205,6 +209,7 @@ fun PlayerTopBar(
                 ) {
                     IconButton(
                         onClick = onToggleEpisodes,
+                        modifier = Modifier.focusProperties { canFocus = false },
                         colors = IconButtonDefaults.iconButtonColors(
                             containerColor = if (isEpisodesActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
                             contentColor = if (isEpisodesActive) MaterialTheme.colorScheme.primary else Color.White

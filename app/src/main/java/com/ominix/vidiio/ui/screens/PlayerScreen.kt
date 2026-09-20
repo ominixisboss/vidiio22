@@ -90,6 +90,7 @@ fun PlayerScreen(
     val selectedEpisode by playerViewModel.selectedEpisode.collectAsState()
     val subtitles by playerViewModel.subtitles.collectAsState()
     val subtitleStyle by playerViewModel.subtitleStyle.collectAsState()
+    val streamSources by playerViewModel.streamSources.collectAsState()
 
     val permissionsState = rememberMultiplePermissionsState(
         permissions = PermissionUtils.getRequiredPermissions()
@@ -101,9 +102,11 @@ fun PlayerScreen(
     var showAudioMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showAspectMenu by remember { mutableStateOf(false) }
+    var showSourcesMenu by remember { mutableStateOf(false) }
     var showEpisodesSidebar by remember { mutableStateOf(false) }
 
     val deviceControls = rememberPlayerDeviceControls()
+    val anyMenuOpen = showSubtitleMenu || showAudioMenu || showSpeedMenu || showAspectMenu || showSourcesMenu
 
     LaunchedEffect(initialSource) { initialSource?.let(playerViewModel::selectSource) }
 
@@ -116,6 +119,7 @@ fun PlayerScreen(
             showAudioMenu -> showAudioMenu = false
             showSpeedMenu -> showSpeedMenu = false
             showAspectMenu -> showAspectMenu = false
+            showSourcesMenu -> showSourcesMenu = false
             showEpisodesSidebar -> showEpisodesSidebar = false
             state.showTorrentFileSheet -> playerViewModel.dismissTorrentFilePicker()
             showControls -> showControls = false
@@ -234,8 +238,8 @@ fun PlayerScreen(
     }
 
     // Controls auto-hide during playback.
-    LaunchedEffect(showControls, state.isPlaying) {
-        if (showControls && state.isPlaying) {
+    LaunchedEffect(showControls, state.isPlaying, anyMenuOpen) {
+        if (showControls && state.isPlaying && !anyMenuOpen) {
             delay(5000)
             showControls = false
         }
@@ -243,6 +247,10 @@ fun PlayerScreen(
 
     val playerFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playerFocus.requestFocus() } }
+    // Nothing else on screen holds focus once the chrome hides, so take it back for the remote.
+    LaunchedEffect(showControls, anyMenuOpen) {
+        if (!showControls && !anyMenuOpen) runCatching { playerFocus.requestFocus() }
+    }
 
     Box(
         modifier = modifier
@@ -252,7 +260,7 @@ fun PlayerScreen(
             .focusable()
             .playerRemoteControls(
                 viewModel = playerViewModel,
-                controlsVisible = showControls,
+                controlsVisible = showControls || anyMenuOpen,
                 onShowControls = { showControls = true }
             )
             .playerTouchGestures(
@@ -318,7 +326,7 @@ fun PlayerScreen(
             )
         }
 
-        AnimatedVisibility(visible = showControls, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(visible = showControls && !anyMenuOpen, enter = fadeIn(), exit = fadeOut()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 PlayerTopBar(
                     title = movie?.title ?: "Loading...",
@@ -379,6 +387,7 @@ fun PlayerScreen(
                     onToggleAudio = { showAudioMenu = true },
                     onToggleSpeed = { showSpeedMenu = true },
                     onToggleAspect = { showAspectMenu = true },
+                    onToggleSources = if (streamSources.size > 1) ({ showSourcesMenu = true }) else null,
                     onToggleFullscreen = playerViewModel::toggleFillMode,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
@@ -473,6 +482,15 @@ fun PlayerScreen(
                 onSubtitleSelect = playerViewModel::selectSubtitle,
                 onDisable = playerViewModel::disableSubtitles,
                 onDismiss = { showSubtitleMenu = false }
+            )
+        }
+
+        if (showSourcesMenu) {
+            SourcesPanel(
+                sources = streamSources,
+                selectedSource = state.selectedSource,
+                onSourceSelect = playerViewModel::selectSource,
+                onDismiss = { showSourcesMenu = false }
             )
         }
 

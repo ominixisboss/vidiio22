@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -44,6 +45,7 @@ fun PlayerTransport(
     onToggleAudio: () -> Unit,
     onToggleSpeed: () -> Unit,
     onToggleAspect: () -> Unit,
+    onToggleSources: (() -> Unit)? = null,
     onToggleFullscreen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -181,7 +183,7 @@ fun PlayerTransport(
                 ) {
                     IconButton(
                         onClick = onPlayPause,
-                        modifier = Modifier.size(56.dp),
+                        modifier = Modifier.size(56.dp).focusProperties { canFocus = false },
                         colors = IconButtonDefaults.iconButtonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = Color.White
@@ -217,7 +219,7 @@ fun PlayerTransport(
                         focusScale = 1.12f
                     )
                 ) {
-                    TextButton(onClick = onToggleSpeed) {
+                    TextButton(onClick = onToggleSpeed, modifier = Modifier.focusProperties { canFocus = false }) {
                         Text(
                             text = "${playbackSpeed}x",
                             color = if (isSpeedActive) MaterialTheme.colorScheme.primary else Color.White,
@@ -225,6 +227,14 @@ fun PlayerTransport(
                             fontSize = 13.sp
                         )
                     }
+                }
+
+                if (onToggleSources != null) {
+                    TransportToggleIcon(
+                        icon = Icons.Rounded.SwapHoriz,
+                        isActive = false,
+                        onClick = onToggleSources
+                    )
                 }
 
                 TransportToggleIcon(
@@ -256,7 +266,7 @@ private fun TransportIconButton(
             focusScale = 1.15f
         )
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(onClick = onClick, modifier = Modifier.focusProperties { canFocus = false }) {
             Icon(icon, contentDescription = contentDescription, tint = Color.White)
         }
     }
@@ -275,7 +285,7 @@ private fun TransportToggleIcon(
             focusScale = 1.15f
         )
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(onClick = onClick, modifier = Modifier.focusProperties { canFocus = false }) {
             Icon(
                 icon,
                 contentDescription = null,

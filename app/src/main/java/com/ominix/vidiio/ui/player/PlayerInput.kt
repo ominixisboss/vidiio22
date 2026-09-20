@@ -28,9 +28,20 @@ fun Modifier.playerRemoteControls(
 ): Modifier = onPreviewKeyEvent { event ->
     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
     when (event.key) {
-        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
+        Key.MediaPlayPause -> {
             viewModel.togglePlayPause()
             onShowControls(); true
+        }
+
+        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+            // With the transport or a menu on screen, OK belongs to whatever button has focus.
+            // Swallowing it here is what made every button after "pause" act as play/pause.
+            if (!controlsVisible) {
+                viewModel.togglePlayPause()
+                onShowControls(); true
+            } else {
+                false
+            }
         }
 
         Key.MediaRewind -> {

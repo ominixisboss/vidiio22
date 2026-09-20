@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,7 +44,7 @@ fun SubtitleMenu(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    PlayerSidePanel(onDismiss = onDismiss) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Subtitles", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
@@ -169,7 +170,7 @@ fun AudioMenu(
     onTrackSelect: (AudioTrackInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    PlayerSidePanel(onDismiss = onDismiss) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Audio Tracks", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
@@ -196,7 +197,7 @@ fun SpeedMenu(
     onDismiss: () -> Unit
 ) {
     val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    PlayerSidePanel(onDismiss = onDismiss) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Playback Speed", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
@@ -232,10 +233,7 @@ fun AspectMenu(
         2 to "Fixed Height"
     )
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
+    PlayerSidePanel(onDismiss = onDismiss) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -263,7 +261,11 @@ fun AspectMenu(
                     headlineContent = { Text("Fill, keep camera clear") },
                     supportingContent = { Text("Fills the screen but stops short of the front-camera hole") },
                     trailingContent = {
-                        Switch(checked = avoidCutout, onCheckedChange = onToggleAvoidCutout)
+                        Switch(
+                            checked = avoidCutout,
+                            onCheckedChange = onToggleAvoidCutout,
+                            modifier = Modifier.focusProperties { canFocus = false }
+                        )
                     },
                     modifier = Modifier.clickable { onToggleAvoidCutout(!avoidCutout) }
                 )

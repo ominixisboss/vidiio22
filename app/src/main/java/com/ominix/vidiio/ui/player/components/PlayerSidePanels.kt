@@ -133,7 +133,7 @@ fun SourcesPanel(
     onSourceSelect: (StreamSource) -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    PlayerSidePanel(onDismiss = onDismiss) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Switch Source", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
