@@ -52,6 +52,9 @@ class SettingsViewModel(
     val mouseToggle: StateFlow<Boolean> = settingsRepository.mouseToggleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val subtitlesEnabledByDefault: StateFlow<Boolean> = settingsRepository.subtitlesEnabledByDefaultFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     val proxyEnabled: StateFlow<Boolean> = settingsRepository.proxyEnabledFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val proxyType: StateFlow<ProxyType> = settingsRepository.proxyTypeFlow
@@ -158,6 +161,12 @@ class SettingsViewModel(
     fun setMouseToggle(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setMouseToggle(enabled)
+        }
+    }
+
+    fun setSubtitlesEnabledByDefault(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setSubtitlesEnabledByDefault(enabled)
         }
     }
 
