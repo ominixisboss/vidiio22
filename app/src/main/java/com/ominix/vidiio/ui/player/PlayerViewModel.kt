@@ -163,6 +163,13 @@ class PlayerViewModel(
             }
         }
         viewModelScope.launch {
+            // Read the user's default once, before any subtitle track can arrive - not as a
+            // running collector, since after this the player owns subtitlesEnabled for the
+            // rest of the session (the in-player "Off" toggle shouldn't be fought by Settings).
+            val subtitlesEnabledByDefault = settingsRepository.subtitlesEnabledByDefaultFlow.first()
+            _state.update { it.copy(subtitlesEnabled = subtitlesEnabledByDefault) }
+            if (!subtitlesEnabledByDefault) setTextTrackDisabled(true)
+
             subtitles.collect { subTracks ->
                 if (subTracks.isNotEmpty() && _state.value.subtitlesEnabled && _state.value.selectedSubtitleUrl == null) {
                     val bestTrack = subTracks.first()

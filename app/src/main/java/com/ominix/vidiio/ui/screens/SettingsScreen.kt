@@ -66,6 +66,7 @@ fun SettingsScreen(
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
     val subtitleLanguages by viewModel.subtitleLanguages.collectAsState()
     val subtitleStyle by viewModel.subtitleStyle.collectAsState()
+    val subtitlesEnabledByDefault by viewModel.subtitlesEnabledByDefault.collectAsState()
     val assNativeStyling by viewModel.assNativeStyling.collectAsState()
     val proxyEnabled by viewModel.proxyEnabled.collectAsState()
     val proxyType by viewModel.proxyType.collectAsState()
@@ -237,6 +238,18 @@ fun SettingsScreen(
                     expanded = isSubtitlesExpanded,
                     onExpandedChange = { isSubtitlesExpanded = it }
                 ) {
+                    SwitchPreferenceItem(
+                        title = "Subtitles",
+                        summary = if (subtitlesEnabledByDefault) {
+                            "Shown by default when you start playing something"
+                        } else {
+                            "Off by default; turn them on per-video from the player"
+                        },
+                        icon = Icons.Rounded.Subtitles,
+                        checked = subtitlesEnabledByDefault,
+                        onCheckedChange = { viewModel.setSubtitlesEnabledByDefault(it) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     PreferenceItem(
                         title = "Subtitle languages",
                         summary = subtitleLanguages.joinToString(", ") { it.uppercase() },

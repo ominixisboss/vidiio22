@@ -99,6 +99,7 @@ class SettingsRepository(private val context: Context) {
         val SUBTITLE_TEXT_COLOR = longPreferencesKey("subtitle_text_color")
         val SUBTITLE_BG_COLOR = longPreferencesKey("subtitle_bg_color")
         val SUBTITLE_EDGE = stringPreferencesKey("subtitle_edge")
+        val SUBTITLES_ENABLED_BY_DEFAULT = booleanPreferencesKey("subtitles_enabled_by_default")
         val DYNAMIC_THEME_MIGRATED = booleanPreferencesKey("dynamic_theme_migrated")
         val ASS_NATIVE_STYLING = booleanPreferencesKey("ass_native_styling")
         val MOUSE_TOGGLE = booleanPreferencesKey("mouse_toggle")
@@ -157,6 +158,17 @@ class SettingsRepository(private val context: Context) {
     /** When true, the video player is inset so the front-camera cutout never covers the picture. */
     val avoidCameraCutoutFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[PreferencesKeys.AVOID_CAMERA_CUTOUT] ?: false
+    }
+
+    /** Whether a new playback session starts with subtitles on. Off doesn't remove tracks. */
+    val subtitlesEnabledByDefaultFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.SUBTITLES_ENABLED_BY_DEFAULT] ?: true
+    }
+
+    suspend fun setSubtitlesEnabledByDefault(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SUBTITLES_ENABLED_BY_DEFAULT] = enabled
+        }
     }
 
     val mouseToggleFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->

@@ -3,6 +3,7 @@ package com.ominix.vidiio.ui.pointer
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.View
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,10 +34,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlin.math.max
 import kotlin.math.min
 
@@ -45,9 +50,10 @@ import kotlin.math.min
  * Focus-based traversal (the usual TV navigation) assumes a layout built for it - a clean
  * order between focusable rows. Dense screens (Settings' switches and dropdowns, grids with
  * uneven row lengths) don't always give the platform a sane order to infer, and users land on
- * the wrong control. This is the fallback: arrow keys move a dot around the screen, and OK
- * taps whatever is under it by replaying a real touch event, so ordinary `clickable` targets
- * need no changes to be reachable.
+ * the wrong control. This is the fallback: arrow keys move a dot around the screen, OK taps
+ * whatever is under it by replaying a real touch event, and parking the cursor against an edge
+ * scrolls the content there - both by replaying real Android input events, so ordinary
+ * `clickable` targets and scroll containers need no changes to work under it.
  *
  * Left off the Player (which has its own D-pad transport handling) and Search (whose text
  * field needs the D-pad for the on-screen keyboard).
@@ -63,6 +69,7 @@ fun VirtualPointerOverlay(
     }
 
     val view = LocalView.current
+    val density = LocalDensity.current
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
     var position by remember { mutableStateOf<Offset?>(null) }
     var pulse by remember { mutableStateOf(false) }
@@ -73,18 +80,38 @@ fun VirtualPointerOverlay(
         label = "pointerPress"
     )
 
-    fun dispatchTap(at: Offset) {
-        val now = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, at.x, at.y, 0)
-        val up = MotionEvent.obtain(now, now + 40, MotionEvent.ACTION_UP, at.x, at.y, 0)
-        down.source = InputDevice.SOURCE_TOUCHSCREEN
-        up.source = InputDevice.SOURCE_TOUCHSCREEN
-        try {
-            view.dispatchTouchEvent(down)
-            view.dispatchTouchEvent(up)
-        } finally {
-            down.recycle()
-            up.recycle()
+    // How close to an edge triggers a scroll, in px.
+    val edgeZonePx = with(density) { EDGE_ZONE_DP.toPx() }
+
+    // Which way the cursor wants to scroll, purely a function of its current position - not an
+    // event. Recomputed whenever the cursor moves, but only ever one of nine (dx, dy) states,
+    // so it makes a stable LaunchedEffect key: the loop below keeps running, unrestarted, for
+    // as long as the cursor sits in the same edge zone, and stops the moment it leaves.
+    val scrollDirection = remember(position, containerSize) {
+        val pos = position
+        if (pos == null || containerSize.width == 0 || containerSize.height == 0) {
+            0f to 0f
+        } else {
+            val vertical = when {
+                pos.y < edgeZonePx -> 1f
+                pos.y > containerSize.height - edgeZonePx -> -1f
+                else -> 0f
+            }
+            val horizontal = when {
+                pos.x < edgeZonePx -> 1f
+                pos.x > containerSize.width - edgeZonePx -> -1f
+                else -> 0f
+            }
+            vertical to horizontal
+        }
+    }
+
+    LaunchedEffect(scrollDirection) {
+        val (vertical, horizontal) = scrollDirection
+        if (vertical == 0f && horizontal == 0f) return@LaunchedEffect
+        while (isActive) {
+            position?.let { dispatchScroll(view, it, vertical * SCROLL_MAGNITUDE, horizontal * SCROLL_MAGNITUDE) }
+            delay(SCROLL_INTERVAL_MS)
         }
     }
 
@@ -113,7 +140,7 @@ fun VirtualPointerOverlay(
                     }
                     in TAP_KEYS -> {
                         pulse = true
-                        dispatchTap(current)
+                        dispatchTap(view, current)
                         true
                     }
                     else -> false
@@ -123,7 +150,6 @@ fun VirtualPointerOverlay(
         content()
 
         position?.let { pos ->
-            val density = androidx.compose.ui.platform.LocalDensity.current
             Icon(
                 imageVector = Icons.Rounded.NearMe,
                 contentDescription = null,
@@ -144,8 +170,8 @@ fun VirtualPointerOverlay(
 
     // The press animation only needs to run once per tap; reset right after it starts.
     if (pulse) {
-        androidx.compose.runtime.LaunchedEffect(position) {
-            kotlinx.coroutines.delay(120)
+        LaunchedEffect(position) {
+            delay(120)
             pulse = false
         }
     }
@@ -166,6 +192,51 @@ private fun move(from: Offset, key: Key, step: Float, bounds: IntSize): Offset {
     )
 }
 
+/** Replays a real tap at [at] so whatever `clickable` is under the cursor fires normally. */
+private fun dispatchTap(view: View, at: Offset) {
+    val now = SystemClock.uptimeMillis()
+    val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, at.x, at.y, 0)
+    val up = MotionEvent.obtain(now, now + 40, MotionEvent.ACTION_UP, at.x, at.y, 0)
+    down.source = InputDevice.SOURCE_TOUCHSCREEN
+    up.source = InputDevice.SOURCE_TOUCHSCREEN
+    try {
+        view.dispatchTouchEvent(down)
+        view.dispatchTouchEvent(up)
+    } finally {
+        down.recycle()
+        up.recycle()
+    }
+}
+
+/**
+ * Replays a mouse-wheel scroll at [at]. Scroll wheels are a "generic motion event", not a
+ * touch event - Compose's scrollable containers already handle it for real mice, so this asks
+ * for nothing they don't already support. Positive [vscroll] scrolls up, positive [hscroll]
+ * scrolls left, matching [android.view.MotionEvent.AXIS_VSCROLL]/`AXIS_HSCROLL`.
+ */
+private fun dispatchScroll(view: View, at: Offset, vscroll: Float, hscroll: Float) {
+    val now = SystemClock.uptimeMillis()
+    val props = arrayOf(MotionEvent.PointerProperties().apply {
+        id = 0
+        toolType = MotionEvent.TOOL_TYPE_MOUSE
+    })
+    val coords = arrayOf(MotionEvent.PointerCoords().apply {
+        x = at.x
+        y = at.y
+        setAxisValue(MotionEvent.AXIS_VSCROLL, vscroll)
+        setAxisValue(MotionEvent.AXIS_HSCROLL, hscroll)
+    })
+    val event = MotionEvent.obtain(
+        now, now, MotionEvent.ACTION_SCROLL, 1, props, coords,
+        0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
+    )
+    try {
+        view.dispatchGenericMotionEvent(event)
+    } finally {
+        event.recycle()
+    }
+}
+
 private val DIRECTION_KEYS = setOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)
 private val TAP_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
@@ -173,3 +244,6 @@ private const val BASE_STEP_PX = 26f
 private const val ACCEL_STEP_PX = 3.5f
 private const val MAX_STEP_PX = 90f
 private val CURSOR_TIP_OFFSET_DP = 6.dp
+private val EDGE_ZONE_DP = 48.dp
+private const val SCROLL_MAGNITUDE = 0.35f
+private const val SCROLL_INTERVAL_MS = 90L
