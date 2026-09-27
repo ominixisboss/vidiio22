@@ -37,6 +37,7 @@ import com.ominix.vidiio.navigation.toEntries
 import com.ominix.vidiio.data.model.toMovie
 import com.ominix.vidiio.ui.screens.*
 import com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactories
+import com.ominix.vidiio.ui.pointer.VirtualPointerOverlay
 
 @Composable
 fun VidiioApp() {
@@ -55,6 +56,8 @@ fun VidiioApp() {
 
     val homeStyle by settingsRepository.homeStyleFlow
         .collectAsState(initial = com.ominix.vidiio.data.repository.HomeStyle.VIDIIO)
+
+    val mouseToggle by settingsRepository.mouseToggleFlow.collectAsState(initial = false)
 
     val themeAccent = MaterialTheme.colorScheme.primary
     val spec = remember(homeStyle, themeAccent) { homeStyle.spec(themeAccent) }
@@ -194,6 +197,8 @@ fun VidiioApp() {
     val currentRoute = navigationState.backStacks[navigationState.topLevelRoute]?.lastOrNull()
     val isPlayerScreen = currentRoute is VidiioRoute.Player
     val isSplashScreen = currentRoute is VidiioRoute.Splash
+    val isSearchScreen = currentRoute is VidiioRoute.Search
+    val pointerEnabled = mouseToggle && !isPlayerScreen && !isSplashScreen && !isSearchScreen
 
     val layoutType = if (isPlayerScreen || isSplashScreen) {
         NavigationSuiteType.None
@@ -264,11 +269,13 @@ fun VidiioApp() {
             )
         }
     ) {
-        NavDisplay(
-            entries = navigationState.toEntries(entryProvider),
-            onBack = { navigator.goBack() },
-            modifier = Modifier.fillMaxSize()
-        )
+        VirtualPointerOverlay(enabled = pointerEnabled) {
+            NavDisplay(
+                entries = navigationState.toEntries(entryProvider),
+                onBack = { navigator.goBack() },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 
