@@ -14,7 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -68,6 +70,7 @@ fun PlayerTransport(
         var scrubValue by remember { mutableFloatStateOf(0f) }
         var settleUntil by remember { mutableLongStateOf(0L) }
         var isSliderFocused by remember { mutableStateOf(false) }
+        val focusManager = LocalFocusManager.current
 
         val playbackFraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
         val bufferedFraction = if (duration > 0) (bufferedPosition.toFloat() / duration).coerceIn(0f, 1f) else 0f
@@ -111,6 +114,10 @@ fun PlayerTransport(
                                 settleUntil = System.currentTimeMillis() + 700
                                 true
                             }
+                            // Up/Down must leave the bar. Material's Slider reads them as "change the
+                            // value", so Up used to nudge playback instead of reaching the top bar.
+                            Key.DirectionUp -> { focusManager.moveFocus(FocusDirection.Up); true }
+                            Key.DirectionDown -> { focusManager.moveFocus(FocusDirection.Down); true }
                             else -> false
                         }
                     } else false
@@ -134,9 +141,14 @@ fun PlayerTransport(
                     scrubValue = it
                 },
                 onValueChangeFinished = {
-                    onSeek((scrubValue * duration).toLong())
-                    isScrubbing = false
-                    settleUntil = System.currentTimeMillis() + 700
+                    // Only commit a seek the user actually made. The Slider also fires this on the
+                    // key-up of any D-pad press once it has focus - including the Up that moved focus
+                    // onto it - and with nothing dragged, scrubValue is 0: that jumped playback to 00:00.
+                    if (isScrubbing) {
+                        onSeek((scrubValue * duration).toLong())
+                        isScrubbing = false
+                        settleUntil = System.currentTimeMillis() + 700
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = SliderDefaults.colors(
