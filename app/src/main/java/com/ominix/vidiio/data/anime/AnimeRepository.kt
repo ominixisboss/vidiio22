@@ -61,6 +61,10 @@ class AnimeRepository(
 
     private val season: SeasonYear get() = SeasonYear.at(clock())
 
+    /** Bundled anime addons (One Pace) as shelves of titles that open straight to details. */
+    suspend fun addonShelves(force: Boolean = false) =
+        cached("addons", force) { movieRepository.getAnimeAddonCategories() }
+
     /** What everyone is watching right now: AniList's trending score. */
     suspend fun trending(force: Boolean = false) =
         cached("trending", force) { service.media(sort = "TRENDING_DESC", perPage = 24) }

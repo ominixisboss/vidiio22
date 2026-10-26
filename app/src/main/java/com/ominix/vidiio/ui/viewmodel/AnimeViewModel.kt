@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ominix.vidiio.data.anime.AniMedia
 import com.ominix.vidiio.data.anime.AniScheduleEntry
 import com.ominix.vidiio.data.anime.AnimeRepository
+import com.ominix.vidiio.data.model.Category
 import com.ominix.vidiio.data.model.Movie
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -29,6 +30,8 @@ data class AnimeHomeState(
     val topRated: List<AniMedia>? = null,
     val allTime: List<AniMedia>? = null,
     val nextSeason: List<AniMedia>? = null,
+    /** Anime addon shelves such as One Pace. */
+    val addons: List<Category>? = null,
     /** Selected genre chip, and its results (null while loading). */
     val genre: String? = null,
     val genreResults: List<AniMedia>? = null,
@@ -68,6 +71,7 @@ class AnimeViewModel(private val repository: AnimeRepository) : ViewModel() {
         loadJob = viewModelScope.launch {
             // Every section in parallel; each lands in the state the moment it is ready.
             coroutineScope {
+                launch { section(force, repository::addonShelves) { s, v -> s.copy(addons = v) } }
                 launch { section(force, repository::trending) { s, v -> s.copy(trending = v) } }
                 launch { section(force, repository::airingNow) { s, v -> s.copy(airing = v) } }
                 launch { section(force, repository::newEpisodes) { s, v -> s.copy(newEpisodes = v) } }

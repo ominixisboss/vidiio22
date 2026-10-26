@@ -353,6 +353,45 @@ fun MovieDetailContent(
             }
         }
 
+        // Seasons and episodes come first: the links below are for the episode picked here.
+        if (movie.type == MovieType.TV_SHOW && movie.seasons.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SecondaryScrollableTabRow(
+                    selectedTabIndex = selectedSeasonIndex,
+                    containerColor = Color.Transparent,
+                    edgePadding = 16.dp,
+                    divider = {}
+                ) {
+                    movie.seasons.forEachIndexed { index, season ->
+                        Tab(
+                            selected = selectedSeasonIndex == index,
+                            onClick = { selectedSeasonIndex = index },
+                            text = {
+                                Text(
+                                    season.name ?: "Season ${season.seasonNumber}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = if (selectedSeasonIndex == index) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            val currentSeason = movie.seasons.getOrNull(selectedSeasonIndex)
+            if (currentSeason != null) {
+                items(currentSeason.episodes.size) { index ->
+                    val episode = currentSeason.episodes[index]
+                    EpisodeListItem(
+                        episode = episode,
+                        isSelected = episode.id == selectedEpisode?.id,
+                        onClick = { onEpisodeSelected(episode) }
+                    )
+                }
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -402,44 +441,6 @@ fun MovieDetailContent(
                     onClick = { onPlayClick(source) },
                     onDownload = { onDownloadClick(source) }
                 )
-            }
-        }
-
-        if (movie.type == MovieType.TV_SHOW && movie.seasons.isNotEmpty()) {
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                SecondaryScrollableTabRow(
-                    selectedTabIndex = selectedSeasonIndex,
-                    containerColor = Color.Transparent,
-                    edgePadding = 16.dp,
-                    divider = {}
-                ) {
-                    movie.seasons.forEachIndexed { index, season ->
-                        Tab(
-                            selected = selectedSeasonIndex == index,
-                            onClick = { selectedSeasonIndex = index },
-                            text = {
-                                Text(
-                                    season.name ?: "Season ${season.seasonNumber}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = if (selectedSeasonIndex == index) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-            val currentSeason = movie.seasons.getOrNull(selectedSeasonIndex)
-            if (currentSeason != null) {
-                items(currentSeason.episodes.size) { index ->
-                    val episode = currentSeason.episodes[index]
-                    EpisodeListItem(
-                        episode = episode,
-                        isSelected = episode.id == selectedEpisode?.id,
-                        onClick = { onEpisodeSelected(episode) }
-                    )
-                }
             }
         }
     }

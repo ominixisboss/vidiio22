@@ -33,6 +33,10 @@ object VidiioViewModelFactories {
         }
     }
 
+    fun browse(app: VidiioApplication, kind: com.ominix.vidiio.data.repository.BrowseKind): ViewModelProvider.Factory = viewModelFactory {
+        initializer { MediaBrowseViewModel(kind, app.movieRepository) }
+    }
+
     fun anime(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
         initializer { AnimeViewModel(app.animeRepository) }
     }

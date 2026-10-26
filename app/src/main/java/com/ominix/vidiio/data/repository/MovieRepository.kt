@@ -61,16 +61,6 @@ class MovieRepository(
             "WA" to "Wano", "EH" to "Egghead",
         )
 
-        /** Home-screen genre shelves: label to TMDB genre id. */
-        val GENRE_SHELVES = listOf(
-            "Action" to 28,
-            "Comedy" to 35,
-            "Horror" to 27,
-            "Sci-Fi" to 878,
-            "Animation" to 16,
-            "Thriller" to 53,
-            "Romance" to 10749,
-        )
     }
 
     private suspend fun getEnabledScrapers(): List<Scraper> {
@@ -78,16 +68,17 @@ class MovieRepository(
         return scrapers.filter { it.sourceId in enabledSources }
     }
 
+    /**
+     * Home is a short front page, not every shelf: a handful of what is hot, plus anything the
+     * user's own addons offer. Everything else (genres, top rated, anime, One Pace, ...) lives on
+     * the dedicated Movies, TV and Anime pages.
+     */
     suspend fun getHomeCategories(): List<Category> = coroutineScope {
         try {
             val trendingMovies = async { tmdbService.getTrendingMovies().results.map { it.toMovie(MovieType.MOVIE) } }
             val popularMovies = async { tmdbService.getPopularMovies().results.map { it.toMovie(MovieType.MOVIE) } }
             val popularTV = async { tmdbService.getPopularTVShows().results.map { it.toMovie(MovieType.TV_SHOW) } }
-            val topRated = async { tmdbService.getTopRatedMovies().results.map { it.toMovie(MovieType.MOVIE) } }
-            
-            val popularAnime = async { getPopularAnime() }
             val trendingAnime = async { getTrendingAnime() }
-            val topRatedAnime = async { getTopRatedAnime() }
 
             val stremioCatalogs = async {
                 addonManager.getCatalogs().map { (name, metas) ->
@@ -95,39 +86,13 @@ class MovieRepository(
                 }
             }
 
-            // Bundled anime addons (e.g. One Pace) get their own row in the anime block.
-            val animeAddonCatalogs = async {
-                runCatching {
-                    addonManager.getAnimeCatalogs().map { (name, metas) ->
-                        Category(name, metas.map { it.toMovie(forceType = MovieType.TV_SHOW) })
-                    }
-                }.getOrDefault(emptyList())
-            }
-
-            val genreShelves = async {
-                GENRE_SHELVES.map { (label, id) ->
-                    async {
-                        val movies = runCatching {
-                            tmdbService.discoverMovies(withGenres = id.toString()).results.map { it.toMovie(MovieType.MOVIE) }
-                        }.getOrDefault(emptyList())
-                        Category(label, movies)
-                    }
-                }.map { it.await() }.filter { it.movies.isNotEmpty() }
-            }
-
             val categories = mutableListOf(
                 Category("Trending Movies", trendingMovies.await()),
                 Category(TOP10_LABEL, trendingMovies.await().take(10)),
+                Category("Popular TV Shows", popularTV.await()),
                 Category("Trending Anime", trendingAnime.await()),
                 Category("Popular Movies", popularMovies.await()),
-                Category("Popular TV Shows", popularTV.await()),
-                Category("Top Rated Movies", topRated.await()),
-                Category("Popular Anime", popularAnime.await()),
-                Category("Top Rated Anime", topRatedAnime.await())
             )
-
-            categories.addAll(animeAddonCatalogs.await().filter { it.movies.isNotEmpty() })
-            categories.addAll(genreShelves.await())
             categories.addAll(stremioCatalogs.await())
             categories
         } catch (e: Exception) {
@@ -136,6 +101,43 @@ class MovieRepository(
             emptyList()
         }
     }
+
+    /** One shelf on the Movies or TV page. */
+    suspend fun browse(kind: BrowseKind, list: BrowseList): List<Movie> {
+        val type = if (kind == BrowseKind.MOVIES) MovieType.MOVIE else MovieType.TV_SHOW
+        val response = when (kind) {
+            BrowseKind.MOVIES -> when (list) {
+                BrowseList.TRENDING -> tmdbService.getTrendingMovies()
+                BrowseList.POPULAR -> tmdbService.getPopularMovies()
+                BrowseList.TOP_RATED -> tmdbService.getTopRatedMovies()
+                BrowseList.FRESH -> tmdbService.getNowPlayingMovies()
+                BrowseList.SOON -> tmdbService.getUpcomingMovies()
+            }
+            BrowseKind.TV -> when (list) {
+                BrowseList.TRENDING -> tmdbService.getTrendingTVShows()
+                BrowseList.POPULAR -> tmdbService.getPopularTVShows()
+                BrowseList.TOP_RATED -> tmdbService.getTopRatedTVShows()
+                BrowseList.FRESH -> tmdbService.getOnTheAirTVShows()
+                BrowseList.SOON -> tmdbService.getAiringTodayTVShows()
+            }
+        }
+        return response.results.map { it.toMovie(type) }.filter { it.posterUrl.isNotBlank() }
+    }
+
+    /** A genre shelf: TMDB discover, most popular first. */
+    suspend fun browseGenre(kind: BrowseKind, genreId: Int): List<Movie> = when (kind) {
+        BrowseKind.MOVIES -> tmdbService.discoverMovies(withGenres = genreId.toString())
+            .results.map { it.toMovie(MovieType.MOVIE) }
+        BrowseKind.TV -> tmdbService.discoverTV(withGenres = genreId.toString(), voteCountGte = 100)
+            .results.map { it.toMovie(MovieType.TV_SHOW) }
+    }.filter { it.posterUrl.isNotBlank() }
+
+    /** Bundled anime addons (One Pace) as shelves, for the Anime page. */
+    suspend fun getAnimeAddonCategories(): List<Category> = runCatching {
+        addonManager.getAnimeCatalogs().map { (name, metas) ->
+            Category(name, metas.map { it.toMovie(forceType = MovieType.TV_SHOW) })
+        }.filter { it.movies.isNotEmpty() }
+    }.getOrDefault(emptyList())
 
     suspend fun search(query: String): List<Movie> = try {
         tmdbService.searchMulti(query).results.map { it.toMovie() }
@@ -150,31 +152,6 @@ class MovieRepository(
             withGenres = "16",
             withOriginalLanguage = "ja",
             sortBy = "popularity.desc"
-        ).results.map { it.toMovie(MovieType.TV_SHOW) }
-    } catch (e: Exception) {
-        if (e is CancellationException) throw e
-        Log.w(TAG, "MovieRepository failed", e)
-        emptyList()
-    }
-
-    suspend fun getPopularAnime(): List<Movie> = try {
-        tmdbService.discoverTV(
-            withGenres = "16",
-            withOriginalLanguage = "ja",
-            sortBy = "popularity.desc"
-        ).results.map { it.toMovie(MovieType.TV_SHOW) }
-    } catch (e: Exception) {
-        if (e is CancellationException) throw e
-        Log.w(TAG, "MovieRepository failed", e)
-        emptyList()
-    }
-
-    suspend fun getTopRatedAnime(): List<Movie> = try {
-        tmdbService.discoverTV(
-            withGenres = "16",
-            withOriginalLanguage = "ja",
-            sortBy = "vote_average.desc",
-            voteCountGte = 200
         ).results.map { it.toMovie(MovieType.TV_SHOW) }
     } catch (e: Exception) {
         if (e is CancellationException) throw e
@@ -406,3 +383,16 @@ class MovieRepository(
 }
 
 private const val TAG = "MovieRepository"
+/** Which of the dedicated browse pages a request is for. */
+enum class BrowseKind { MOVIES, TV }
+
+/** The standard shelves every browse page has. What FRESH and SOON mean depends on the page. */
+enum class BrowseList {
+    TRENDING, POPULAR, TOP_RATED,
+
+    /** Movies: in theatres now. TV: currently on the air. */
+    FRESH,
+
+    /** Movies: coming soon. TV: airing today. */
+    SOON,
+}

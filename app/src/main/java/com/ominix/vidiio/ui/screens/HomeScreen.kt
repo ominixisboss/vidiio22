@@ -55,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ominix.vidiio.data.model.Movie
-import com.ominix.vidiio.data.model.MovieType
 import com.ominix.vidiio.data.model.TOP10_LABEL
 import com.ominix.vidiio.data.model.WatchProgress
 import com.ominix.vidiio.data.repository.HomeStyle
@@ -63,6 +62,9 @@ import com.ominix.vidiio.ui.components.RiveLoader
 import com.ominix.vidiio.ui.components.tvClickable
 import com.ominix.vidiio.ui.components.tvFocusRing
 import com.ominix.vidiio.ui.tv.LocalIsTv
+import com.ominix.vidiio.ui.browse.LocalBrowseShortcuts
+import com.ominix.vidiio.ui.browse.ShortcutButtons
+import androidx.compose.foundation.layout.statusBarsPadding
 import com.ominix.vidiio.ui.viewmodel.HomeUiState
 import com.ominix.vidiio.ui.viewmodel.HomeViewModel
 import kotlinx.coroutines.delay
@@ -74,6 +76,9 @@ fun HomeScreen(
     onNavigateToDetails: (Movie) -> Unit,
     onSearchQuery: (String) -> Unit = {},
     onResumeWatching: (WatchProgress) -> Unit = {},
+    onOpenMovies: () -> Unit = {},
+    onOpenTv: () -> Unit = {},
+    onOpenAnime: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -130,14 +135,8 @@ fun HomeScreen(
                 val heroMovies = remember(state.categories) {
                     state.categories.firstOrNull()?.movies?.take(5) ?: emptyList()
                 }
-                // The Categories filter: narrows every row to what each title actually is (a film or a
-                // series), rather than searching for a word. Rows left with nothing disappear.
-                var contentFilter by rememberSaveable { mutableStateOf(ContentFilter.ALL) }
-                val rows = remember(state.categories, contentFilter) {
-                    state.categories.mapNotNull { category ->
-                        val kept = category.movies.filter { contentFilter.accepts(it) }
-                        if (kept.isEmpty()) null else category.copy(movies = kept)
-                    }
+                val rows = remember(state.categories) {
+                    state.categories.filter { it.movies.isNotEmpty() }
                 }
 
                 PullToRefreshBox(
@@ -176,7 +175,7 @@ fun HomeScreen(
                             }
                         }
                         item(key = "categories") {
-                            CategoryFilterRow(selected = contentFilter, spec = spec, onSelect = { contentFilter = it })
+                            CategoryLinks(spec = spec, onOpenMovies = onOpenMovies, onOpenTv = onOpenTv, onOpenAnime = onOpenAnime)
                         }
                         if (continueWatching.isNotEmpty()) {
                             item {
@@ -208,6 +207,13 @@ fun HomeScreen(
                     Button(onClick = { viewModel.refresh() }) { Text("Retry") }
                 }
             }
+        }
+
+        LocalBrowseShortcuts.current?.takeIf { !LocalIsTv.current }?.let { shortcuts ->
+            ShortcutButtons(
+                shortcuts,
+                Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 8.dp, top = 4.dp)
+            )
         }
 
         if (showVpnReminder && !vpnDialogDismissed) {
@@ -964,40 +970,37 @@ fun ContinueWatchingRow(
     }
 }
 
-/** What the Categories filter on Home can narrow the rows to. */
-enum class ContentFilter(val label: String) {
-    ALL("All"),
-    MOVIES("Movies"),
-    TV_SHOWS("TV Shows");
-
-    fun accepts(movie: Movie): Boolean = when (this) {
-        ALL -> true
-        MOVIES -> movie.type == MovieType.MOVIE
-        TV_SHOWS -> movie.type == MovieType.TV_SHOW
-    }
-}
-
-/** Category chips under the hero. Choosing one filters the rows below; it never searches. */
+/**
+ * Category chips under the hero. "All" is this page; the others open the dedicated Movies, TV
+ * Shows and Anime pages, so Home itself stays a short, curated front page instead of a wall of
+ * every shelf.
+ */
 @Composable
-private fun CategoryFilterRow(
-    selected: ContentFilter,
+private fun CategoryLinks(
     spec: HomeStyleSpec,
-    onSelect: (ContentFilter) -> Unit,
+    onOpenMovies: () -> Unit,
+    onOpenTv: () -> Unit,
+    onOpenAnime: () -> Unit,
 ) {
+    val chips = listOf(
+        Triple("All", true, {}),
+        Triple("Movies", false, onOpenMovies),
+        Triple("TV Shows", false, onOpenTv),
+        Triple("Anime", false, onOpenAnime),
+    )
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(ContentFilter.entries.toList()) { filter ->
-            val isSelected = filter == selected
+        items(chips) { (label, isSelected, onClick) ->
             val shape = RoundedCornerShape(50)
             Text(
-                text = filter.label,
+                text = label,
                 color = if (isSelected) Color.White else MaterialTheme.colorScheme.onBackground,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 fontSize = 14.sp,
                 modifier = Modifier
-                    .tvClickable(onClick = { onSelect(filter) }, shape = shape)
+                    .tvClickable(onClick = onClick, shape = shape)
                     .background(if (isSelected) spec.accent else Color.White.copy(alpha = 0.08f))
                     .border(1.dp, if (isSelected) spec.accent else Color.White.copy(alpha = 0.18f), shape)
                     .padding(horizontal = 18.dp, vertical = 9.dp)
