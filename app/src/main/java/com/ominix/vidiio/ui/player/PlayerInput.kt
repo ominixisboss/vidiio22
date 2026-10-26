@@ -55,8 +55,9 @@ fun Modifier.playerRemoteControls(
         }
 
         Key.DirectionLeft -> {
+            // Left/Right never skip on their own: with the controls hidden they only bring the
+            // controls up. Seeking is on the seek bar, or the rewind/forward media keys.
             if (!controlsVisible) {
-                viewModel.seekBy(-SEEK_STEP_MS)
                 onShowControls(); true
             } else {
                 false
@@ -65,7 +66,6 @@ fun Modifier.playerRemoteControls(
 
         Key.DirectionRight -> {
             if (!controlsVisible) {
-                viewModel.seekBy(SEEK_STEP_MS)
                 onShowControls(); true
             } else {
                 false

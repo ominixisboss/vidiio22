@@ -58,6 +58,26 @@ class TorrServerApi(private val baseUrl: String) {
         }
     }
 
+    /**
+     * Applies [overrides] on top of the engine's current settings (POST /settings). The engine's
+     * "set" replaces the whole block, so the current values are read first and merged.
+     */
+    fun applySettings(overrides: Map<String, Any>): Boolean = try {
+        val current = postJson("/settings", JSONObject().put("action", "get"))
+            ?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
+        overrides.forEach { (k, v) -> current.put(k, v) }
+        postJson("/settings", JSONObject().put("action", "set").put("sets", current)) != null
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Log.w(TAG, "applySettings failed: ${e.message}")
+        false
+    }
+
+    private fun postJson(path: String, body: JSONObject): String? {
+        val req = Request.Builder().url("$baseUrl$path").post(body.toString().toRequestBody(JSON)).build()
+        return client.newCall(req).execute().use { r -> if (r.isSuccessful) r.body.string() else null }
+    }
+
     /** POST /torrents {action:"add"} — adds a magnet / hash and returns its status. */
     fun addTorrent(link: String, title: String? = null): TsTorrent? {
         val body = JSONObject().apply {

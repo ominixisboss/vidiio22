@@ -59,7 +59,7 @@ class TorrentManager(private val context: Context) {
         }
         val api = engine.getApi() ?: return@withContext null
 
-        val magnet = normalizeMagnet(magnetUrl)
+        val magnet = TorrentTuning.withTrackers(normalizeMagnet(magnetUrl))
         _status.value = _status.value?.copy(statusMessage = "Adding torrent...")
 
         val added = try {
