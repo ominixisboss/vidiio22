@@ -126,6 +126,8 @@ class MediaSession(
                 .filter { showDead || health[it.url]?.status != SourceStatus.DEAD }
                 .sortedWith(
                     compareBy<StreamSource> { (health[it.url]?.status ?: SourceStatus.CHECKING).ordinal }
+                        // English before other languages, within the same trust level.
+                        .thenBy { com.ominix.vidiio.data.repository.SourceLanguage.rank(it.serverName) }
                         .thenByDescending { it.seeders ?: 0 }
                         .thenBy { it.quality != "4K" }
                         .thenBy { it.quality != "1080p" }

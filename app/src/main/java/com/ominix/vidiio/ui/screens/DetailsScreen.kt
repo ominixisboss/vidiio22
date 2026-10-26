@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -104,6 +105,42 @@ fun DetailsScreen(
                     val permissionsState = com.google.accompanist.permissions.rememberMultiplePermissionsState(
                         permissions = com.ominix.vidiio.utils.PermissionUtils.getRequiredPermissions()
                     )
+                    // Picking an episode starts the best stream that works and is in English, rather than just
+                    // listing links: the episode that was tapped, once its sources are found and checked.
+                    var autoPlayEpisodeId by remember { mutableStateOf<String?>(null) }
+                    var giveUp by remember { mutableStateOf(false) }
+                    var sawSearching by remember { mutableStateOf(false) }
+                    val toastContext = androidx.compose.ui.platform.LocalContext.current
+                    LaunchedEffect(autoPlayEpisodeId) {
+                        giveUp = false
+                        sawSearching = false
+                        if (autoPlayEpisodeId != null) {
+                            kotlinx.coroutines.delay(15_000)
+                            giveUp = true
+                        }
+                    }
+                    LaunchedEffect(autoPlayEpisodeId, state.selectedEpisode?.id, state.streamSources, sourceHealth, state.isSearchingSources, giveUp) {
+                        val pending = autoPlayEpisodeId ?: return@LaunchedEffect
+                        // Wait until the tap has taken effect, and the new search has actually begun - before
+                        // that the list is empty and "not searching" only because it is between episodes.
+                        if (state.selectedEpisode?.id != pending) return@LaunchedEffect
+                        if (state.isSearchingSources) sawSearching = true
+                        val best = com.ominix.vidiio.data.repository.pickStreamToPlay(
+                            state.streamSources, sourceHealth, state.isSearchingSources, giveUp
+                        )
+                        when {
+                            best != null -> {
+                                autoPlayEpisodeId = null
+                                onPlay(state.movie, state.selectedEpisode, best)
+                            }
+                            (sawSearching && !state.isSearchingSources) || giveUp -> {
+                                autoPlayEpisodeId = null
+                                android.widget.Toast.makeText(toastContext, "No working stream found for this episode", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                    androidx.activity.compose.BackHandler(enabled = autoPlayEpisodeId != null) { autoPlayEpisodeId = null }
+
                     MovieDetailContent(
                         movie = state.movie,
                         streamSources = state.streamSources,
@@ -113,7 +150,10 @@ fun DetailsScreen(
                         onShowUnavailableChange = viewModel::setShowUnavailable,
                         selectedEpisode = state.selectedEpisode,
                         isSearchingSources = state.isSearchingSources,
-                        onEpisodeSelected = { viewModel.selectEpisode(it) },
+                        onEpisodeSelected = { episode ->
+                            viewModel.selectEpisode(episode)
+                            autoPlayEpisodeId = episode.id
+                        },
                         onPlayClick = { source -> onPlay(state.movie, state.selectedEpisode, source) },
                         onDownloadClick = { source ->
                             if (!permissionsState.allPermissionsGranted) {
@@ -124,6 +164,22 @@ fun DetailsScreen(
                         onToggleSourceSelector = { showSourceSelector = true },
                         onFocusTop = { runCatching { topFocus.requestFocus() } }
                     )
+                    if (autoPlayEpisodeId != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.7f))
+                                .pointerInput(Unit) { },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = Color.White)
+                                Spacer(Modifier.height(16.dp))
+                                Text("Finding the best stream...", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                                Text("Back to cancel", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
                 }
                 is DetailsUiState.Error -> {
                     Text(
