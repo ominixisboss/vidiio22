@@ -105,7 +105,8 @@ object VidiioViewModelFactories {
                 app.watchProgressRepository,
                 app.addonManager,
                 movie,
-                initialEpisodeId
+                initialEpisodeId,
+                app.torrServerEngine
             )
         }
     }

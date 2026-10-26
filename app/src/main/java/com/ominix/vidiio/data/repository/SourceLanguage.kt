@@ -6,6 +6,12 @@ import com.ominix.vidiio.data.model.StreamSource
  * Guesses whether a release is in English from its name. Scrapers return torrent and file names
  * and no language field, so the tags people put in those names are all there is.
  */
+/** Releases a streaming stick cannot decode: 4K, Dolby Vision, HDR. Rarely worth picking by default. */
+object SourceHeaviness {
+    private val HEAVY = Regex("""(?i)(?<![a-z0-9])(2160p|4k|uhd|dolby[ .-_]?vision|dv|hdr10+?|hdr|hevc[ .-_]?10)(?![a-z0-9])""")
+    fun isHeavy(name: String): Boolean = HEAVY.containsMatchIn(name)
+}
+
 object SourceLanguage {
 
     /** Releases whose name says another language is the one in them. */
@@ -43,7 +49,9 @@ fun pickStreamToPlay(
     fun status(s: StreamSource) = health[s.url]?.status
     val working = sources.filter { status(it) == SourceStatus.WORKING }
 
-    working.firstOrNull { SourceLanguage.isLikelyEnglish(it.serverName) }?.let { return it }
+    // Best first choice: works, English, and light enough for a TV stick to decode.
+    working.firstOrNull { SourceLanguage.isLikelyEnglish(it.serverName) && !SourceHeaviness.isHeavy(it.serverName) }?.let { return it }
+    working.firstOrNull { SourceLanguage.isLikelyEnglish(it.serverName) }?.let { if (!searching || giveUp) return it }
 
     if (searching && !giveUp) return null
     return working.firstOrNull()

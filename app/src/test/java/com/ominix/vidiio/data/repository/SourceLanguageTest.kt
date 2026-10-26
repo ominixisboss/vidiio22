@@ -58,6 +58,15 @@ class SourceLanguageTest {
     }
 
     @Test
+    fun `heavy 4K or Dolby Vision sources are skipped when a lighter one works`() {
+        val dv = src("The.Dog.Stars.2026.2160p.WEB-DL.DV.HDR10.DDP5.1.H265")
+        val hd = src("The Dog Stars 2026 1080p WEBRip x264")
+        assertTrue(SourceHeaviness.isHeavy(dv.serverName))
+        assertFalse(SourceHeaviness.isHeavy(hd.serverName))
+        assertEquals(hd, pickStreamToPlay(listOf(dv, hd), working(dv, hd), searching = true, giveUp = false))
+    }
+
+    @Test
     fun `never picks a dead source and returns null when nothing is playable`() {
         val dead = src("Show S01E01 1080p")
         val health = mapOf(dead.url to SourceHealth(SourceStatus.DEAD))
