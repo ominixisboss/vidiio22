@@ -61,7 +61,6 @@ import com.ominix.vidiio.data.repository.HomeStyle
 import com.ominix.vidiio.ui.components.RiveLoader
 import com.ominix.vidiio.ui.components.tvClickable
 import com.ominix.vidiio.ui.tv.LocalIsTv
-import com.ominix.vidiio.ui.tv.tvRow
 import com.ominix.vidiio.ui.viewmodel.HomeUiState
 import com.ominix.vidiio.ui.viewmodel.HomeViewModel
 import kotlinx.coroutines.delay
@@ -86,19 +85,6 @@ fun HomeScreen(
     val themeAccent = MaterialTheme.colorScheme.primary
     val spec = remember(homeStyle, themeAccent) { homeStyle.spec(themeAccent) }
     val background = spec.background ?: MaterialTheme.colorScheme.background
-
-    val topBarAlpha by remember {
-        derivedStateOf {
-            if (scrollState.firstVisibleItemIndex > 0) 0f
-            else (1f - (scrollState.firstVisibleItemScrollOffset.toFloat() / 300f)).coerceIn(0f, 1f)
-        }
-    }
-    val backgroundAlpha by remember {
-        derivedStateOf {
-            if (scrollState.firstVisibleItemIndex > 0) 1f
-            else (scrollState.firstVisibleItemScrollOffset.toFloat() / 300f).coerceIn(0f, 1f)
-        }
-    }
 
     Box(modifier = modifier.fillMaxSize().background(background)) {
         if (spec.style == HomeStyle.VIDIIO) {
@@ -139,22 +125,11 @@ fun HomeScreen(
                 HomeSkeletonLoading(spec)
             }
             is HomeUiState.Success -> {
-                var selectedFilter by remember { mutableStateOf("All") }
-                var showCategorySheet by remember { mutableStateOf(false) }
-
                 val heroMovies = remember(state.categories) {
                     state.categories.firstOrNull()?.movies?.take(5) ?: emptyList()
                 }
-                val rows = remember(state.categories, selectedFilter) {
-                    state.categories.filter { cat ->
-                        if (cat.movies.isEmpty()) return@filter false
-                        when (selectedFilter) {
-                            "TV Shows" -> cat.name.contains("TV", true) || cat.name.contains("Series", true) || cat.name.contains("Show", true)
-                            "Movies" -> cat.name.contains("Movie", true) || (!cat.name.contains("TV", true) && !cat.name.contains("Series", true))
-                            "All" -> true
-                            else -> cat.name.contains(selectedFilter, true)
-                        }
-                    }
+                val rows = remember(state.categories) {
+                    state.categories.filter { it.movies.isNotEmpty() }
                 }
 
                 PullToRefreshBox(
@@ -211,26 +186,6 @@ fun HomeScreen(
                             }
                         }
                     }
-                }
-
-                StyledTopAppBar(
-                    spec = spec,
-                    selectedFilter = selectedFilter,
-                    onFilterSelected = { selectedFilter = it },
-                    onShowCategorySheet = { showCategorySheet = true },
-                    onSearchQuery = onSearchQuery,
-                    topBarAlpha = topBarAlpha,
-                    backgroundAlpha = backgroundAlpha,
-                    background = background
-                )
-
-                if (showCategorySheet) {
-                    NetflixCategoriesSheet(
-                        currentFilter = selectedFilter,
-                        onSelectCategory = { selectedFilter = it },
-                        onSearchCategory = { onSearchQuery(it) },
-                        onDismiss = { showCategorySheet = false }
-                    )
                 }
             }
             is HomeUiState.Error -> {
@@ -372,221 +327,6 @@ fun HomeSkeletonLoading(spec: HomeStyleSpec) {
 /* ----------------------------- App Customizations ----------------------------- */
 
 @Composable
-private fun TopBarChip(
-    text: String,
-    isSelected: Boolean,
-    activeColor: Color,
-    onClick: () -> Unit
-) {
-    val chipShape = RoundedCornerShape(16.dp)
-    Surface(
-        modifier = Modifier
-            .tvClickable(
-                onClick = onClick,
-                shape = chipShape,
-                focusScale = 1.08f
-            ),
-        shape = chipShape,
-        color = if (isSelected) activeColor.copy(alpha = 0.25f) else Color.Transparent,
-        border = if (isSelected) BorderStroke(1.dp, activeColor) else null
-    ) {
-        Text(
-            text = text,
-            color = if (isSelected) activeColor else Color.White.copy(alpha = 0.85f),
-            fontSize = 13.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun StyledTopAppBar(
-    spec: HomeStyleSpec,
-    selectedFilter: String,
-    onFilterSelected: (String) -> Unit,
-    onShowCategorySheet: () -> Unit,
-    onSearchQuery: (String) -> Unit,
-    topBarAlpha: Float,
-    backgroundAlpha: Float,
-    background: Color
-) {
-    val titleComposable: @Composable () -> Unit = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            when (spec.style) {
-                HomeStyle.NETFLIX -> {
-                    Text(
-                        "NETFLIX",
-                        color = Color(0xFFE50914),
-                        fontWeight = FontWeight.Black,
-                        fontSize = 24.sp,
-                        letterSpacing = (-1).sp,
-                        modifier = Modifier.tvClickable(onClick = { onFilterSelected("All") }, focusScale = 1.05f)
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TopBarChip(
-                            text = "TV Shows",
-                            isSelected = selectedFilter == "TV Shows",
-                            activeColor = Color(0xFFE50914),
-                            onClick = { onFilterSelected(if (selectedFilter == "TV Shows") "All" else "TV Shows") }
-                        )
-                        TopBarChip(
-                            text = "Movies",
-                            isSelected = selectedFilter == "Movies",
-                            activeColor = Color(0xFFE50914),
-                            onClick = { onFilterSelected(if (selectedFilter == "Movies") "All" else "Movies") }
-                        )
-                        TopBarChip(
-                            text = "Categories",
-                            isSelected = false,
-                            activeColor = Color(0xFFE50914),
-                            onClick = onShowCategorySheet
-                        )
-                    }
-                }
-                HomeStyle.DISNEY -> {
-                    Text(
-                        "Disney+",
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 26.sp,
-                        letterSpacing = (-0.5).sp,
-                        modifier = Modifier.tvClickable(onClick = { onFilterSelected("All") }, focusScale = 1.05f)
-                    )
-                }
-                HomeStyle.HULU -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "hulu",
-                            color = Color(0xFF1CE783),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 26.sp,
-                            letterSpacing = (-1.5).sp,
-                            modifier = Modifier.tvClickable(onClick = { onFilterSelected("All") }, focusScale = 1.05f)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TopBarChip(
-                                text = "Hubs",
-                                isSelected = selectedFilter == "All",
-                                activeColor = Color(0xFF1CE783),
-                                onClick = { onFilterSelected("All") }
-                            )
-                            TopBarChip(
-                                text = "TV",
-                                isSelected = selectedFilter == "TV Shows",
-                                activeColor = Color(0xFF1CE783),
-                                onClick = { onFilterSelected(if (selectedFilter == "TV Shows") "All" else "TV Shows") }
-                            )
-                            TopBarChip(
-                                text = "Movies",
-                                isSelected = selectedFilter == "Movies",
-                                activeColor = Color(0xFF1CE783),
-                                onClick = { onFilterSelected(if (selectedFilter == "Movies") "All" else "Movies") }
-                            )
-                        }
-                    }
-                }
-                HomeStyle.PRIME -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "prime video",
-                            color = Color(0xFF00A8E1),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 22.sp,
-                            letterSpacing = (-0.5).sp,
-                            modifier = Modifier.tvClickable(onClick = { onFilterSelected("All") }, focusScale = 1.05f)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TopBarChip(
-                                text = "All",
-                                isSelected = selectedFilter == "All",
-                                activeColor = Color(0xFF00A8E1),
-                                onClick = { onFilterSelected("All") }
-                            )
-                            TopBarChip(
-                                text = "Movies",
-                                isSelected = selectedFilter == "Movies",
-                                activeColor = Color(0xFF00A8E1),
-                                onClick = { onFilterSelected(if (selectedFilter == "Movies") "All" else "Movies") }
-                            )
-                            TopBarChip(
-                                text = "TV Shows",
-                                isSelected = selectedFilter == "TV Shows",
-                                activeColor = Color(0xFF00A8E1),
-                                onClick = { onFilterSelected(if (selectedFilter == "TV Shows") "All" else "TV Shows") }
-                            )
-                        }
-                    }
-                }
-                HomeStyle.VIDIIO -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = spec.accent.copy(alpha = 0.2f),
-                            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.25f)),
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(
-                                "VIDIIO",
-                                color = spec.accent,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = (-1).sp,
-                                fontSize = 20.sp,
-                                modifier = Modifier
-                                    .tvClickable(onClick = { onFilterSelected("All") }, focusScale = 1.05f)
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TopBarChip(
-                                text = "All",
-                                isSelected = selectedFilter == "All",
-                                activeColor = spec.accent,
-                                onClick = { onFilterSelected("All") }
-                            )
-                            TopBarChip(
-                                text = "Movies",
-                                isSelected = selectedFilter == "Movies",
-                                activeColor = spec.accent,
-                                onClick = { onFilterSelected(if (selectedFilter == "Movies") "All" else "Movies") }
-                            )
-                            TopBarChip(
-                                text = "TV Shows",
-                                isSelected = selectedFilter == "TV Shows",
-                                activeColor = spec.accent,
-                                onClick = { onFilterSelected(if (selectedFilter == "TV Shows") "All" else "TV Shows") }
-                            )
-                            TopBarChip(
-                                text = "Categories",
-                                isSelected = false,
-                                activeColor = spec.accent,
-                                onClick = onShowCategorySheet
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    TopAppBar(
-        title = {
-            Box(modifier = Modifier.alpha(topBarAlpha)) {
-                titleComposable()
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = background.copy(alpha = backgroundAlpha),
-            titleContentColor = spec.accent
-        )
-    )
-}
-
-@Composable
 fun DisneyBrandHubsRow(onBrandClick: (String) -> Unit = {}) {
     val brands = listOf(
         "DISNEY" to listOf(Color(0xFF0038A8), Color(0xFF001552)),
@@ -598,7 +338,7 @@ fun DisneyBrandHubsRow(onBrandClick: (String) -> Unit = {}) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.tvRow().padding(vertical = 8.dp)
+        modifier = Modifier.padding(vertical = 8.dp)
     ) {
         items(brands) { (name, colors) ->
             val shape = RoundedCornerShape(14.dp)
@@ -1071,7 +811,6 @@ fun CategorySection(
     Column {
         RowHeader(name, spec, onClick = onHeaderClick)
         LazyRow(
-            modifier = Modifier.tvRow(),
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1092,7 +831,6 @@ fun Top10Section(
     Column {
         RowHeader("Top 10 This Week", spec, onClick = onHeaderClick)
         LazyRow(
-            modifier = Modifier.tvRow(),
             contentPadding = PaddingValues(start = 24.dp, end = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(if (spec.style == HomeStyle.NETFLIX) (-12).dp else 4.dp)
         ) {
@@ -1127,7 +865,6 @@ fun ContinueWatchingRow(
     Column {
         RowHeader("Continue Watching", spec)
         LazyRow(
-            modifier = Modifier.tvRow(),
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1209,104 +946,6 @@ fun ContinueWatchingRow(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NetflixCategoriesSheet(
-    currentFilter: String,
-    onSelectCategory: (String) -> Unit,
-    onSearchCategory: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val categories = listOf(
-        "All Categories" to "All",
-        "TV Shows" to "TV Shows",
-        "Movies" to "Movies",
-        "Action & Adventure" to "Action",
-        "Anime & Animation" to "Animation",
-        "Comedies" to "Comedy",
-        "Dramas" to "Drama",
-        "Horror & Thrillers" to "Horror",
-        "Sci-Fi & Fantasy" to "Sci-Fi",
-        "Romance" to "Romance"
-    )
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF181818),
-        contentColor = Color.White,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp, start = 20.dp, end = 20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Categories",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(categories) { (displayName, filterKey) ->
-                    val isSelected = currentFilter == filterKey
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .tvClickable(
-                                onClick = {
-                                    onSelectCategory(filterKey)
-                                    if (filterKey != "All" && filterKey != "TV Shows" && filterKey != "Movies") {
-                                        onSearchCategory(filterKey)
-                                    }
-                                    onDismiss()
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                focusScale = 1.02f
-                            ),
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) Color(0xFFE50914).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
-                        border = if (isSelected) BorderStroke(1.dp, Color(0xFFE50914)) else null
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = displayName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (isSelected) Color(0xFFE50914) else Color.White,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                            if (isSelected) {
-                                Icon(
-                                    Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    tint = Color(0xFFE50914),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
                     }
                 }
             }
