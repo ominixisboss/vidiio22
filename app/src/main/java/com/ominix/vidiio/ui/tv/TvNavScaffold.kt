@@ -1,6 +1,7 @@
 package com.ominix.vidiio.ui.tv
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,6 +34,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -76,6 +78,7 @@ fun TvNavScaffold(
     content: @Composable () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
     var railOpen by remember { mutableStateOf(true) }
     var railHasFocus by remember { mutableStateOf(false) }
@@ -90,8 +93,10 @@ fun TvNavScaffold(
 
     // Hide once focus has been out of the rail for a moment. The first time, wait a little
     // longer so the menu is actually seen at launch.
-    LaunchedEffect(railHasFocus, railOpen, focusRailOnOpen) {
-        if (railOpen && !railHasFocus && !focusRailOnOpen) {
+    LaunchedEffect(railEnabled, railHasFocus, railOpen, focusRailOnOpen) {
+        // Don't start the clock while the menu can't show (splash), or the launch reveal is
+        // used up before anyone sees it.
+        if (railEnabled && railOpen && !railHasFocus && !focusRailOnOpen) {
             delay(if (firstHide) 2500 else 250)
             firstHide = false
             railOpen = false
@@ -129,7 +134,31 @@ fun TvNavScaffold(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // Back has to act on the first press. On a remote it was being used up dropping the focus
+            // highlight, so closing a panel or leaving a page took two presses. Take Back here and
+            // run the normal back handlers ourselves, once, on key down.
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.Back) {
+                    if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                        backDispatcher?.onBackPressed()
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
             .onKeyEvent { event ->
+                // The remote's Menu button always toggles the side menu, whatever the page or the
+                // cursor is doing.
+                if (railEnabled && event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
+                    if (railOpen && railHasFocus) {
+                        focusManager.moveFocus(FocusDirection.Right)
+                    } else {
+                        railOpen = true
+                        focusRailOnOpen = true
+                    }
+                    return@onKeyEvent true
+                }
                 // Only sees Left when nothing in the page used it. We move focus ourselves so
                 // we can tell whether there was anywhere to go - and if there wasn't, that's
                 // the cue to open the menu.

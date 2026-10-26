@@ -35,6 +35,7 @@ import com.ominix.vidiio.data.model.MovieType
 import com.ominix.vidiio.data.model.StreamSource
 import com.ominix.vidiio.data.repository.SourceHealth
 import com.ominix.vidiio.ui.components.SourceHealthBadge
+import com.ominix.vidiio.ui.components.tvFocusRing
 import com.ominix.vidiio.ui.components.GlassCard
 import com.ominix.vidiio.ui.components.RiveLoader
 import com.ominix.vidiio.ui.viewmodel.DetailsUiState
@@ -323,7 +324,7 @@ fun MovieDetailContent(
                 if (streamSources.isNotEmpty()) {
                     Button(
                         onClick = { onPlayClick(streamSources.first()) },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        modifier = Modifier.fillMaxWidth().height(56.dp).tvFocusRing(RoundedCornerShape(24.dp)),
                         shape = RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.White,

@@ -60,6 +60,7 @@ import com.ominix.vidiio.data.model.WatchProgress
 import com.ominix.vidiio.data.repository.HomeStyle
 import com.ominix.vidiio.ui.components.RiveLoader
 import com.ominix.vidiio.ui.components.tvClickable
+import com.ominix.vidiio.ui.components.tvFocusRing
 import com.ominix.vidiio.ui.tv.LocalIsTv
 import com.ominix.vidiio.ui.viewmodel.HomeUiState
 import com.ominix.vidiio.ui.viewmodel.HomeViewModel
@@ -475,7 +476,8 @@ private fun HeroButtons(movie: Movie, spec: HomeStyleSpec, center: Boolean, onCl
             onClick = { onClick(movie) },
             shape = RoundedCornerShape(24.dp),
             colors = ButtonDefaults.buttonColors(containerColor = playBg, contentColor = playText),
-            modifier = if (center) Modifier.weight(1f).height(48.dp) else Modifier.height(48.dp)
+            modifier = (if (center) Modifier.weight(1f).height(48.dp) else Modifier.height(48.dp))
+                .tvFocusRing(RoundedCornerShape(24.dp))
         ) {
             Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(6.dp))
@@ -494,6 +496,7 @@ private fun HeroButtons(movie: Movie, spec: HomeStyleSpec, center: Boolean, onCl
             modifier = (if (center) Modifier.weight(1f) else Modifier)
                 .height(48.dp)
                 .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
+                .tvFocusRing(RoundedCornerShape(24.dp))
         ) {
             val secondIcon = if (spec.style == HomeStyle.NETFLIX || spec.style == HomeStyle.DISNEY) Icons.Rounded.Add else Icons.Rounded.Info
             val secondLabel = when (spec.style) {
@@ -564,7 +567,7 @@ fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie)
     Box(modifier = Modifier.fillMaxWidth().height(spec.heroHeight)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val movie = movies[page]
-            Box(Modifier.fillMaxSize().tvClickable(onClick = { onMovieClick(movie) }, focusScale = 1f)) {
+            Box(Modifier.fillMaxSize().tvClickable(onClick = { onMovieClick(movie) }, enabled = !isTv)) {
                 if (spec.kenBurns && !isTv) {
                     KenBurnsImage(movie.backdropUrl ?: movie.posterUrl, Modifier.fillMaxSize())
                 } else {
@@ -613,6 +616,7 @@ fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie)
 
 @Composable
 fun HeroStatic(movie: Movie, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit) {
+    val isTv = LocalIsTv.current
     val scrim = spec.background ?: Color.Black
     val inset = spec.heroKind == HeroKind.SPOTLIGHT
     val corner = if (inset) 20.dp else 0.dp
@@ -622,7 +626,7 @@ fun HeroStatic(movie: Movie, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit)
             .fillMaxWidth()
             .height(spec.heroHeight)
             .then(if (inset) Modifier.padding(horizontal = 12.dp, vertical = 8.dp) else Modifier)
-            .tvClickable(onClick = { onMovieClick(movie) }, shape = RoundedCornerShape(corner), focusScale = 1f)
+            .tvClickable(onClick = { onMovieClick(movie) }, shape = RoundedCornerShape(corner), enabled = !isTv)
     ) {
         if (spec.kenBurns) {
             KenBurnsImage(movie.backdropUrl ?: movie.posterUrl, Modifier.fillMaxSize())
