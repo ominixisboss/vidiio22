@@ -23,6 +23,11 @@ object SourceLanguage {
     private val ENGLISH = Regex("""(?i)(?<![a-z0-9])(eng|english|dual[ .\-_]?audio|multi[ .\-_]?audio|en-us|en-gb)(?![a-z0-9])""")
 
     /** 0 = says English, 1 = says nothing either way, 2 = says another language. */
+    private val DUB = Regex("""(?i)(?<![a-z0-9])(dub|dubbed|english[ .-_]?dub|eng[ .-_]?dub)(?![a-z0-9])""")
+
+    /** An English dub: what anime viewers want over a subbed original. */
+    fun isDub(name: String): Boolean = DUB.containsMatchIn(name)
+
     fun rank(name: String): Int = when {
         ENGLISH.containsMatchIn(name) -> 0
         FOREIGN.containsMatchIn(name) -> 2
@@ -56,4 +61,25 @@ fun pickStreamToPlay(
     if (searching && !giveUp) return null
     return working.firstOrNull()
         ?: sources.firstOrNull { status(it) != SourceStatus.DEAD && status(it) != SourceStatus.CHECKING }
+}
+
+/** What an audio track's language tag tells us. Pure, so it can be tested. */
+object AudioLanguage {
+    private val ENGLISH_TAGS = setOf("en", "eng")
+    private val UNKNOWN_TAGS = setOf("", "und", "mis", "zxx")
+
+    fun isEnglish(tag: String?): Boolean {
+        val t = tag?.lowercase()?.substringBefore('-')?.substringBefore('_') ?: return false
+        return t in ENGLISH_TAGS
+    }
+
+    fun isKnown(tag: String?): Boolean = (tag?.lowercase()?.substringBefore('-') ?: "") !in UNKNOWN_TAGS
+
+    /**
+     * True when the file says what its audio is and none of it is English: certain enough to move
+     * on to another source. Untagged ("und") audio is never judged - it cannot be told apart
+     * without analysing the sound itself.
+     */
+    fun definitelyNotEnglish(tags: List<String?>): Boolean =
+        tags.isNotEmpty() && tags.all { isKnown(it) } && tags.none { isEnglish(it) }
 }

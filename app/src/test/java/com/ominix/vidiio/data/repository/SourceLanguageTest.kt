@@ -67,6 +67,27 @@ class SourceLanguageTest {
     }
 
     @Test
+    fun `audio tags decide when a file is not english`() {
+        assertTrue(AudioLanguage.isEnglish("eng"))
+        assertTrue(AudioLanguage.isEnglish("en-US"))
+        assertFalse(AudioLanguage.isEnglish("jpn"))
+        assertTrue(AudioLanguage.definitelyNotEnglish(listOf("jpn")))
+        assertTrue(AudioLanguage.definitelyNotEnglish(listOf("jpn", "fra")))
+        assertFalse(AudioLanguage.definitelyNotEnglish(listOf("jpn", "eng")))
+        // Untagged audio is never judged.
+        assertFalse(AudioLanguage.definitelyNotEnglish(listOf("und")))
+        assertFalse(AudioLanguage.definitelyNotEnglish(listOf(null)))
+        assertFalse(AudioLanguage.definitelyNotEnglish(emptyList()))
+    }
+
+    @Test
+    fun `dubs are recognised`() {
+        assertTrue(SourceLanguage.isDub("Show S01E01 1080p English Dub"))
+        assertTrue(SourceLanguage.isDub("Show.S01.DUBBED.1080p"))
+        assertFalse(SourceLanguage.isDub("Show S01E01 1080p"))
+    }
+
+    @Test
     fun `never picks a dead source and returns null when nothing is playable`() {
         val dead = src("Show S01E01 1080p")
         val health = mapOf(dead.url to SourceHealth(SourceStatus.DEAD))

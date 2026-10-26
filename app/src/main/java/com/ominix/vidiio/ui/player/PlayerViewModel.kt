@@ -271,6 +271,24 @@ class PlayerViewModel(
                 }
             }
             _state.update { it.copy(availableAudioTracks = tracksList) }
+
+            // The file says what language its audio is in. If it says so and none of it is English,
+            // this source is the wrong one: move on to the next. (Players pick the English track of a
+            // dual-audio file on their own - see setPreferredAudioLanguages below.)
+            val tags = tracksList.map { it.format.language }
+            val current = _state.value.selectedSource
+            if (current != null && com.ominix.vidiio.data.repository.AudioLanguage.definitelyNotEnglish(tags)) {
+                val next = session.streamSources.value.firstOrNull {
+                    it.url != current.url && !skippedUrls.contains(it.url) &&
+                        !com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) &&
+                        com.ominix.vidiio.data.repository.SourceLanguage.isLikelyEnglish(it.serverName)
+                }
+                if (next != null) {
+                    skippedUrls += current.url
+                    torrentPrepareRetries = 0
+                    selectSource(next)
+                }
+            }
         }
 
         override fun onIsPlayingChanged(playing: Boolean) {
@@ -299,6 +317,10 @@ class PlayerViewModel(
             .build()
 
         val builder = ExoPlayer.Builder(application)
+            .setTrackSelector(androidx.media3.exoplayer.trackselection.DefaultTrackSelector(application).apply {
+                // Choose the English audio track whenever a file has one (dual-audio anime, etc.).
+                parameters = buildUponParameters().setPreferredAudioLanguages("en", "eng").build()
+            })
             .setLoadControl(loadControl)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setHandleAudioBecomingNoisy(true)

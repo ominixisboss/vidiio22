@@ -131,6 +131,7 @@ class MediaSession(
                     compareBy<StreamSource> { (health[it.url]?.status ?: SourceStatus.CHECKING).ordinal }
                         // English before other languages, within the same trust level.
                         .thenBy { com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) }
+                        .thenBy { !com.ominix.vidiio.data.repository.SourceLanguage.isDub(it.serverName) }
                         .thenBy { com.ominix.vidiio.data.repository.SourceLanguage.rank(it.serverName) }
                         .thenByDescending { it.seeders ?: 0 }
                         .thenBy { it.quality != "4K" }
