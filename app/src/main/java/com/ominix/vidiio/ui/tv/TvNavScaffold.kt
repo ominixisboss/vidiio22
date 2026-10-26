@@ -90,8 +90,10 @@ fun TvNavScaffold(
 
     // Hide once focus has been out of the rail for a moment. The first time, wait a little
     // longer so the menu is actually seen at launch.
-    LaunchedEffect(railHasFocus, railOpen, focusRailOnOpen) {
-        if (railOpen && !railHasFocus && !focusRailOnOpen) {
+    LaunchedEffect(railEnabled, railHasFocus, railOpen, focusRailOnOpen) {
+        // Don't start the clock while the menu can't show (splash), or the launch reveal is
+        // used up before anyone sees it.
+        if (railEnabled && railOpen && !railHasFocus && !focusRailOnOpen) {
             delay(if (firstHide) 2500 else 250)
             firstHide = false
             railOpen = false
@@ -130,6 +132,17 @@ fun TvNavScaffold(
         modifier = Modifier
             .fillMaxSize()
             .onKeyEvent { event ->
+                // The remote's Menu button always toggles the side menu, whatever the page or the
+                // cursor is doing.
+                if (railEnabled && event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
+                    if (railOpen && railHasFocus) {
+                        focusManager.moveFocus(FocusDirection.Right)
+                    } else {
+                        railOpen = true
+                        focusRailOnOpen = true
+                    }
+                    return@onKeyEvent true
+                }
                 // Only sees Left when nothing in the page used it. We move focus ourselves so
                 // we can tell whether there was anywhere to go - and if there wasn't, that's
                 // the cue to open the menu.

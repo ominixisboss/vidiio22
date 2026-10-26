@@ -127,6 +127,11 @@ fun VirtualPointerOverlay(
             .focusable(interactionSource = remember { MutableInteractionSource() })
             .onPreviewKeyEvent { event ->
                 val current = position ?: return@onPreviewKeyEvent false
+                // Pushing Left with the cursor already against the left edge is the way to reach the
+                // side menu: don't swallow it, let the menu see it.
+                if (event.key == Key.DirectionLeft && current.x <= LEFT_EDGE_PX) {
+                    return@onPreviewKeyEvent false
+                }
                 if (event.type != KeyEventType.KeyDown) {
                     return@onPreviewKeyEvent event.key in DIRECTION_KEYS || event.key in TAP_KEYS
                 }
@@ -240,6 +245,8 @@ private fun dispatchScroll(view: View, at: Offset, vscroll: Float, hscroll: Floa
 private val DIRECTION_KEYS = setOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)
 private val TAP_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
+/** Within this many px of the left edge counts as "at the edge" for opening the side menu. */
+private const val LEFT_EDGE_PX = 4f
 private const val BASE_STEP_PX = 26f
 private const val ACCEL_STEP_PX = 3.5f
 private const val MAX_STEP_PX = 90f
