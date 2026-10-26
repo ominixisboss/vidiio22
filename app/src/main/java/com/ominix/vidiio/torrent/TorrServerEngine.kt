@@ -79,6 +79,14 @@ class TorrServerEngine(private val context: Context) {
             ).apply {
                 directory(dir)
                 redirectErrorStream(true)
+                // The engine is a Go program: left alone it lets its heap grow well past what a 1 GB stick
+                // can spare, and Android then kills the whole app. Cap it and collect more eagerly.
+                val lowRam = (context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)
+                    ?.let { it.isLowRamDevice || it.memoryClass <= 192 } == true
+                if (lowRam) {
+                    environment()["GOMEMLIMIT"] = "160MiB"
+                    environment()["GOGC"] = "40"
+                }
                 // Route the torrent engine's traffic through the user's proxy ("VPN"),
                 // the same way qBittorrent-style SOCKS proxying works.
                 (context.applicationContext as? com.ominix.vidiio.VidiioApplication)?.proxyConfig?.let { cfg ->

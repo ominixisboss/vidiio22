@@ -172,21 +172,6 @@ class PlayerViewModel(
                 _state.update { it.copy(mediaPlayerChoice = choice) }
             }
         }
-        viewModelScope.launch {
-            // Read the user's default once, before any subtitle track can arrive - not as a
-            // running collector, since after this the player owns subtitlesEnabled for the
-            // rest of the session (the in-player "Off" toggle shouldn't be fought by Settings).
-            val subtitlesEnabledByDefault = settingsRepository.subtitlesEnabledByDefaultFlow.first()
-            _state.update { it.copy(subtitlesEnabled = subtitlesEnabledByDefault) }
-            if (!subtitlesEnabledByDefault) setTextTrackDisabled(true)
-
-            subtitles.collect { subTracks ->
-                if (subTracks.isNotEmpty() && _state.value.subtitlesEnabled && _state.value.selectedSubtitleUrl == null) {
-                    val bestTrack = subTracks.first()
-                    selectSubtitle(bestTrack)
-                }
-            }
-        }
     }
 
     /** Resume point from Continue Watching. Applied once, when the media is ready. */
@@ -306,10 +291,14 @@ class PlayerViewModel(
      * re-entering a half-initialised delegate.
      */
     val player: ExoPlayer = run {
+        // A 2-minute buffer of 1080p is ~120 MB of RAM. Fine on a phone, fatal on a 1 GB stick, where the
+        // system kills the app. Keep it to 30 s there; fast start (below) is unchanged.
+        val am = application.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val lowRam = am?.let { it.isLowRamDevice || it.memoryClass <= 192 } == true
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                50000, // minBufferMs
-                120000, // maxBufferMs
+                if (lowRam) 15000 else 50000, // minBufferMs
+                if (lowRam) 30000 else 120000, // maxBufferMs
                 2500, // bufferForPlaybackMs (Fast start!)
                 5000 // bufferForPlaybackAfterRebufferMs
             )
@@ -349,6 +338,24 @@ class PlayerViewModel(
 
     init {
         player.addListener(playerListener)
+        // These touch the player, so they must run after it exists. Started from the constructor
+        // body above the player they used to run first (Main.immediate resumes synchronously once
+        // DataStore has a cached value) and crashed with a null player when subtitles default to Off.
+        viewModelScope.launch {
+            // Read the user's default once, before any subtitle track can arrive - not as a
+            // running collector, since after this the player owns subtitlesEnabled for the
+            // rest of the session (the in-player "Off" toggle shouldn't be fought by Settings).
+            val subtitlesEnabledByDefault = settingsRepository.subtitlesEnabledByDefaultFlow.first()
+            _state.update { it.copy(subtitlesEnabled = subtitlesEnabledByDefault) }
+            if (!subtitlesEnabledByDefault) setTextTrackDisabled(true)
+
+            subtitles.collect { subTracks ->
+                if (subTracks.isNotEmpty() && _state.value.subtitlesEnabled && _state.value.selectedSubtitleUrl == null) {
+                    val bestTrack = subTracks.first()
+                    selectSubtitle(bestTrack)
+                }
+            }
+        }
         startPolling()
 
         viewModelScope.launch {
