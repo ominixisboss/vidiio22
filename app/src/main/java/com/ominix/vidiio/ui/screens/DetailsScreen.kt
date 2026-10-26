@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -167,6 +168,8 @@ fun MovieDetailContent(
     var trailerFullscreen by remember(movie.id) { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val listState = rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val trailerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     // Pause the inline trailer once the header scrolls (mostly) out of view.
     val headerVisible by remember {
         derivedStateOf {
@@ -251,7 +254,7 @@ fun MovieDetailContent(
                     ) {
                         IconButton(
                             onClick = { trailerMuted = !trailerMuted },
-                            modifier = Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                            modifier = Modifier.focusRequester(trailerFocus).background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
                         ) {
                             Icon(
                                 imageVector = if (trailerMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
@@ -340,7 +343,16 @@ fun MovieDetailContent(
                             .height(56.dp)
                             .tvFocusRing(RoundedCornerShape(24.dp))
                             .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) { onFocusTop(); true } else false
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) {
+                                    // Scroll back up to the trailer and put focus on its controls; with no
+                                    // trailer there, fall back to the top bar.
+                                    scope.launch {
+                                        listState.scrollToItem(0)
+                                        kotlinx.coroutines.delay(150)
+                                        runCatching { trailerFocus.requestFocus() }.onFailure { onFocusTop() }
+                                    }
+                                    true
+                                } else false
                             },
                         shape = RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(

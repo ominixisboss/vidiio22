@@ -21,9 +21,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
@@ -264,6 +267,33 @@ fun VidiioApp() {
     val isSplashScreen = currentRoute is VidiioRoute.Splash
     val isSearchScreen = currentRoute is VidiioRoute.Search
     val pointerEnabled = mouseToggle && !isPlayerScreen && !isSplashScreen && !isSearchScreen
+
+    // Back at the very base of a section would leave the app, and people press Back repeatedly
+    // meaning "take me to the menu". So: from another section, Back goes Home; from Home it asks.
+    var confirmExit by remember { mutableStateOf(false) }
+    val atBase = (navigationState.backStacks[navigationState.topLevelRoute]?.size ?: 0) <= 1
+    androidx.activity.compose.BackHandler(enabled = atBase && !isSplashScreen) {
+        if (navigationState.topLevelRoute == VidiioRoute.Home) confirmExit = true
+        else navigator.navigate(VidiioRoute.Home)
+    }
+    if (confirmExit) {
+        val stayFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { stayFocus.requestFocus() } }
+        AlertDialog(
+            onDismissRequest = { confirmExit = false },
+            title = { Text("Leave Vidiio?") },
+            text = { Text("Are you sure you want to exit the app?") },
+            confirmButton = {
+                TextButton(onClick = { (context as? android.app.Activity)?.finish() }) { Text("Exit") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { confirmExit = false },
+                    modifier = Modifier.focusRequester(stayFocus)
+                ) { Text("Stay") }
+            }
+        )
+    }
 
     val layoutType = if (isPlayerScreen || isSplashScreen) {
         NavigationSuiteType.None
