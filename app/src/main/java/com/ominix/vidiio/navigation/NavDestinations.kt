@@ -1,9 +1,13 @@
 package com.ominix.vidiio.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -21,10 +25,35 @@ sealed interface VidiioRoute : NavKey {
     }
 
     @Serializable
+    data object Movies : VidiioRoute {
+        val icon = Icons.Rounded.Movie
+        val label = "Movies"
+    }
+
+    @Serializable
+    data object TvShows : VidiioRoute {
+        val icon = Icons.Rounded.Tv
+        val label = "TV Shows"
+    }
+
+    @Serializable
+    data object Anime : VidiioRoute {
+        val icon = Icons.Rounded.AutoAwesome
+        val label = "Anime"
+    }
+
+    @Serializable
     data class Search(val query: String = "") : VidiioRoute {
         @kotlinx.serialization.Transient
         val icon = Icons.Rounded.Search
         val label = "Search"
+    }
+
+    /** Phone-only hub for My List, Downloads and Settings, which do not fit the bottom bar. */
+    @Serializable
+    data object Library : VidiioRoute {
+        val icon = Icons.Rounded.VideoLibrary
+        val label = "Library"
     }
 
     @Serializable

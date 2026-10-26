@@ -8,6 +8,8 @@ import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.FavoriteRepository
 import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.SourceVerifier
+import com.ominix.vidiio.data.anime.AniListService
+import com.ominix.vidiio.data.anime.AnimeRepository
 import com.ominix.vidiio.data.repository.ProxyConfig
 import com.ominix.vidiio.data.repository.ProxyType
 import com.ominix.vidiio.data.repository.SettingsRepository
@@ -270,6 +272,10 @@ class VidiioApplication : Application() {
     }
 
     val sourceVerifier: SourceVerifier by lazy { SourceVerifier(playbackHttpClient) }
+
+    val animeRepository: AnimeRepository by lazy {
+        AnimeRepository(AniListService(okHttpClient), movieRepository)
+    }
 
     val movieRepository: MovieRepository by lazy {
         MovieRepository(

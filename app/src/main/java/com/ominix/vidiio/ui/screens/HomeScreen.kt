@@ -62,6 +62,9 @@ import com.ominix.vidiio.ui.components.RiveLoader
 import com.ominix.vidiio.ui.components.tvClickable
 import com.ominix.vidiio.ui.components.tvFocusRing
 import com.ominix.vidiio.ui.tv.LocalIsTv
+import com.ominix.vidiio.ui.browse.LocalBrowseShortcuts
+import com.ominix.vidiio.ui.browse.ShortcutButtons
+import androidx.compose.foundation.layout.statusBarsPadding
 import com.ominix.vidiio.ui.viewmodel.HomeUiState
 import com.ominix.vidiio.ui.viewmodel.HomeViewModel
 import kotlinx.coroutines.delay
@@ -73,6 +76,9 @@ fun HomeScreen(
     onNavigateToDetails: (Movie) -> Unit,
     onSearchQuery: (String) -> Unit = {},
     onResumeWatching: (WatchProgress) -> Unit = {},
+    onOpenMovies: () -> Unit = {},
+    onOpenTv: () -> Unit = {},
+    onOpenAnime: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -168,6 +174,9 @@ fun HomeScreen(
                                 })
                             }
                         }
+                        item(key = "categories") {
+                            CategoryLinks(spec = spec, onOpenMovies = onOpenMovies, onOpenTv = onOpenTv, onOpenAnime = onOpenAnime)
+                        }
                         if (continueWatching.isNotEmpty()) {
                             item {
                                 ContinueWatchingRow(
@@ -181,9 +190,9 @@ fun HomeScreen(
                         items(rows) { category ->
                             when {
                                 category.name == TOP10_LABEL && spec.showTop10 ->
-                                    Top10Section(category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery("Popular Movies") })
+                                    Top10Section(category.movies, spec, onNavigateToDetails)
                                 category.name == TOP10_LABEL -> Unit // hidden for this style
-                                else -> CategorySection(category.name, category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery(category.name) })
+                                else -> CategorySection(category.name, category.movies, spec, onNavigateToDetails)
                             }
                         }
                     }
@@ -198,6 +207,13 @@ fun HomeScreen(
                     Button(onClick = { viewModel.refresh() }) { Text("Retry") }
                 }
             }
+        }
+
+        LocalBrowseShortcuts.current?.takeIf { !LocalIsTv.current }?.let { shortcuts ->
+            ShortcutButtons(
+                shortcuts,
+                Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 8.dp, top = 4.dp)
+            )
         }
 
         if (showVpnReminder && !vpnDialogDismissed) {
@@ -691,17 +707,16 @@ fun HeroStatic(movie: Movie, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit)
 
 /* ----------------------------- Rows ----------------------------- */
 
+/** A row's title. Plain text: it is not focusable and does nothing when selected. */
 @Composable
-private fun RowHeader(text: String, spec: HomeStyleSpec, onClick: (() -> Unit)? = null) {
+private fun RowHeader(text: String, spec: HomeStyleSpec) {
     Text(
         text = if (spec.uppercaseHeaders) text.uppercase() else text,
         fontSize = spec.rowHeaderSize,
         fontWeight = spec.rowHeaderWeight,
         letterSpacing = if (spec.uppercaseHeaders) 1.sp else 0.sp,
         color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
     )
 }
 
@@ -809,11 +824,10 @@ fun CategorySection(
     name: String,
     movies: List<Movie>,
     spec: HomeStyleSpec,
-    onMovieClick: (Movie) -> Unit,
-    onHeaderClick: (() -> Unit)? = null
+    onMovieClick: (Movie) -> Unit
 ) {
     Column {
-        RowHeader(name, spec, onClick = onHeaderClick)
+        RowHeader(name, spec)
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -829,11 +843,10 @@ fun CategorySection(
 fun Top10Section(
     movies: List<Movie>,
     spec: HomeStyleSpec,
-    onMovieClick: (Movie) -> Unit,
-    onHeaderClick: (() -> Unit)? = null
+    onMovieClick: (Movie) -> Unit
 ) {
     Column {
-        RowHeader("Top 10 This Week", spec, onClick = onHeaderClick)
+        RowHeader("Top 10 This Week", spec)
         LazyRow(
             contentPadding = PaddingValues(start = 24.dp, end = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(if (spec.style == HomeStyle.NETFLIX) (-12).dp else 4.dp)
@@ -953,6 +966,45 @@ fun ContinueWatchingRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Category chips under the hero. "All" is this page; the others open the dedicated Movies, TV
+ * Shows and Anime pages, so Home itself stays a short, curated front page instead of a wall of
+ * every shelf.
+ */
+@Composable
+private fun CategoryLinks(
+    spec: HomeStyleSpec,
+    onOpenMovies: () -> Unit,
+    onOpenTv: () -> Unit,
+    onOpenAnime: () -> Unit,
+) {
+    val chips = listOf(
+        Triple("All", true, {}),
+        Triple("Movies", false, onOpenMovies),
+        Triple("TV Shows", false, onOpenTv),
+        Triple("Anime", false, onOpenAnime),
+    )
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(chips) { (label, isSelected, onClick) ->
+            val shape = RoundedCornerShape(50)
+            Text(
+                text = label,
+                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onBackground,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .tvClickable(onClick = onClick, shape = shape)
+                    .background(if (isSelected) spec.accent else Color.White.copy(alpha = 0.08f))
+                    .border(1.dp, if (isSelected) spec.accent else Color.White.copy(alpha = 0.18f), shape)
+                    .padding(horizontal = 18.dp, vertical = 9.dp)
+            )
         }
     }
 }

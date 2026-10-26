@@ -31,6 +31,21 @@ interface TMDBService {
     @GET("movie/top_rated")
     suspend fun getTopRatedMovies(): TMDBResponse<TMDBMovie>
 
+    @GET("movie/now_playing")
+    suspend fun getNowPlayingMovies(): TMDBResponse<TMDBMovie>
+
+    @GET("movie/upcoming")
+    suspend fun getUpcomingMovies(): TMDBResponse<TMDBMovie>
+
+    @GET("tv/top_rated")
+    suspend fun getTopRatedTVShows(): TMDBResponse<TMDBMovie>
+
+    @GET("tv/on_the_air")
+    suspend fun getOnTheAirTVShows(): TMDBResponse<TMDBMovie>
+
+    @GET("tv/airing_today")
+    suspend fun getAiringTodayTVShows(): TMDBResponse<TMDBMovie>
+
     @GET("search/multi")
     suspend fun searchMulti(
         @Query("query") query: String

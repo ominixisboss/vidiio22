@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Home
@@ -20,9 +21,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
@@ -39,6 +43,11 @@ import com.ominix.vidiio.ui.screens.*
 import com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactories
 import com.ominix.vidiio.ui.pointer.VirtualPointerOverlay
 import com.ominix.vidiio.ui.tv.LocalIsTv
+import com.ominix.vidiio.ui.browse.BrowseShortcuts
+import com.ominix.vidiio.ui.browse.LocalBrowseShortcuts
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Tv
+import com.ominix.vidiio.data.repository.BrowseKind
 import com.ominix.vidiio.ui.tv.ProvideTvScrolling
 import com.ominix.vidiio.ui.tv.TvNavItem
 import com.ominix.vidiio.ui.tv.TvNavScaffold
@@ -51,7 +60,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 fun VidiioApp() {
     val navigationState = rememberNavigationState(
         startRoute = VidiioRoute.Splash,
-        topLevelRoutes = setOf(VidiioRoute.Home, VidiioRoute.Search(), VidiioRoute.Favorites, VidiioRoute.Downloads, VidiioRoute.Settings, VidiioRoute.Splash)
+        topLevelRoutes = setOf(VidiioRoute.Home, VidiioRoute.Movies, VidiioRoute.TvShows, VidiioRoute.Anime, VidiioRoute.Library, VidiioRoute.Search(), VidiioRoute.Favorites, VidiioRoute.Downloads, VidiioRoute.Settings, VidiioRoute.Splash)
     )
 
     val navigator = remember { Navigator(navigationState) }
@@ -94,6 +103,56 @@ fun VidiioApp() {
                 onResumeWatching = { wp ->
                     navigator.navigate(VidiioRoute.Player(wp.toMovie(), wp.episodeId, null))
                 },
+                onOpenMovies = { navigator.navigate(VidiioRoute.Movies) },
+                onOpenTv = { navigator.navigate(VidiioRoute.TvShows) },
+                onOpenAnime = { navigator.navigate(VidiioRoute.Anime) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        entry<VidiioRoute.Movies>(
+            metadata = metadata {
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
+            }
+        ) {
+            val viewModel: com.ominix.vidiio.ui.viewmodel.MediaBrowseViewModel = viewModel(
+                key = "browse_movies",
+                factory = VidiioViewModelFactories.browse(application, BrowseKind.MOVIES)
+            )
+            MediaBrowseScreen(
+                viewModel = viewModel,
+                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        entry<VidiioRoute.TvShows>(
+            metadata = metadata {
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
+            }
+        ) {
+            val viewModel: com.ominix.vidiio.ui.viewmodel.MediaBrowseViewModel = viewModel(
+                key = "browse_tv",
+                factory = VidiioViewModelFactories.browse(application, BrowseKind.TV)
+            )
+            MediaBrowseScreen(
+                viewModel = viewModel,
+                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        entry<VidiioRoute.Library> {
+            LibraryScreen(onOpen = { route -> navigator.navigate(route) }, modifier = Modifier.fillMaxSize())
+        }
+        entry<VidiioRoute.Anime>(
+            metadata = metadata {
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
+            }
+        ) {
+            val viewModel: com.ominix.vidiio.ui.viewmodel.AnimeViewModel = viewModel(
+                factory = VidiioViewModelFactories.anime(application)
+            )
+            AnimeScreen(
+                viewModel = viewModel,
+                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -209,6 +268,33 @@ fun VidiioApp() {
     val isSearchScreen = currentRoute is VidiioRoute.Search
     val pointerEnabled = mouseToggle && !isPlayerScreen && !isSplashScreen && !isSearchScreen
 
+    // Back at the very base of a section would leave the app, and people press Back repeatedly
+    // meaning "take me to the menu". So: from another section, Back goes Home; from Home it asks.
+    var confirmExit by remember { mutableStateOf(false) }
+    val atBase = (navigationState.backStacks[navigationState.topLevelRoute]?.size ?: 0) <= 1
+    androidx.activity.compose.BackHandler(enabled = atBase && !isSplashScreen) {
+        if (navigationState.topLevelRoute == VidiioRoute.Home) confirmExit = true
+        else navigator.navigate(VidiioRoute.Home)
+    }
+    if (confirmExit) {
+        val stayFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { stayFocus.requestFocus() } }
+        AlertDialog(
+            onDismissRequest = { confirmExit = false },
+            title = { Text("Leave Vidiio?") },
+            text = { Text("Are you sure you want to exit the app?") },
+            confirmButton = {
+                TextButton(onClick = { (context as? android.app.Activity)?.finish() }) { Text("Exit") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { confirmExit = false },
+                    modifier = Modifier.focusRequester(stayFocus)
+                ) { Text("Stay") }
+            }
+        )
+    }
+
     val layoutType = if (isPlayerScreen || isSplashScreen) {
         NavigationSuiteType.None
     } else {
@@ -237,34 +323,35 @@ fun VidiioApp() {
         )
     )
 
-    // One list of sections, shared by the standard scaffold and the TV one.
-    val navItems = listOf(
-        TvNavItem(
-            selected = navigationState.topLevelRoute == VidiioRoute.Home,
-            icon = Icons.Rounded.Home, label = "Home",
-            onClick = { navigator.navigate(VidiioRoute.Home) }
-        ),
-        TvNavItem(
-            selected = navigationState.topLevelRoute is VidiioRoute.Search,
-            icon = Icons.Rounded.Search, label = "Search",
-            onClick = { navigator.navigate(VidiioRoute.Search()) }
-        ),
-        TvNavItem(
-            selected = navigationState.topLevelRoute == VidiioRoute.Favorites,
-            icon = Icons.Rounded.Favorite, label = "My List",
-            onClick = { navigator.navigate(VidiioRoute.Favorites) }
-        ),
-        TvNavItem(
-            selected = navigationState.topLevelRoute == VidiioRoute.Downloads,
-            icon = Icons.Rounded.Download, label = "Downloads",
-            onClick = { navigator.navigate(VidiioRoute.Downloads) }
-        ),
-        TvNavItem(
-            selected = navigationState.topLevelRoute == VidiioRoute.Settings,
-            icon = Icons.Rounded.Settings, label = "Settings",
-            onClick = { navigator.navigate(VidiioRoute.Settings) }
-        ),
+    // The sections. The side menu (TV, tablets) lists them all; the phone's bottom bar has room
+    // for five, so My List / Downloads / Settings sit behind a Library shortcut there instead.
+    fun item(route: androidx.navigation3.runtime.NavKey, selected: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) =
+        TvNavItem(selected = selected, icon = icon, label = label, onClick = { navigator.navigate(route) })
+
+    val top = navigationState.topLevelRoute
+    val home = item(VidiioRoute.Home, top == VidiioRoute.Home, Icons.Rounded.Home, "Home")
+    val movies = item(VidiioRoute.Movies, top == VidiioRoute.Movies, Icons.Rounded.Movie, "Movies")
+    val tv = item(VidiioRoute.TvShows, top == VidiioRoute.TvShows, Icons.Rounded.Tv, "TV Shows")
+    val anime = item(VidiioRoute.Anime, top == VidiioRoute.Anime, Icons.Rounded.AutoAwesome, "Anime")
+    val search = item(VidiioRoute.Search(), top is VidiioRoute.Search, Icons.Rounded.Search, "Search")
+    val railItems = listOf(
+        home, movies, tv, anime, search,
+        item(VidiioRoute.Favorites, top == VidiioRoute.Favorites, Icons.Rounded.Favorite, "My List"),
+        item(VidiioRoute.Downloads, top == VidiioRoute.Downloads, Icons.Rounded.Download, "Downloads"),
+        item(VidiioRoute.Settings, top == VidiioRoute.Settings, Icons.Rounded.Settings, "Settings"),
     )
+    val barItems = listOf(home, movies, tv, anime, search)
+    val useBottomBar = layoutType == NavigationSuiteType.NavigationBar
+
+    // Phones get search + library shortcuts on the pages' headers; TVs and tablets have the menu.
+    val shortcuts = remember(useBottomBar, isTv) {
+        if (useBottomBar && !isTv) {
+            BrowseShortcuts(
+                onSearch = { navigator.navigate(VidiioRoute.Search()) },
+                onLibrary = { navigator.navigate(VidiioRoute.Library) }
+            )
+        } else null
+    }
 
     val pageContent: @Composable () -> Unit = {
         VirtualPointerOverlay(enabled = pointerEnabled) {
@@ -276,12 +363,12 @@ fun VidiioApp() {
         }
     }
 
-    CompositionLocalProvider(LocalIsTv provides isTv) {
+    CompositionLocalProvider(LocalIsTv provides isTv, LocalBrowseShortcuts provides shortcuts) {
         ProvideTvScrolling(enabled = isTv) {
             if (isTv) {
                 // A remote-driven TV gets a side menu that hides itself while you browse.
                 TvNavScaffold(
-                    items = navItems,
+                    items = railItems,
                     railEnabled = !(isPlayerScreen || isSplashScreen),
                     railColors = navItemColors.navigationRailItemColors,
                     pageKey = currentRoute ?: "none",
@@ -296,7 +383,7 @@ fun VidiioApp() {
                     layoutType = layoutType,
                     containerColor = MaterialTheme.colorScheme.background,
                     navigationSuiteItems = {
-                        navItems.forEach { nav ->
+                        (if (useBottomBar) barItems else railItems).forEach { nav ->
                             item(
                                 selected = nav.selected,
                                 onClick = nav.onClick,

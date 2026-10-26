@@ -26,6 +26,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -53,6 +60,9 @@ fun DetailsScreen(
     val unavailableCount by viewModel.unavailableCount.collectAsState()
     val showUnavailable by viewModel.showUnavailable.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    // Up from Play has nothing reliably above it to land on (the trailer sits there), so give
+    // the remote a direct route to the top bar.
+    val topFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var showSourceSelector by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -61,7 +71,7 @@ fun DetailsScreen(
             TopAppBar(
                 title = { },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.focusRequester(topFocus)) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -111,7 +121,8 @@ fun DetailsScreen(
                             }
                             viewModel.downloadSource(source)
                         },
-                        onToggleSourceSelector = { showSourceSelector = true }
+                        onToggleSourceSelector = { showSourceSelector = true },
+                        onFocusTop = { runCatching { topFocus.requestFocus() } }
                     )
                 }
                 is DetailsUiState.Error -> {
@@ -146,7 +157,8 @@ fun MovieDetailContent(
     onEpisodeSelected: (Episode) -> Unit,
     onPlayClick: (StreamSource) -> Unit,
     onDownloadClick: (StreamSource) -> Unit,
-    onToggleSourceSelector: () -> Unit
+    onToggleSourceSelector: () -> Unit,
+    onFocusTop: () -> Unit = {}
 ) {
     var selectedSeasonIndex by remember(movie.id) {
         mutableIntStateOf(movie.seasons.indexOfFirst { it.seasonNumber == selectedEpisode?.seasonNumber }.coerceAtLeast(0))
@@ -156,6 +168,8 @@ fun MovieDetailContent(
     var trailerFullscreen by remember(movie.id) { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val listState = rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val trailerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     // Pause the inline trailer once the header scrolls (mostly) out of view.
     val headerVisible by remember {
         derivedStateOf {
@@ -240,7 +254,7 @@ fun MovieDetailContent(
                     ) {
                         IconButton(
                             onClick = { trailerMuted = !trailerMuted },
-                            modifier = Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                            modifier = Modifier.focusRequester(trailerFocus).background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
                         ) {
                             Icon(
                                 imageVector = if (trailerMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
@@ -324,7 +338,22 @@ fun MovieDetailContent(
                 if (streamSources.isNotEmpty()) {
                     Button(
                         onClick = { onPlayClick(streamSources.first()) },
-                        modifier = Modifier.fillMaxWidth().height(56.dp).tvFocusRing(RoundedCornerShape(24.dp)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .tvFocusRing(RoundedCornerShape(24.dp))
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) {
+                                    // Scroll back up to the trailer and put focus on its controls; with no
+                                    // trailer there, fall back to the top bar.
+                                    scope.launch {
+                                        listState.scrollToItem(0)
+                                        kotlinx.coroutines.delay(150)
+                                        runCatching { trailerFocus.requestFocus() }.onFailure { onFocusTop() }
+                                    }
+                                    true
+                                } else false
+                            },
                         shape = RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.White,
@@ -350,6 +379,45 @@ fun MovieDetailContent(
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+
+        // Seasons and episodes come first: the links below are for the episode picked here.
+        if (movie.type == MovieType.TV_SHOW && movie.seasons.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SecondaryScrollableTabRow(
+                    selectedTabIndex = selectedSeasonIndex,
+                    containerColor = Color.Transparent,
+                    edgePadding = 16.dp,
+                    divider = {}
+                ) {
+                    movie.seasons.forEachIndexed { index, season ->
+                        Tab(
+                            selected = selectedSeasonIndex == index,
+                            onClick = { selectedSeasonIndex = index },
+                            text = {
+                                Text(
+                                    season.name ?: "Season ${season.seasonNumber}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = if (selectedSeasonIndex == index) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            val currentSeason = movie.seasons.getOrNull(selectedSeasonIndex)
+            if (currentSeason != null) {
+                items(currentSeason.episodes.size) { index ->
+                    val episode = currentSeason.episodes[index]
+                    EpisodeListItem(
+                        episode = episode,
+                        isSelected = episode.id == selectedEpisode?.id,
+                        onClick = { onEpisodeSelected(episode) }
+                    )
+                }
             }
         }
 
@@ -402,44 +470,6 @@ fun MovieDetailContent(
                     onClick = { onPlayClick(source) },
                     onDownload = { onDownloadClick(source) }
                 )
-            }
-        }
-
-        if (movie.type == MovieType.TV_SHOW && movie.seasons.isNotEmpty()) {
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                SecondaryScrollableTabRow(
-                    selectedTabIndex = selectedSeasonIndex,
-                    containerColor = Color.Transparent,
-                    edgePadding = 16.dp,
-                    divider = {}
-                ) {
-                    movie.seasons.forEachIndexed { index, season ->
-                        Tab(
-                            selected = selectedSeasonIndex == index,
-                            onClick = { selectedSeasonIndex = index },
-                            text = {
-                                Text(
-                                    season.name ?: "Season ${season.seasonNumber}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = if (selectedSeasonIndex == index) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-            val currentSeason = movie.seasons.getOrNull(selectedSeasonIndex)
-            if (currentSeason != null) {
-                items(currentSeason.episodes.size) { index ->
-                    val episode = currentSeason.episodes[index]
-                    EpisodeListItem(
-                        episode = episode,
-                        isSelected = episode.id == selectedEpisode?.id,
-                        onClick = { onEpisodeSelected(episode) }
-                    )
-                }
             }
         }
     }
