@@ -10,14 +10,17 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.unit.dp
@@ -72,11 +75,7 @@ fun Modifier.tvClickable(
                 // Lift the focused item slightly, then draw the ring inside its bounds.
                 val outline = shape.createOutline(size, layoutDirection, this)
                 drawOutline(outline, Color.White.copy(alpha = 0.14f * ring))
-                val stroke = RING_WIDTH.toPx()
-                inset(stroke / 2f) {
-                    val inner = shape.createOutline(Size(size.width, size.height), layoutDirection, this)
-                    drawOutline(inner, Color.White.copy(alpha = ring), style = Stroke(width = stroke))
-                }
+                drawFocusRing(shape, ring)
             }
             if (dim > 0f) {
                 drawOutline(shape.createOutline(size, layoutDirection, this), Color.Black.copy(alpha = dim))
@@ -85,3 +84,40 @@ fun Modifier.tvClickable(
 }
 
 private val RING_WIDTH = 4.dp
+private val RING_INNER_WIDTH = 2.dp
+
+/**
+ * White ring with a thin dark line just inside it. White alone vanishes on a white button; the
+ * dark line alone vanishes on a dark card; together one of them always reads.
+ */
+private fun DrawScope.drawFocusRing(shape: Shape, alpha: Float) {
+    val outer = RING_WIDTH.toPx()
+    inset(outer / 2f) {
+        drawOutline(shape.createOutline(size, layoutDirection, this), Color.White.copy(alpha = alpha), style = Stroke(width = outer))
+    }
+    val innerWidth = RING_INNER_WIDTH.toPx()
+    inset(outer + innerWidth / 2f) {
+        drawOutline(shape.createOutline(size, layoutDirection, this), Color.Black.copy(alpha = 0.85f * alpha), style = Stroke(width = innerWidth))
+    }
+}
+
+/**
+ * Focus ring for controls that are focusable on their own (Material buttons): they get the same
+ * ring as cards. Matters most on light buttons, where the stock focus tint is white on white and
+ * the button just looks greyed out rather than highlighted.
+ */
+@Composable
+fun Modifier.tvFocusRing(shape: Shape): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    val ring by animateFloatAsState(
+        targetValue = if (focused) 1f else 0f,
+        animationSpec = tween(120),
+        label = "tvFocusRing"
+    )
+    return this
+        .onFocusChanged { focused = it.hasFocus }
+        .drawWithContent {
+            drawContent()
+            if (ring > 0f) drawFocusRing(shape, ring)
+        }
+}

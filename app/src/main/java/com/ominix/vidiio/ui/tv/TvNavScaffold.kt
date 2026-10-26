@@ -1,6 +1,7 @@
 package com.ominix.vidiio.ui.tv
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,6 +34,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -76,6 +78,7 @@ fun TvNavScaffold(
     content: @Composable () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
     var railOpen by remember { mutableStateOf(true) }
     var railHasFocus by remember { mutableStateOf(false) }
@@ -131,6 +134,19 @@ fun TvNavScaffold(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // Back has to act on the first press. On a remote it was being used up dropping the focus
+            // highlight, so closing a panel or leaving a page took two presses. Take Back here and
+            // run the normal back handlers ourselves, once, on key down.
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.Back) {
+                    if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                        backDispatcher?.onBackPressed()
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
             .onKeyEvent { event ->
                 // The remote's Menu button always toggles the side menu, whatever the page or the
                 // cursor is doing.
