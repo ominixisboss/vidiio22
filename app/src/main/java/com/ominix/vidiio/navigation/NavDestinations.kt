@@ -1,6 +1,7 @@
 package com.ominix.vidiio.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Home
@@ -18,6 +19,12 @@ sealed interface VidiioRoute : NavKey {
     data object Home : VidiioRoute {
         val icon = Icons.Rounded.Home
         val label = "Home"
+    }
+
+    @Serializable
+    data object Anime : VidiioRoute {
+        val icon = Icons.Rounded.AutoAwesome
+        val label = "Anime"
     }
 
     @Serializable

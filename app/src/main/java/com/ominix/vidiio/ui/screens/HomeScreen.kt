@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ominix.vidiio.data.model.Movie
+import com.ominix.vidiio.data.model.MovieType
 import com.ominix.vidiio.data.model.TOP10_LABEL
 import com.ominix.vidiio.data.model.WatchProgress
 import com.ominix.vidiio.data.repository.HomeStyle
@@ -129,8 +130,14 @@ fun HomeScreen(
                 val heroMovies = remember(state.categories) {
                     state.categories.firstOrNull()?.movies?.take(5) ?: emptyList()
                 }
-                val rows = remember(state.categories) {
-                    state.categories.filter { it.movies.isNotEmpty() }
+                // The Categories filter: narrows every row to what each title actually is (a film or a
+                // series), rather than searching for a word. Rows left with nothing disappear.
+                var contentFilter by rememberSaveable { mutableStateOf(ContentFilter.ALL) }
+                val rows = remember(state.categories, contentFilter) {
+                    state.categories.mapNotNull { category ->
+                        val kept = category.movies.filter { contentFilter.accepts(it) }
+                        if (kept.isEmpty()) null else category.copy(movies = kept)
+                    }
                 }
 
                 PullToRefreshBox(
@@ -168,6 +175,9 @@ fun HomeScreen(
                                 })
                             }
                         }
+                        item(key = "categories") {
+                            CategoryFilterRow(selected = contentFilter, spec = spec, onSelect = { contentFilter = it })
+                        }
                         if (continueWatching.isNotEmpty()) {
                             item {
                                 ContinueWatchingRow(
@@ -181,9 +191,9 @@ fun HomeScreen(
                         items(rows) { category ->
                             when {
                                 category.name == TOP10_LABEL && spec.showTop10 ->
-                                    Top10Section(category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery("Popular Movies") })
+                                    Top10Section(category.movies, spec, onNavigateToDetails)
                                 category.name == TOP10_LABEL -> Unit // hidden for this style
-                                else -> CategorySection(category.name, category.movies, spec, onNavigateToDetails, onHeaderClick = { onSearchQuery(category.name) })
+                                else -> CategorySection(category.name, category.movies, spec, onNavigateToDetails)
                             }
                         }
                     }
@@ -691,17 +701,16 @@ fun HeroStatic(movie: Movie, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit)
 
 /* ----------------------------- Rows ----------------------------- */
 
+/** A row's title. Plain text: it is not focusable and does nothing when selected. */
 @Composable
-private fun RowHeader(text: String, spec: HomeStyleSpec, onClick: (() -> Unit)? = null) {
+private fun RowHeader(text: String, spec: HomeStyleSpec) {
     Text(
         text = if (spec.uppercaseHeaders) text.uppercase() else text,
         fontSize = spec.rowHeaderSize,
         fontWeight = spec.rowHeaderWeight,
         letterSpacing = if (spec.uppercaseHeaders) 1.sp else 0.sp,
         color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
     )
 }
 
@@ -809,11 +818,10 @@ fun CategorySection(
     name: String,
     movies: List<Movie>,
     spec: HomeStyleSpec,
-    onMovieClick: (Movie) -> Unit,
-    onHeaderClick: (() -> Unit)? = null
+    onMovieClick: (Movie) -> Unit
 ) {
     Column {
-        RowHeader(name, spec, onClick = onHeaderClick)
+        RowHeader(name, spec)
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -829,11 +837,10 @@ fun CategorySection(
 fun Top10Section(
     movies: List<Movie>,
     spec: HomeStyleSpec,
-    onMovieClick: (Movie) -> Unit,
-    onHeaderClick: (() -> Unit)? = null
+    onMovieClick: (Movie) -> Unit
 ) {
     Column {
-        RowHeader("Top 10 This Week", spec, onClick = onHeaderClick)
+        RowHeader("Top 10 This Week", spec)
         LazyRow(
             contentPadding = PaddingValues(start = 24.dp, end = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(if (spec.style == HomeStyle.NETFLIX) (-12).dp else 4.dp)
@@ -953,6 +960,48 @@ fun ContinueWatchingRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/** What the Categories filter on Home can narrow the rows to. */
+enum class ContentFilter(val label: String) {
+    ALL("All"),
+    MOVIES("Movies"),
+    TV_SHOWS("TV Shows");
+
+    fun accepts(movie: Movie): Boolean = when (this) {
+        ALL -> true
+        MOVIES -> movie.type == MovieType.MOVIE
+        TV_SHOWS -> movie.type == MovieType.TV_SHOW
+    }
+}
+
+/** Category chips under the hero. Choosing one filters the rows below; it never searches. */
+@Composable
+private fun CategoryFilterRow(
+    selected: ContentFilter,
+    spec: HomeStyleSpec,
+    onSelect: (ContentFilter) -> Unit,
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(ContentFilter.entries.toList()) { filter ->
+            val isSelected = filter == selected
+            val shape = RoundedCornerShape(50)
+            Text(
+                text = filter.label,
+                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onBackground,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .tvClickable(onClick = { onSelect(filter) }, shape = shape)
+                    .background(if (isSelected) spec.accent else Color.White.copy(alpha = 0.08f))
+                    .border(1.dp, if (isSelected) spec.accent else Color.White.copy(alpha = 0.18f), shape)
+                    .padding(horizontal = 18.dp, vertical = 9.dp)
+            )
         }
     }
 }

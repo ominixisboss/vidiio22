@@ -33,6 +33,10 @@ object VidiioViewModelFactories {
         }
     }
 
+    fun anime(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
+        initializer { AnimeViewModel(app.animeRepository) }
+    }
+
     fun search(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
         initializer { SearchViewModel(app.movieRepository) }
     }

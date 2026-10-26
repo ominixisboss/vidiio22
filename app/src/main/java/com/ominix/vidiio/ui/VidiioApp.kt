@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Home
@@ -51,7 +52,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 fun VidiioApp() {
     val navigationState = rememberNavigationState(
         startRoute = VidiioRoute.Splash,
-        topLevelRoutes = setOf(VidiioRoute.Home, VidiioRoute.Search(), VidiioRoute.Favorites, VidiioRoute.Downloads, VidiioRoute.Settings, VidiioRoute.Splash)
+        topLevelRoutes = setOf(VidiioRoute.Home, VidiioRoute.Anime, VidiioRoute.Search(), VidiioRoute.Favorites, VidiioRoute.Downloads, VidiioRoute.Settings, VidiioRoute.Splash)
     )
 
     val navigator = remember { Navigator(navigationState) }
@@ -94,6 +95,20 @@ fun VidiioApp() {
                 onResumeWatching = { wp ->
                     navigator.navigate(VidiioRoute.Player(wp.toMovie(), wp.episodeId, null))
                 },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        entry<VidiioRoute.Anime>(
+            metadata = metadata {
+                put(NavDisplay.TransitionKey) { homeStyle.topLevelTransition() }
+            }
+        ) {
+            val viewModel: com.ominix.vidiio.ui.viewmodel.AnimeViewModel = viewModel(
+                factory = VidiioViewModelFactories.anime(application)
+            )
+            AnimeScreen(
+                viewModel = viewModel,
+                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -243,6 +258,11 @@ fun VidiioApp() {
             selected = navigationState.topLevelRoute == VidiioRoute.Home,
             icon = Icons.Rounded.Home, label = "Home",
             onClick = { navigator.navigate(VidiioRoute.Home) }
+        ),
+        TvNavItem(
+            selected = navigationState.topLevelRoute == VidiioRoute.Anime,
+            icon = Icons.Rounded.AutoAwesome, label = "Anime",
+            onClick = { navigator.navigate(VidiioRoute.Anime) }
         ),
         TvNavItem(
             selected = navigationState.topLevelRoute is VidiioRoute.Search,
