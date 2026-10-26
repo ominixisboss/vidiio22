@@ -397,6 +397,17 @@ fun PlayerScreen(
             }
         }
 
+        // Paused for a moment: say what is being watched.
+        val paused = !state.isPlaying && !state.isBuffering && !state.isTorrentLoading && state.durationMs > 0 && !anyMenuOpen
+        var showPauseInfo by remember { mutableStateOf(false) }
+        LaunchedEffect(paused) {
+            showPauseInfo = false
+            if (paused) { delay(900); showPauseInfo = true }
+        }
+        AnimatedVisibility(visible = showPauseInfo, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.CenterStart)) {
+            PauseInfoPanel(movie, selectedEpisode)
+        }
+
         if (state.isTorrentLoading || state.isBuffering) {
             PlayerLoadingOverlay(
                 isMagnet = state.isMagnet,

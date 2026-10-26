@@ -414,14 +414,14 @@ fun SettingsScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            "The app was made by OOZI 'for family and friends' enjoy!",
+                            "I made this app for my family and my homies. Enjoy! ❤️",
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium,
                             fontSize = 14.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "A professional streaming experience powered by Stremio Addons and multiple sources.",
+                            "Movies, shows and anime in one place, powered by Stremio addons and multiple sources.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 13.sp
                         )
@@ -429,7 +429,7 @@ fun SettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Code, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Developed with ❤️ using Jetpack Compose", color = Color.Gray, fontSize = 12.sp)
+                            Text("Made by OOZI with Jetpack Compose", color = Color.Gray, fontSize = 12.sp)
                         }
                     }
                 }

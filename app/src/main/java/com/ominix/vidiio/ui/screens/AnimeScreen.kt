@@ -47,7 +47,6 @@ import com.ominix.vidiio.ui.browse.BrowseHero
 import com.ominix.vidiio.ui.browse.BrowseSection
 import com.ominix.vidiio.ui.browse.BrowseSkeleton
 import com.ominix.vidiio.ui.browse.HeroSpec
-import com.ominix.vidiio.ui.browse.MovieShelf
 import com.ominix.vidiio.ui.browse.PillChip
 import com.ominix.vidiio.ui.browse.PosterCard
 import com.ominix.vidiio.ui.browse.WideCard
@@ -146,20 +145,6 @@ private fun AnimeContent(
             )
         }
 
-        // Bundled anime addons, One Pace first and prominent: these open straight to details.
-        state.addons.orEmpty().forEach { category ->
-            item(key = "addon-${category.name}") {
-                MovieShelf(
-                    palette = Palette,
-                    title = category.name,
-                    subtitle = "Every arc, in order",
-                    accent = Palette.secondary,
-                    movies = category.movies,
-                    onOpen = onOpenMovie
-                )
-            }
-        }
-
         shelf("trending", "Trending Now", "What everyone is watching", state.trending, nowSeconds, resolving, open)
 
         state.newEpisodes?.takeIf { it.isNotEmpty() }?.let { entries ->
@@ -192,7 +177,31 @@ private fun AnimeContent(
             item(key = "calendar") { ScheduleSection(week, nowSeconds, resolving, open) }
         }
 
-        shelf("popular", "Popular This Season", null, state.popularSeason, nowSeconds, resolving, open)
+        // One Pace (and any other bundled anime addon) leads the popular shelf, ahead of the AniList
+        // titles. It is a TMDB-style title, so it opens straight to details rather than being matched.
+        val addonMovies = state.addons.orEmpty().flatMap { it.movies }
+        if (addonMovies.isNotEmpty() || !state.popularSeason.isNullOrEmpty()) {
+            item(key = "popular") {
+                BrowseSection("Popular Anime", null, Palette.primary) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(addonMovies, key = { "addon-${it.id}" }) { movie ->
+                            PosterCard(
+                                palette = Palette, title = movie.title, imageUrl = movie.posterUrl,
+                                subtitle = "Every arc, in order", score = movie.rating, strip = null,
+                                stripColor = Palette.tertiary, cornerChip = null, loading = false,
+                                onClick = { onOpenMovie(movie) }
+                            )
+                        }
+                        items(state.popularSeason.orEmpty(), key = { "popular-${it.id}" }) { item ->
+                            AnimeCard(item, nowSeconds, loading = resolving == item.id, onClick = { open(item) })
+                        }
+                    }
+                }
+            }
+        }
 
         item(key = "genres") {
             GenreBrowse(state.genre, state.genreResults, nowSeconds, resolving, open, onGenre)

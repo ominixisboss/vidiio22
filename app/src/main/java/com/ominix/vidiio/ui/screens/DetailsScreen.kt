@@ -26,6 +26,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -53,6 +59,9 @@ fun DetailsScreen(
     val unavailableCount by viewModel.unavailableCount.collectAsState()
     val showUnavailable by viewModel.showUnavailable.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    // Up from Play has nothing reliably above it to land on (the trailer sits there), so give
+    // the remote a direct route to the top bar.
+    val topFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var showSourceSelector by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -61,7 +70,7 @@ fun DetailsScreen(
             TopAppBar(
                 title = { },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.focusRequester(topFocus)) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -111,7 +120,8 @@ fun DetailsScreen(
                             }
                             viewModel.downloadSource(source)
                         },
-                        onToggleSourceSelector = { showSourceSelector = true }
+                        onToggleSourceSelector = { showSourceSelector = true },
+                        onFocusTop = { runCatching { topFocus.requestFocus() } }
                     )
                 }
                 is DetailsUiState.Error -> {
@@ -146,7 +156,8 @@ fun MovieDetailContent(
     onEpisodeSelected: (Episode) -> Unit,
     onPlayClick: (StreamSource) -> Unit,
     onDownloadClick: (StreamSource) -> Unit,
-    onToggleSourceSelector: () -> Unit
+    onToggleSourceSelector: () -> Unit,
+    onFocusTop: () -> Unit = {}
 ) {
     var selectedSeasonIndex by remember(movie.id) {
         mutableIntStateOf(movie.seasons.indexOfFirst { it.seasonNumber == selectedEpisode?.seasonNumber }.coerceAtLeast(0))
@@ -324,7 +335,13 @@ fun MovieDetailContent(
                 if (streamSources.isNotEmpty()) {
                     Button(
                         onClick = { onPlayClick(streamSources.first()) },
-                        modifier = Modifier.fillMaxWidth().height(56.dp).tvFocusRing(RoundedCornerShape(24.dp)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .tvFocusRing(RoundedCornerShape(24.dp))
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) { onFocusTop(); true } else false
+                            },
                         shape = RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.White,
