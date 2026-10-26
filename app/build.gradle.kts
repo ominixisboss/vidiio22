@@ -33,8 +33,8 @@ android {
         targetSdk = 37
         // Single source of truth for the shipped version. CI can override without
         // editing the file: -PversionCode=42 -PversionName=1.4.2
-        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 2
-        versionName = (project.findProperty("versionName") as String?) ?: "1.1"
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 8
+        versionName = (project.findProperty("versionName") as String?) ?: "1.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

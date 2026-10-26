@@ -57,7 +57,8 @@ class DetailsViewModel(
     watchProgressRepository: WatchProgressRepository,
     addonManager: AddonManager,
     movie: Movie,
-    initialEpisodeId: String? = null
+    initialEpisodeId: String? = null,
+    torrServerEngine: com.ominix.vidiio.torrent.TorrServerEngine? = null
 ) : ViewModel() {
 
     private val session = MediaSession(
@@ -70,7 +71,19 @@ class DetailsViewModel(
         watchProgressRepository = watchProgressRepository,
         addonManager = addonManager,
         initialMovie = movie,
-        initialEpisodeId = initialEpisodeId
+        initialEpisodeId = initialEpisodeId,
+        prefetch = torrServerEngine?.let { engine ->
+            { source ->
+                // Start the engine and join the swarm now, so pressing Play finds peers already.
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        if (engine.ensureStarted()) {
+                            engine.getApi()?.addTorrent(com.ominix.vidiio.torrent.TorrentTuning.withTrackers(source.url))
+                        }
+                    }
+                }
+            }
+        }
     )
 
     private val _isFavorite = MutableStateFlow(false)

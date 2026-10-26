@@ -61,7 +61,10 @@ class MediaSession(
     private val addonManager: AddonManager,
     private val initialMovie: Movie,
     private val initialEpisodeId: String? = null,
+    /** Called once per episode with the first working torrent, so its peers can be gathered early. */
+    private val prefetch: ((StreamSource) -> Unit)? = null,
 ) {
+    private var prefetched = false
 
     private val _movie = MutableStateFlow<Movie?>(null)
     val movie: StateFlow<Movie?> = _movie.asStateFlow()
@@ -126,6 +129,9 @@ class MediaSession(
                 .filter { showDead || health[it.url]?.status != SourceStatus.DEAD }
                 .sortedWith(
                     compareBy<StreamSource> { (health[it.url]?.status ?: SourceStatus.CHECKING).ordinal }
+                        // English before other languages, within the same trust level.
+                        .thenBy { com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) }
+                        .thenBy { com.ominix.vidiio.data.repository.SourceLanguage.rank(it.serverName) }
                         .thenByDescending { it.seeders ?: 0 }
                         .thenBy { it.quality != "4K" }
                         .thenBy { it.quality != "1080p" }
@@ -149,6 +155,12 @@ class MediaSession(
                 SourceHealth(SourceStatus.UNKNOWN)
             }
             _sourceHealth.update { it + (source.url to health) }
+            if (!prefetched && health.status == SourceStatus.WORKING && source.url.startsWith("magnet:") &&
+                !com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(source.serverName)
+            ) {
+                prefetched = true
+                prefetch?.invoke(source)
+            }
         }
         synchronized(probeJobs) {
             probeJobs.removeAll { !it.isActive }
@@ -253,6 +265,7 @@ class MediaSession(
     }
 
     fun selectEpisode(episode: Episode) {
+        prefetched = false
         cancelProbes()
         _sourceHealth.value = emptyMap()
         _allFoundSources.value = emptyList()

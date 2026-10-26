@@ -120,6 +120,10 @@ class TorrServerEngine(private val context: Context) {
             }
             if (api?.echo() != null) {
                 isAvailable = true
+                // Tune for fast, smooth starts before the first torrent is added.
+                val am = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                val tuned = api?.applySettings(TorrentTuning.settings(isLowMemory = am?.isLowRamDevice == true || (am?.memoryClass ?: 256) <= 192)) == true
+                Log.i(TAG, "TorrServer tuning applied: $tuned")
                 Log.i(TAG, "TorrServer ready on $baseUrl")
                 return true
             }

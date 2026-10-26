@@ -196,6 +196,9 @@ class PlayerViewModel(
     /** Counts the silent re-kicks described in [Player.Listener.onPlayerError]. */
     private var torrentPrepareRetries = 0
 
+    /** Sources that failed to decode on this device, so the fallback never loops back to them. */
+    private val skippedUrls = mutableSetOf<String>()
+
     /** Bumped to re-run the screen's source-preparation effect. */
     private val _retryTrigger = MutableStateFlow(0)
     val retryTrigger: StateFlow<Int> = _retryTrigger.asStateFlow()
@@ -221,7 +224,24 @@ class PlayerViewModel(
             // A fresh torrent often 'Source error's for the first 10-30s while TorrServer
             // finds peers and buffers. Silently re-kick the stream a couple of times (the
             // picked file is remembered) before giving up.
-            if (_state.value.isTorrentStream && torrentPrepareRetries < 3) {
+            // A source the hardware cannot decode (4K, Dolby Vision, ...) will never play, so move
+            // straight on to the next one instead of retrying or showing an error.
+            val undecodable = error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ||
+                error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
+                error.message?.contains("EXCEEDS_CAPABILITIES") == true
+            val current = _state.value.selectedSource
+            val next = if (undecodable) session.streamSources.value.firstOrNull {
+                it.url != current?.url && !skippedUrls.contains(it.url) &&
+                    com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName).not()
+            } else null
+            if (undecodable) current?.url?.let { skippedUrls += it }
+            if (next != null) {
+                torrentPrepareRetries = 0
+                selectSource(next)
+                return
+            }
+            if (_state.value.isTorrentStream && torrentPrepareRetries < 3 && !undecodable) {
                 torrentPrepareRetries++
                 _state.update { it.copy(isTorrentLoading = true) }
                 viewModelScope.launch {
