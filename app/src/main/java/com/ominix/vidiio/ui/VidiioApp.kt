@@ -38,6 +38,14 @@ import com.ominix.vidiio.data.model.toMovie
 import com.ominix.vidiio.ui.screens.*
 import com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactories
 import com.ominix.vidiio.ui.pointer.VirtualPointerOverlay
+import com.ominix.vidiio.ui.tv.LocalIsTv
+import com.ominix.vidiio.ui.tv.ProvideTvScrolling
+import com.ominix.vidiio.ui.tv.TvNavItem
+import com.ominix.vidiio.ui.tv.TvNavScaffold
+import com.ominix.vidiio.ui.tv.isTvDevice
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.CompositionLocalProvider
 
 @Composable
 fun VidiioApp() {
@@ -48,6 +56,7 @@ fun VidiioApp() {
 
     val navigator = remember { Navigator(navigationState) }
     val context = LocalContext.current
+    val isTv = remember { isTvDevice(context) }
     val application = context.applicationContext as VidiioApplication
     
     // Screens get their dependencies from VidiioViewModelFactories, which reads them off
@@ -228,53 +237,77 @@ fun VidiioApp() {
         )
     )
 
-    NavigationSuiteScaffold(
-        layoutType = layoutType,
-        containerColor = MaterialTheme.colorScheme.background,
-        navigationSuiteItems = {
-            item(
-                selected = navigationState.topLevelRoute == VidiioRoute.Home,
-                onClick = { navigator.navigate(VidiioRoute.Home) },
-                icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
-                label = { Text("Home", fontWeight = FontWeight.Bold) },
-                colors = navItemColors
-            )
-            item(
-                selected = navigationState.topLevelRoute is VidiioRoute.Search,
-                onClick = { navigator.navigate(VidiioRoute.Search()) },
-                icon = { Icon(Icons.Rounded.Search, contentDescription = "Search") },
-                label = { Text("Search", fontWeight = FontWeight.Bold) },
-                colors = navItemColors
-            )
-            item(
-                selected = navigationState.topLevelRoute == VidiioRoute.Favorites,
-                onClick = { navigator.navigate(VidiioRoute.Favorites) },
-                icon = { Icon(Icons.Rounded.Favorite, contentDescription = "Favorites") },
-                label = { Text("My List", fontWeight = FontWeight.Bold) },
-                colors = navItemColors
-            )
-            item(
-                selected = navigationState.topLevelRoute == VidiioRoute.Downloads,
-                onClick = { navigator.navigate(VidiioRoute.Downloads) },
-                icon = { Icon(Icons.Rounded.Download, contentDescription = "Downloads") },
-                label = { Text("Downloads", fontWeight = FontWeight.Bold) },
-                colors = navItemColors
-            )
-            item(
-                selected = navigationState.topLevelRoute == VidiioRoute.Settings,
-                onClick = { navigator.navigate(VidiioRoute.Settings) },
-                icon = { Icon(Icons.Rounded.Settings, contentDescription = "Settings") },
-                label = { Text("Settings", fontWeight = FontWeight.Bold) },
-                colors = navItemColors
-            )
-        }
-    ) {
+    // One list of sections, shared by the standard scaffold and the TV one.
+    val navItems = listOf(
+        TvNavItem(
+            selected = navigationState.topLevelRoute == VidiioRoute.Home,
+            icon = Icons.Rounded.Home, label = "Home",
+            onClick = { navigator.navigate(VidiioRoute.Home) }
+        ),
+        TvNavItem(
+            selected = navigationState.topLevelRoute is VidiioRoute.Search,
+            icon = Icons.Rounded.Search, label = "Search",
+            onClick = { navigator.navigate(VidiioRoute.Search()) }
+        ),
+        TvNavItem(
+            selected = navigationState.topLevelRoute == VidiioRoute.Favorites,
+            icon = Icons.Rounded.Favorite, label = "My List",
+            onClick = { navigator.navigate(VidiioRoute.Favorites) }
+        ),
+        TvNavItem(
+            selected = navigationState.topLevelRoute == VidiioRoute.Downloads,
+            icon = Icons.Rounded.Download, label = "Downloads",
+            onClick = { navigator.navigate(VidiioRoute.Downloads) }
+        ),
+        TvNavItem(
+            selected = navigationState.topLevelRoute == VidiioRoute.Settings,
+            icon = Icons.Rounded.Settings, label = "Settings",
+            onClick = { navigator.navigate(VidiioRoute.Settings) }
+        ),
+    )
+
+    val pageContent: @Composable () -> Unit = {
         VirtualPointerOverlay(enabled = pointerEnabled) {
             NavDisplay(
                 entries = navigationState.toEntries(entryProvider),
                 onBack = { navigator.goBack() },
                 modifier = Modifier.fillMaxSize()
             )
+        }
+    }
+
+    CompositionLocalProvider(LocalIsTv provides isTv) {
+        ProvideTvScrolling(enabled = isTv) {
+            if (isTv) {
+                // A remote-driven TV gets a side menu that hides itself while you browse.
+                TvNavScaffold(
+                    items = navItems,
+                    railEnabled = !(isPlayerScreen || isSplashScreen),
+                    railColors = navItemColors.navigationRailItemColors,
+                ) {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        pageContent()
+                    }
+                }
+            } else {
+                NavigationSuiteScaffold(
+                    layoutType = layoutType,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    navigationSuiteItems = {
+                        navItems.forEach { nav ->
+                            item(
+                                selected = nav.selected,
+                                onClick = nav.onClick,
+                                icon = { Icon(nav.icon, contentDescription = nav.label) },
+                                label = { Text(nav.label, fontWeight = FontWeight.Bold) },
+                                colors = navItemColors
+                            )
+                        }
+                    }
+                ) {
+                    pageContent()
+                }
+            }
         }
     }
 }

@@ -13,6 +13,8 @@ import com.ominix.vidiio.data.stremio.AddonManager
 import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.SettingsRepository
+import com.ominix.vidiio.data.repository.SourceHealth
+import com.ominix.vidiio.data.repository.SourceStatus
 import com.ominix.vidiio.data.repository.WatchProgressRepository
 import com.ominix.vidiio.download.DownloadManager
 import kotlinx.coroutines.CancellationException
@@ -89,19 +91,77 @@ class MediaSession(
      * where the player could not reach it - so the player showed whatever order its own
      * copy happened to produce.
      */
-    val streamSources: StateFlow<List<StreamSource>> =
+    /** What the checker has found out about each source, keyed by URL. */
+    private val _sourceHealth = MutableStateFlow<Map<String, SourceHealth>>(emptyMap())
+    val sourceHealth: StateFlow<Map<String, SourceHealth>> = _sourceHealth.asStateFlow()
+
+    /** Whether sources that failed their check are listed anyway. Off by default. */
+    private val _showUnavailable = MutableStateFlow(false)
+    val showUnavailable: StateFlow<Boolean> = _showUnavailable.asStateFlow()
+    fun setShowUnavailable(show: Boolean) { _showUnavailable.value = show }
+
+    private val enabledSources: Flow<List<StreamSource>> =
         combine(_allFoundSources, settingsRepository.sourcesFlow) { sources, enabled ->
             sources
                 .filter { it.sourceId in enabled || it.sourceId == "stremio" }
                 .distinctBy { it.url }
+        }
+
+    /** How many of the found sources failed their check, whether or not they are shown. */
+    val unavailableCount: StateFlow<Int> =
+        combine(enabledSources, _sourceHealth) { sources, health ->
+            sources.count { health[it.url]?.status == SourceStatus.DEAD }
+        }.stateIn(scope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /**
+     * Found sources, ordered best-first, with the ones that do not work left out.
+     *
+     * Verified-working sources come first (fastest direct links, then best-seeded torrents),
+     * then ones still being checked, then ones that cannot be checked. Dead sources only
+     * appear when [showUnavailable] is on, at the bottom.
+     */
+    val streamSources: StateFlow<List<StreamSource>> =
+        combine(enabledSources, _sourceHealth, _showUnavailable) { sources, health, showDead ->
+            sources
+                .filter { showDead || health[it.url]?.status != SourceStatus.DEAD }
                 .sortedWith(
-                    compareByDescending<StreamSource> { it.seeders ?: 0 }
+                    compareBy<StreamSource> { (health[it.url]?.status ?: SourceStatus.CHECKING).ordinal }
+                        .thenByDescending { it.seeders ?: 0 }
                         .thenBy { it.quality != "4K" }
                         .thenBy { it.quality != "1080p" }
+                        .thenBy { health[it.url]?.latencyMs ?: Long.MAX_VALUE }
                 )
         }.stateIn(scope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var scrapingJob: Job? = null
+    private val probeJobs = mutableListOf<Job>()
+
+    /** Checks a newly found source in the background; the list re-sorts as results land. */
+    private fun probe(source: StreamSource) {
+        if (_sourceHealth.value.containsKey(source.url)) return
+        _sourceHealth.update { it + (source.url to SourceHealth.Checking) }
+        val job = scope.launch {
+            val health = try {
+                movieRepository.checkSource(source)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                SourceHealth(SourceStatus.UNKNOWN)
+            }
+            _sourceHealth.update { it + (source.url to health) }
+        }
+        synchronized(probeJobs) {
+            probeJobs.removeAll { !it.isActive }
+            probeJobs += job
+        }
+    }
+
+    private fun cancelProbes() {
+        synchronized(probeJobs) {
+            probeJobs.forEach { it.cancel() }
+            probeJobs.clear()
+        }
+    }
 
     init {
         loadDetails()
@@ -183,6 +243,7 @@ class MediaSession(
                     movieRepository.getStreamSources(movie, episode)
                         .collect { source ->
                             _allFoundSources.update { (it + source).distinctBy { s -> s.url } }
+                            probe(source)
                         }
                 }
             } finally {
@@ -192,6 +253,8 @@ class MediaSession(
     }
 
     fun selectEpisode(episode: Episode) {
+        cancelProbes()
+        _sourceHealth.value = emptyMap()
         _allFoundSources.value = emptyList()
         _selectedEpisode.value = episode
         // observeSettings() re-scrapes on the episode change.

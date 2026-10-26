@@ -114,6 +114,12 @@ class DetailsViewModel(
             .launchIn(viewModelScope)
     }
 
+    /** Per-source results of the "does this actually work" check, keyed by URL. */
+    val sourceHealth = session.sourceHealth
+    val unavailableCount = session.unavailableCount
+    val showUnavailable = session.showUnavailable
+    fun setShowUnavailable(show: Boolean) = session.setShowUnavailable(show)
+
     fun selectEpisode(episode: Episode) = session.selectEpisode(episode)
 
     fun downloadSource(source: StreamSource) = session.downloadSource(source)

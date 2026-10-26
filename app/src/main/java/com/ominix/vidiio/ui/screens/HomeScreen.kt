@@ -60,6 +60,8 @@ import com.ominix.vidiio.data.model.WatchProgress
 import com.ominix.vidiio.data.repository.HomeStyle
 import com.ominix.vidiio.ui.components.RiveLoader
 import com.ominix.vidiio.ui.components.tvClickable
+import com.ominix.vidiio.ui.tv.LocalIsTv
+import com.ominix.vidiio.ui.tv.tvRow
 import com.ominix.vidiio.ui.viewmodel.HomeUiState
 import com.ominix.vidiio.ui.viewmodel.HomeViewModel
 import kotlinx.coroutines.delay
@@ -596,7 +598,7 @@ fun DisneyBrandHubsRow(onBrandClick: (String) -> Unit = {}) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.padding(vertical = 8.dp)
+        modifier = Modifier.tvRow().padding(vertical = 8.dp)
     ) {
         items(brands) { (name, colors) ->
             val shape = RoundedCornerShape(14.dp)
@@ -804,11 +806,14 @@ private fun heroScrim(bottom: Color) = Brush.verticalGradient(
 
 @Composable
 fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie) -> Unit) {
+    val isTv = LocalIsTv.current
     val pagerState = rememberPagerState(pageCount = { movies.size })
     val scrim = spec.background ?: Color.Black
 
     LaunchedEffect(pagerState.isScrollInProgress, movies.size) {
-        if (!pagerState.isScrollInProgress && movies.isNotEmpty()) {
+        // Never auto-advance under a remote: the hero changing by itself while you navigate moves
+        // the page out from under the cursor.
+        if (!isTv && !pagerState.isScrollInProgress && movies.isNotEmpty()) {
             while (true) {
                 delay(6000)
                 pagerState.animateScrollToPage((pagerState.currentPage + 1) % movies.size)
@@ -820,7 +825,7 @@ fun HeroCarousel(movies: List<Movie>, spec: HomeStyleSpec, onMovieClick: (Movie)
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val movie = movies[page]
             Box(Modifier.fillMaxSize().tvClickable(onClick = { onMovieClick(movie) }, focusScale = 1f)) {
-                if (spec.kenBurns) {
+                if (spec.kenBurns && !isTv) {
                     KenBurnsImage(movie.backdropUrl ?: movie.posterUrl, Modifier.fillMaxSize())
                 } else {
                     AsyncImage(
@@ -963,7 +968,10 @@ fun HomeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var appeared by remember { mutableStateOf(!spec.staggerIn) }
+    // No entrance animation with a remote: cards fading and sliding in as you scroll is motion
+    // on top of the scroll itself, and reads as the page shaking.
+    val isTv = LocalIsTv.current
+    var appeared by remember { mutableStateOf(!spec.staggerIn || isTv) }
     LaunchedEffect(Unit) { appeared = true }
     val appear by animateFloatAsState(
         targetValue = if (appeared) 1f else 0f,
@@ -1063,6 +1071,7 @@ fun CategorySection(
     Column {
         RowHeader(name, spec, onClick = onHeaderClick)
         LazyRow(
+            modifier = Modifier.tvRow(),
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1083,6 +1092,7 @@ fun Top10Section(
     Column {
         RowHeader("Top 10 This Week", spec, onClick = onHeaderClick)
         LazyRow(
+            modifier = Modifier.tvRow(),
             contentPadding = PaddingValues(start = 24.dp, end = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(if (spec.style == HomeStyle.NETFLIX) (-12).dp else 4.dp)
         ) {
@@ -1117,6 +1127,7 @@ fun ContinueWatchingRow(
     Column {
         RowHeader("Continue Watching", spec)
         LazyRow(
+            modifier = Modifier.tvRow(),
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

@@ -91,6 +91,9 @@ fun PlayerScreen(
     val subtitles by playerViewModel.subtitles.collectAsState()
     val subtitleStyle by playerViewModel.subtitleStyle.collectAsState()
     val streamSources by playerViewModel.streamSources.collectAsState()
+    val sourceHealth by playerViewModel.sourceHealth.collectAsState()
+    val unavailableCount by playerViewModel.unavailableCount.collectAsState()
+    val showUnavailable by playerViewModel.showUnavailable.collectAsState()
 
     val permissionsState = rememberMultiplePermissionsState(
         permissions = PermissionUtils.getRequiredPermissions()
@@ -489,6 +492,10 @@ fun PlayerScreen(
             SourcesPanel(
                 sources = streamSources,
                 selectedSource = state.selectedSource,
+                sourceHealth = sourceHealth,
+                unavailableCount = unavailableCount,
+                showUnavailable = showUnavailable,
+                onShowUnavailableChange = playerViewModel::setShowUnavailable,
                 onSourceSelect = playerViewModel::selectSource,
                 onDismiss = { showSourcesMenu = false }
             )

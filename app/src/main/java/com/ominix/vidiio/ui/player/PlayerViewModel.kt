@@ -30,6 +30,8 @@ import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.MediaPlayerChoice
 import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.SettingsRepository
+import com.ominix.vidiio.data.repository.SourceHealth
+import com.ominix.vidiio.data.repository.SourceStatus
 import com.ominix.vidiio.data.repository.SubtitleEdge
 import com.ominix.vidiio.data.repository.SubtitleStyle
 import com.ominix.vidiio.data.repository.WatchProgressRepository
@@ -46,6 +48,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -144,6 +148,12 @@ class PlayerViewModel(
     val selectedEpisode: StateFlow<Episode?> = session.selectedEpisode
     val subtitles: StateFlow<List<SubtitleTrack>> = session.subtitles
     val streamSources: StateFlow<List<StreamSource>> = session.streamSources
+
+    /** Result of the "does this source work" check, for the Sources panel. */
+    val sourceHealth: StateFlow<Map<String, SourceHealth>> = session.sourceHealth
+    val unavailableCount: StateFlow<Int> = session.unavailableCount
+    val showUnavailable: StateFlow<Boolean> = session.showUnavailable
+    fun setShowUnavailable(show: Boolean) = session.setShowUnavailable(show)
 
     /** User's subtitle appearance, applied to the player's SubtitleView by the screen. */
     val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyleFlow
@@ -303,8 +313,22 @@ class PlayerViewModel(
             session.resumePositionMs.collect { resumePositionMs = it }
         }
         viewModelScope.launch {
-            session.streamSources.collect { sources ->
-                selectSourceIfNone(sources.firstOrNull())
+            // Start on the best source that has actually been verified. Waiting for a check
+            // costs a moment, so if nothing verifies we fall back to the first listed source
+            // once scraping is done, or after a grace period - never sit on a blank player.
+            combine(session.streamSources, session.sourceHealth, session.isSearchingSources) { sources, health, searching ->
+                Triple(sources, health, searching)
+            }.collectLatest { (sources, health, searching) ->
+                val verified = sources.firstOrNull { health[it.url]?.status == SourceStatus.WORKING }
+                when {
+                    verified != null -> selectSourceIfNone(verified)
+                    sources.isEmpty() -> Unit
+                    !searching -> selectSourceIfNone(sources.first())
+                    else -> {
+                        delay(AUTO_PICK_GRACE_MS)
+                        selectSourceIfNone(sources.first())
+                    }
+                }
             }
         }
 
@@ -654,3 +678,6 @@ class PlayerViewModel(
         player.release()
     }
 }
+
+/** How long the player waits for a source to verify before starting on the first listed one. */
+private const val AUTO_PICK_GRACE_MS = 8_000L
