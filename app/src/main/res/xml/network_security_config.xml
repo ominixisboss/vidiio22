@@ -8,9 +8,21 @@
   rather than re-enabling cleartext globally.
 -->
 <network-security-config>
+    <!--
+      Two public roots are bundled as a fallback to the system store, for old devices (older
+      Fire TV sticks and Android TVs) whose certificate store predates them and fail with
+      "Trust anchor for certification path not found":
+        - isrg_root_x1: Let's Encrypt (image.tmdb.org, fedew04.github.io). Absent before 7.1.1.
+        - gts_root_r4:  Google Trust Services (Torrentio, the subtitle addons, knaben, ...).
+      Both are the roots' public certificates, SHA-256 verified against the issuers' published
+      values (ISRG Root X1 96:BC:EC:06..., GTS Root R4 34:9D:FA:40...). They only ever add
+      trust for those two CAs; the system store is still consulted first and in full.
+    -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
+            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/gts_root_r4" />
         </trust-anchors>
     </base-config>
 
@@ -31,6 +43,8 @@
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
+            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/gts_root_r4" />
         </trust-anchors>
     </debug-overrides>
 </network-security-config>
