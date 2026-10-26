@@ -71,7 +71,7 @@ fun Modifier.tvClickable(
             if (ring > 0f) {
                 // Lift the focused item slightly, then draw the ring inside its bounds.
                 val outline = shape.createOutline(size, layoutDirection, this)
-                drawOutline(outline, Color.White.copy(alpha = 0.08f * ring))
+                drawOutline(outline, Color.White.copy(alpha = 0.14f * ring))
                 val stroke = RING_WIDTH.toPx()
                 inset(stroke / 2f) {
                     val inner = shape.createOutline(Size(size.width, size.height), layoutDirection, this)
@@ -84,4 +84,4 @@ fun Modifier.tvClickable(
         }
 }
 
-private val RING_WIDTH = 3.dp
+private val RING_WIDTH = 4.dp

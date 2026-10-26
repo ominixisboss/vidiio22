@@ -284,6 +284,8 @@ fun VidiioApp() {
                     items = navItems,
                     railEnabled = !(isPlayerScreen || isSplashScreen),
                     railColors = navItemColors.navigationRailItemColors,
+                    pageKey = currentRoute ?: "none",
+                    autoFocus = !isSearchScreen,
                 ) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                         pageContent()
