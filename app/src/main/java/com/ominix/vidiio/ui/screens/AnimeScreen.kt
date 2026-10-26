@@ -141,7 +141,14 @@ private fun AnimeContent(
                 items = specs,
                 loadingKey = resolving,
                 onOpen = { index -> open(hero[index]) },
-                onFocused = { scope.launch { listState.animateScrollToItem(0) } }
+                onFocused = {
+                    // Wait out the focus scroll (which would leave the hero half off the top), then
+                    // snap to the very top.
+                    scope.launch {
+                        kotlinx.coroutines.delay(150)
+                        listState.scrollToItem(0)
+                    }
+                }
             )
         }
 
