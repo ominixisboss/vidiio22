@@ -24,6 +24,8 @@ import coil.compose.AsyncImage
 import com.ominix.vidiio.data.model.Episode
 import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.model.StreamSource
+import com.ominix.vidiio.data.repository.SourceHealth
+import com.ominix.vidiio.ui.components.SourceHealthBadge
 
 @Composable
 fun EpisodeSidebar(
@@ -130,12 +132,21 @@ fun EpisodeItem(
 fun SourcesPanel(
     sources: List<StreamSource>,
     selectedSource: StreamSource?,
+    sourceHealth: Map<String, SourceHealth>,
+    unavailableCount: Int,
+    showUnavailable: Boolean,
+    onShowUnavailableChange: (Boolean) -> Unit,
     onSourceSelect: (StreamSource) -> Unit,
     onDismiss: () -> Unit
 ) {
     PlayerSidePanel(onDismiss = onDismiss) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Switch Source", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            if (unavailableCount > 0) {
+                TextButton(onClick = { onShowUnavailableChange(!showUnavailable) }) {
+                    Text(if (showUnavailable) "Hide not working" else "Show not working ($unavailableCount)")
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn {
@@ -147,7 +158,10 @@ fun SourcesPanel(
                             source.quality?.let { info.add(it) }
                             source.size?.let { info.add(it) }
                             source.seeders?.let { info.add("👥 $it") }
-                            Text("${source.sourceName} • ${info.joinToString(" • ")}") 
+                            Column {
+                                Text("${source.sourceName} • ${info.joinToString(" • ")}")
+                                SourceHealthBadge(health = sourceHealth[source.url])
+                            }
                         },
                         leadingContent = { RadioButton(selected = source == selectedSource, onClick = null) },
                         modifier = Modifier.tvClickable(onClick = { onSourceSelect(source); onDismiss() }, shape = RoundedCornerShape(8.dp))

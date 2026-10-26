@@ -33,6 +33,8 @@ import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.data.model.Episode
 import com.ominix.vidiio.data.model.MovieType
 import com.ominix.vidiio.data.model.StreamSource
+import com.ominix.vidiio.data.repository.SourceHealth
+import com.ominix.vidiio.ui.components.SourceHealthBadge
 import com.ominix.vidiio.ui.components.GlassCard
 import com.ominix.vidiio.ui.components.RiveLoader
 import com.ominix.vidiio.ui.viewmodel.DetailsUiState
@@ -46,6 +48,9 @@ fun DetailsScreen(
     onPlay: (Movie, Episode?, StreamSource) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val sourceHealth by viewModel.sourceHealth.collectAsState()
+    val unavailableCount by viewModel.unavailableCount.collectAsState()
+    val showUnavailable by viewModel.showUnavailable.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     var showSourceSelector by remember { mutableStateOf(false) }
 
@@ -91,6 +96,10 @@ fun DetailsScreen(
                     MovieDetailContent(
                         movie = state.movie,
                         streamSources = state.streamSources,
+                        sourceHealth = sourceHealth,
+                        unavailableCount = unavailableCount,
+                        showUnavailable = showUnavailable,
+                        onShowUnavailableChange = viewModel::setShowUnavailable,
                         selectedEpisode = state.selectedEpisode,
                         isSearchingSources = state.isSearchingSources,
                         onEpisodeSelected = { viewModel.selectEpisode(it) },
@@ -127,6 +136,10 @@ fun DetailsScreen(
 fun MovieDetailContent(
     movie: Movie,
     streamSources: List<StreamSource>,
+    sourceHealth: Map<String, SourceHealth>,
+    unavailableCount: Int,
+    showUnavailable: Boolean,
+    onShowUnavailableChange: (Boolean) -> Unit,
     selectedEpisode: Episode?,
     isSearchingSources: Boolean,
     onEpisodeSelected: (Episode) -> Unit,
@@ -355,6 +368,14 @@ fun MovieDetailContent(
                     RiveLoader(modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(16.dp))
                 }
+                if (unavailableCount > 0) {
+                    TextButton(onClick = { onShowUnavailableChange(!showUnavailable) }) {
+                        Text(
+                            text = if (showUnavailable) "Hide not working" else "Show not working ($unavailableCount)",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
                 IconButton(onClick = onToggleSourceSelector) {
                     Icon(Icons.Rounded.Settings, contentDescription = "Select Sources", tint = MaterialTheme.colorScheme.onBackground)
                 }
@@ -376,6 +397,7 @@ fun MovieDetailContent(
                 val source = streamSources[index]
                 SourceItem(
                     source = source,
+                    health = sourceHealth[source.url],
                     onClick = { onPlayClick(source) },
                     onDownload = { onDownloadClick(source) }
                 )
@@ -496,6 +518,7 @@ fun SourceSelectorBottomSheet(
 @Composable
 fun SourceItem(
     source: StreamSource,
+    health: SourceHealth?,
     onClick: () -> Unit,
     onDownload: () -> Unit
 ) {
@@ -543,6 +566,7 @@ fun SourceItem(
                         Text(text = "👥 $it", color = Color.Green, style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                SourceHealthBadge(health = health, modifier = Modifier.padding(top = 2.dp))
             }
             IconButton(onClick = onDownload) {
                 Icon(Icons.Rounded.Download, contentDescription = "Download", tint = MaterialTheme.colorScheme.onSurfaceVariant)

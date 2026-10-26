@@ -7,6 +7,7 @@ import com.ominix.vidiio.data.db.VidiioDatabase
 import com.ominix.vidiio.data.repository.DownloadRepository
 import com.ominix.vidiio.data.repository.FavoriteRepository
 import com.ominix.vidiio.data.repository.MovieRepository
+import com.ominix.vidiio.data.repository.SourceVerifier
 import com.ominix.vidiio.data.repository.ProxyConfig
 import com.ominix.vidiio.data.repository.ProxyType
 import com.ominix.vidiio.data.repository.SettingsRepository
@@ -268,6 +269,8 @@ class VidiioApplication : Application() {
         AddonManager(stremioRetrofit.create(StremioService::class.java), settingsRepository)
     }
 
+    val sourceVerifier: SourceVerifier by lazy { SourceVerifier(playbackHttpClient) }
+
     val movieRepository: MovieRepository by lazy {
         MovieRepository(
             tmdbRetrofit.create(TMDBService::class.java),
@@ -285,7 +288,8 @@ class VidiioApplication : Application() {
                 VuflixScraper(okHttpClient)
             ),
             settingsRepository,
-            addonManager
+            addonManager,
+            sourceVerifier
         )
     }
 

@@ -32,8 +32,12 @@ class MovieRepository(
     private val tmdbService: TMDBService,
     private val scrapers: List<Scraper>,
     private val settingsRepository: SettingsRepository,
-    private val addonManager: AddonManager
+    private val addonManager: AddonManager,
+    private val sourceVerifier: SourceVerifier
 ) {
+
+    /** Probes one scraped source for whether it is actually playable. See [SourceVerifier]. */
+    suspend fun checkSource(source: StreamSource): SourceHealth = sourceVerifier.check(source)
 
     private companion object {
         /**
