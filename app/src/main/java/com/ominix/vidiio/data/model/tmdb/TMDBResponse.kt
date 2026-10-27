@@ -17,6 +17,7 @@ data class TMDBMovie(
     @Json(name = "backdrop_path") val backdropPath: String? = null,
     @Json(name = "overview") val overview: String?,
     @Json(name = "vote_average") val voteAverage: Double?,
+    @Json(name = "vote_count") val voteCount: Int? = null,
     @Json(name = "release_date") val releaseDate: String?,
     @Json(name = "first_air_date") val firstAirDate: String?,
     @Json(name = "media_type") val mediaType: String?,

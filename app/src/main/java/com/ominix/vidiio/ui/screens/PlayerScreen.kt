@@ -118,6 +118,7 @@ fun PlayerScreen(
     // Fire TV remote / D-Pad back button handling
     BackHandler {
         when {
+            state.upNext != null -> playerViewModel.cancelUpNext()
             showSubtitleMenu -> showSubtitleMenu = false
             showAudioMenu -> showAudioMenu = false
             showSpeedMenu -> showSpeedMenu = false
@@ -248,6 +249,14 @@ fun PlayerScreen(
         }
     }
 
+    // Lets the view model look at the video to spot credits. PixelCopy reads the video surface into a
+    // tiny bitmap, so it costs next to nothing.
+    val playerViewRef = remember { arrayOfNulls<PlayerView>(1) }
+    DisposableEffect(playerViewRef) {
+        playerViewModel.frameSampler = { sampleVideoFrame(playerViewRef[0]) }
+        onDispose { playerViewModel.frameSampler = null }
+    }
+
     val playerFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { playerFocus.requestFocus() } }
     // Nothing else on screen holds focus once the chrome hides, so take it back for the remote.
@@ -263,7 +272,7 @@ fun PlayerScreen(
             .focusable()
             .playerRemoteControls(
                 viewModel = playerViewModel,
-                controlsVisible = showControls || anyMenuOpen,
+                controlsVisible = showControls || anyMenuOpen || state.upNext != null,
                 onShowControls = { showControls = true }
             )
             .playerTouchGestures(
@@ -284,6 +293,7 @@ fun PlayerScreen(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         player = playerViewModel.player
+                        playerViewRef[0] = this
                         useController = false
                         resizeMode = state.resizeMode
                         layoutParams = FrameLayout.LayoutParams(
@@ -408,7 +418,17 @@ fun PlayerScreen(
             PauseInfoPanel(movie, selectedEpisode)
         }
 
-        if (state.isTorrentLoading || state.isBuffering) {
+        state.upNext?.let { next ->
+            UpNextOverlay(
+                next = next,
+                secondsLeft = state.upNextSeconds,
+                onPlayNow = playerViewModel::playNextEpisode,
+                onCancel = playerViewModel::cancelUpNext,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 120.dp)
+            )
+        }
+
+        if (state.isTorrentLoading || state.isBuffering || state.loadingNext) {
             PlayerLoadingOverlay(
                 isMagnet = state.isMagnet,
                 status = torrentStatus,
@@ -453,19 +473,6 @@ fun PlayerScreen(
                     label = "Skip Intro",
                     onSkip = playerViewModel::skipIntro,
                     onDismiss = playerViewModel::dismissSkipIntro
-                )
-            }
-        }
-
-        if (state.showAutoNext) {
-            val allEpisodes = movie?.seasons?.flatMap { it.episodes }.orEmpty()
-            val currentIndex = allEpisodes.indexOfFirst { it.id == selectedEpisode?.id }
-            if (currentIndex != -1 && currentIndex < allEpisodes.size - 1) {
-                AutoNextOverlay(
-                    nextEpisodeName = allEpisodes[currentIndex + 1].name,
-                    secondsLeft = state.autoNextSeconds,
-                    onCancel = playerViewModel::cancelAutoNext,
-                    onPlayNow = { playerViewModel.selectEpisode(allEpisodes[currentIndex + 1]) }
                 )
             }
         }
@@ -576,5 +583,29 @@ fun PlayerScreen(
                 }
             )
         }
+    }
+}
+
+/**
+ * A [CreditsDetector.WIDTH] x [CreditsDetector.HEIGHT] copy of what the video surface is showing now,
+ * or null when it can't be read (no surface yet, protected content, or the copy failed).
+ */
+private suspend fun sampleVideoFrame(view: PlayerView?): IntArray? {
+    val surfaceView = view?.videoSurfaceView as? android.view.SurfaceView ?: return null
+    if (!surfaceView.holder.surface.isValid || surfaceView.width == 0 || surfaceView.height == 0) return null
+    val bitmap = android.graphics.Bitmap.createBitmap(
+        com.ominix.vidiio.ui.player.CreditsDetector.WIDTH,
+        com.ominix.vidiio.ui.player.CreditsDetector.HEIGHT,
+        android.graphics.Bitmap.Config.ARGB_8888
+    )
+    return try {
+        val result = kotlinx.coroutines.suspendCancellableCoroutine<Int> { cont ->
+            android.view.PixelCopy.request(surfaceView, bitmap, { code -> if (cont.isActive) cont.resumeWith(Result.success(code)) },
+                android.os.Handler(android.os.Looper.getMainLooper()))
+        }
+        if (result != android.view.PixelCopy.SUCCESS) null
+        else IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height) }
+    } finally {
+        bitmap.recycle()
     }
 }

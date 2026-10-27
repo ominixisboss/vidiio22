@@ -124,6 +124,58 @@ class MovieRepository(
         return response.results.map { it.toMovie(type) }.filter { it.posterUrl.isNotBlank() }
     }
 
+    /**
+     * The Top 100 Halloween Movies: horror films tagged "halloween" on TMDB with a real number of votes
+     * (about 240 qualify), ranked by weighted rating so obscure titles with a handful of perfect scores
+     * do not outrank classics. Fetched in parallel and not cached here - the caller keeps it.
+     */
+    suspend fun halloweenTop100(): List<Movie> = coroutineScope {
+        val pages = (1..HALLOWEEN_PAGES).map { page ->
+            async {
+                runCatching {
+                    tmdbService.discoverMoviesFiltered(
+                        withGenres = "27", withKeywords = HALLOWEEN_KEYWORD_ID.toString(),
+                        sortBy = "vote_count.desc", voteCountGte = 250, page = page
+                    ).results
+                }.getOrDefault(emptyList())
+            }
+        }
+        rankHalloween(pages.awaitAll().flatten()).map { it.toMovie(MovieType.MOVIE) }
+    }
+
+    /** One filtered list for the Movies or TV page: any mix of genre or mood, decade, studio or network. */
+    suspend fun browseFiltered(kind: BrowseKind, filter: BrowseFilter): List<Movie> {
+        val sort = when (filter.sort) {
+            BrowseSort.POPULAR -> "popularity.desc"
+            BrowseSort.TOP_RATED -> "vote_average.desc"
+            BrowseSort.NEWEST -> if (kind == BrowseKind.MOVIES) "primary_release_date.desc" else "first_air_date.desc"
+        }
+        // Top rated needs a vote floor or it fills with titles rated 10 by three people; Newest must not
+        // list films that have not come out.
+        val minVotes = when (filter.sort) {
+            BrowseSort.TOP_RATED -> if (kind == BrowseKind.MOVIES) 500 else 200
+            BrowseSort.NEWEST -> 15
+            BrowseSort.POPULAR -> if (kind == BrowseKind.MOVIES) 100 else 50
+        }
+        val today = java.time.LocalDate.now().toString()
+        val from = filter.decade?.let { "${it.startYear}-01-01" }
+        val toDate = (filter.decade?.let { "${it.endYear}-12-31" })
+            ?: if (filter.sort == BrowseSort.NEWEST) today else null
+        val to = toDate?.let { if (it > today) today else it }
+        val results = if (kind == BrowseKind.MOVIES) {
+            tmdbService.discoverMoviesFiltered(
+                withGenres = filter.genreExpr, withCompanies = filter.provider?.id?.toString(),
+                releaseGte = from, releaseLte = to, sortBy = sort, voteCountGte = minVotes
+            ).results.map { it.toMovie(MovieType.MOVIE) }
+        } else {
+            tmdbService.discoverTvFiltered(
+                withGenres = filter.genreExpr, withNetworks = filter.provider?.id?.toString(),
+                airedGte = from, airedLte = to, sortBy = sort, voteCountGte = minVotes
+            ).results.map { it.toMovie(MovieType.TV_SHOW) }
+        }
+        return results.filter { it.posterUrl.isNotBlank() }
+    }
+
     /** A genre shelf: TMDB discover, most popular first. */
     suspend fun browseGenre(kind: BrowseKind, genreId: Int): List<Movie> = when (kind) {
         BrowseKind.MOVIES -> tmdbService.discoverMovies(withGenres = genreId.toString())
@@ -383,6 +435,21 @@ class MovieRepository(
 }
 
 private const val TAG = "MovieRepository"
+/** TMDB keyword id for "halloween", and how many pages of it to read (20 films a page). */
+private const val HALLOWEEN_KEYWORD_ID = 3335
+private const val HALLOWEEN_PAGES = 12
+
+/**
+ * Orders candidate Halloween films best-first by weighted rating and keeps the top 100. Pure, so it
+ * can be tested; drops duplicates and films with no poster.
+ */
+internal fun rankHalloween(candidates: List<com.ominix.vidiio.data.model.tmdb.TMDBMovie>): List<com.ominix.vidiio.data.model.tmdb.TMDBMovie> =
+    candidates
+        .distinctBy { it.id }
+        .filter { !it.posterPath.isNullOrBlank() }
+        .sortedByDescending { weightedRating(it.voteAverage ?: 0.0, it.voteCount ?: 0) }
+        .take(100)
+
 /** Which of the dedicated browse pages a request is for. */
 enum class BrowseKind { MOVIES, TV }
 

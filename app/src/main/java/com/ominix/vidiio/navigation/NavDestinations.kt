@@ -36,6 +36,10 @@ sealed interface VidiioRoute : NavKey {
         val label = "TV Shows"
     }
 
+    /** The ranked Top 100 Halloween movies; opened from the Movies page. */
+    @Serializable
+    data object Halloween : VidiioRoute
+
     @Serializable
     data object Anime : VidiioRoute {
         val icon = Icons.Rounded.AutoAwesome

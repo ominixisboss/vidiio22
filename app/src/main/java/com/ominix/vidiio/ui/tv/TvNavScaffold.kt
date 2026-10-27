@@ -91,6 +91,14 @@ fun TvNavScaffold(
     val selectedItemFocus = remember { FocusRequester() }
     val contentFocus = remember { FocusRequester() }
 
+    // Hand focus back to the page and tuck the menu away. Asking the focus system to move Right is not
+    // enough: from a menu item it finds nothing to land on whenever the page is not laid out to the
+    // right of it, so focus stayed on the item and the menu never closed. Go straight to the page.
+    fun leaveRailToPage() {
+        railOpen = false
+        runCatching { contentFocus.requestFocus() }
+    }
+
     // Hide once focus has been out of the rail for a moment. The first time, wait a little
     // longer so the menu is actually seen at launch.
     LaunchedEffect(railEnabled, railHasFocus, railOpen, focusRailOnOpen) {
@@ -128,7 +136,7 @@ fun TvNavScaffold(
 
     // Back from the menu returns to the page rather than leaving the app.
     BackHandler(enabled = railEnabled && railOpen && railHasFocus) {
-        focusManager.moveFocus(FocusDirection.Right)
+        leaveRailToPage()
     }
 
     Box(
@@ -152,7 +160,7 @@ fun TvNavScaffold(
                 // cursor is doing.
                 if (railEnabled && event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
                     if (railOpen && railHasFocus) {
-                        focusManager.moveFocus(FocusDirection.Right)
+                        leaveRailToPage()
                     } else {
                         railOpen = true
                         focusRailOnOpen = true
@@ -202,7 +210,7 @@ fun TvNavScaffold(
                         onClick = {
                             if (item.selected) {
                                 // Already on this page: nothing will change, just go back to it.
-                                focusManager.moveFocus(FocusDirection.Right)
+                                leaveRailToPage()
                             } else {
                                 item.onClick()
                                 // The page will change; hand it focus once it appears.

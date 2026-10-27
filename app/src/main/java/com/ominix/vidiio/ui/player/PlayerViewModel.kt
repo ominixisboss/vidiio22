@@ -65,6 +65,12 @@ data class PlayerUiState(
     val bufferedPositionMs: Long = 0L,
     val errorMessage: String? = null,
 
+    /** The episode that will start by itself when this one ends, and seconds left to cancel. */
+    val upNext: com.ominix.vidiio.data.model.Episode? = null,
+    val upNextSeconds: Int = 0,
+    /** True from choosing the next episode until it is actually playing. */
+    val loadingNext: Boolean = false,
+
     val subtitlesEnabled: Boolean = true,
     val selectedSubtitleUrl: String? = null,
     val subtitleOffsetMs: Long = 0L,
@@ -159,7 +165,74 @@ class PlayerViewModel(
     val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SubtitleStyle())
 
-    fun selectEpisode(episode: Episode) = session.selectEpisode(episode)
+    /** Picking an episode (e.g. from the in-player list) really starts it, with the best stream for it. */
+    fun selectEpisode(episode: Episode) = startEpisode(episode)
+
+    private var upNextJob: Job? = null
+
+    /**
+     * Set by the screen: returns a [CreditsDetector.WIDTH] x [CreditsDetector.HEIGHT] copy of the current
+     * video frame, or null if one cannot be had right now (no surface yet, DRM, ...).
+     */
+    var frameSampler: (suspend () -> IntArray?)? = null
+    private val creditsTracker = CreditsTracker()
+    private var lastCreditsSampleAt = 0L
+
+    /** The episode finished: offer the next one with a 10 second countdown, if there is one. */
+    private fun onEpisodeEnded() {
+        if (!upNextDismissed && upNextJob?.isActive != true) startUpNext()
+    }
+
+    /** True after the viewer cancelled the countdown for this episode, so it is not offered again. */
+    private var upNextDismissed = false
+
+    private fun startUpNext() {
+        val show = session.movie.value ?: return
+        val next = com.ominix.vidiio.data.repository.nextEpisodeAfter(show, session.selectedEpisode.value) ?: return
+        upNextJob?.cancel()
+        upNextJob = viewModelScope.launch {
+            for (left in UP_NEXT_SECONDS downTo 1) {
+                _state.update { it.copy(upNext = next, upNextSeconds = left) }
+                delay(1000)
+            }
+            playNextEpisode()
+        }
+    }
+
+    /** Stay on the finished episode and dismiss the countdown. */
+    fun cancelUpNext() {
+        upNextDismissed = true
+        upNextJob?.cancel()
+        _state.update { it.copy(upNext = null, upNextSeconds = 0) }
+    }
+
+    /** Start the offered episode now (also what the countdown does when it reaches zero). */
+    fun playNextEpisode() {
+        val next = _state.value.upNext ?: return
+        startEpisode(next)
+    }
+
+    private fun startEpisode(next: Episode) {
+        if (next.id == session.selectedEpisode.value?.id && _state.value.selectedSource != null) return
+        creditsTracker.reset()
+        upNextDismissed = false
+        upNextJob?.cancel()
+        skippedUrls.clear()
+        torrentPrepareRetries = 0
+        // Drop the finished video: otherwise the player still reports a position at the end of it and the
+        // credits check below would immediately offer the episode after this one, and so on.
+        player.stop()
+        player.clearMediaItems()
+        // Clearing the source lets the source-picker below choose the best working English stream for the
+        // new episode as soon as its links have been found and checked.
+        _state.update {
+            it.copy(
+                upNext = null, upNextSeconds = 0, loadingNext = true, selectedSource = null,
+                selectedSubtitleUrl = null, positionMs = 0L, durationMs = 0L, errorMessage = null
+            )
+        }
+        session.selectEpisode(next)
+    }
     fun downloadSource(source: StreamSource) = session.downloadSource(source)
     fun getDownloadStatus(url: String): Flow<DownloadStatus?> = session.getDownloadStatus(url)
 
@@ -170,21 +243,6 @@ class PlayerViewModel(
         viewModelScope.launch {
             settingsRepository.mediaPlayerFlow.collect { choice ->
                 _state.update { it.copy(mediaPlayerChoice = choice) }
-            }
-        }
-        viewModelScope.launch {
-            // Read the user's default once, before any subtitle track can arrive - not as a
-            // running collector, since after this the player owns subtitlesEnabled for the
-            // rest of the session (the in-player "Off" toggle shouldn't be fought by Settings).
-            val subtitlesEnabledByDefault = settingsRepository.subtitlesEnabledByDefaultFlow.first()
-            _state.update { it.copy(subtitlesEnabled = subtitlesEnabledByDefault) }
-            if (!subtitlesEnabledByDefault) setTextTrackDisabled(true)
-
-            subtitles.collect { subTracks ->
-                if (subTracks.isNotEmpty() && _state.value.subtitlesEnabled && _state.value.selectedSubtitleUrl == null) {
-                    val bestTrack = subTracks.first()
-                    selectSubtitle(bestTrack)
-                }
             }
         }
     }
@@ -271,14 +329,33 @@ class PlayerViewModel(
                 }
             }
             _state.update { it.copy(availableAudioTracks = tracksList) }
+
+            // The file says what language its audio is in. If it says so and none of it is English,
+            // this source is the wrong one: move on to the next. (Players pick the English track of a
+            // dual-audio file on their own - see setPreferredAudioLanguages below.)
+            val tags = tracksList.map { it.format.language }
+            val current = _state.value.selectedSource
+            if (current != null && com.ominix.vidiio.data.repository.AudioLanguage.definitelyNotEnglish(tags)) {
+                val next = session.streamSources.value.firstOrNull {
+                    it.url != current.url && !skippedUrls.contains(it.url) &&
+                        !com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) &&
+                        com.ominix.vidiio.data.repository.SourceLanguage.isLikelyEnglish(it.serverName)
+                }
+                if (next != null) {
+                    skippedUrls += current.url
+                    torrentPrepareRetries = 0
+                    selectSource(next)
+                }
+            }
         }
 
         override fun onIsPlayingChanged(playing: Boolean) {
-            _state.update { it.copy(isPlaying = playing) }
+            _state.update { it.copy(isPlaying = playing, loadingNext = if (playing) false else it.loadingNext) }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             _state.update { it.copy(isBuffering = playbackState == Player.STATE_BUFFERING) }
+            if (playbackState == Player.STATE_ENDED) onEpisodeEnded()
         }
     }
 
@@ -288,10 +365,14 @@ class PlayerViewModel(
      * re-entering a half-initialised delegate.
      */
     val player: ExoPlayer = run {
+        // A 2-minute buffer of 1080p is ~120 MB of RAM. Fine on a phone, fatal on a 1 GB stick, where the
+        // system kills the app. Keep it to 30 s there; fast start (below) is unchanged.
+        val am = application.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val lowRam = am?.let { it.isLowRamDevice || it.memoryClass <= 192 } == true
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                50000, // minBufferMs
-                120000, // maxBufferMs
+                if (lowRam) 15000 else 50000, // minBufferMs
+                if (lowRam) 30000 else 120000, // maxBufferMs
                 2500, // bufferForPlaybackMs (Fast start!)
                 5000 // bufferForPlaybackAfterRebufferMs
             )
@@ -299,6 +380,10 @@ class PlayerViewModel(
             .build()
 
         val builder = ExoPlayer.Builder(application)
+            .setTrackSelector(androidx.media3.exoplayer.trackselection.DefaultTrackSelector(application).apply {
+                // Choose the English audio track whenever a file has one (dual-audio anime, etc.).
+                parameters = buildUponParameters().setPreferredAudioLanguages("en", "eng").build()
+            })
             .setLoadControl(loadControl)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setHandleAudioBecomingNoisy(true)
@@ -327,6 +412,24 @@ class PlayerViewModel(
 
     init {
         player.addListener(playerListener)
+        // These touch the player, so they must run after it exists. Started from the constructor
+        // body above the player they used to run first (Main.immediate resumes synchronously once
+        // DataStore has a cached value) and crashed with a null player when subtitles default to Off.
+        viewModelScope.launch {
+            // Read the user's default once, before any subtitle track can arrive - not as a
+            // running collector, since after this the player owns subtitlesEnabled for the
+            // rest of the session (the in-player "Off" toggle shouldn't be fought by Settings).
+            val subtitlesEnabledByDefault = settingsRepository.subtitlesEnabledByDefaultFlow.first()
+            _state.update { it.copy(subtitlesEnabled = subtitlesEnabledByDefault) }
+            if (!subtitlesEnabledByDefault) setTextTrackDisabled(true)
+
+            subtitles.collect { subTracks ->
+                if (subTracks.isNotEmpty() && _state.value.subtitlesEnabled && _state.value.selectedSubtitleUrl == null) {
+                    val bestTrack = subTracks.first()
+                    selectSubtitle(bestTrack)
+                }
+            }
+        }
         startPolling()
 
         viewModelScope.launch {
@@ -339,14 +442,17 @@ class PlayerViewModel(
             combine(session.streamSources, session.sourceHealth, session.isSearchingSources) { sources, health, searching ->
                 Triple(sources, health, searching)
             }.collectLatest { (sources, health, searching) ->
-                val verified = sources.firstOrNull { health[it.url]?.status == SourceStatus.WORKING }
+                // Same choice the Details page makes: working, English, light enough to decode.
+                val pick = com.ominix.vidiio.data.repository.pickStreamToPlay(sources, health, searching, giveUp = false)
                 when {
-                    verified != null -> selectSourceIfNone(verified)
+                    pick != null -> selectSourceIfNone(pick)
                     sources.isEmpty() -> Unit
-                    !searching -> selectSourceIfNone(sources.first())
                     else -> {
                         delay(AUTO_PICK_GRACE_MS)
-                        selectSourceIfNone(sources.first())
+                        selectSourceIfNone(
+                            com.ominix.vidiio.data.repository.pickStreamToPlay(sources, health, false, giveUp = true)
+                                ?: sources.first()
+                        )
                     }
                 }
             }
@@ -382,6 +488,35 @@ class PlayerViewModel(
                 }
 
                 val playing = player.isPlaying
+
+                // Read the picture: rolling credits (dark frame, light text, held for a few seconds) start
+                // the countdown as soon as they appear, far earlier than the clock-based window below.
+                if (playing && duration > 0L && upNextJob?.isActive != true && !upNextDismissed &&
+                    !_state.value.loadingNext && _state.value.upNext == null
+                ) {
+                    val remaining = duration - position
+                    val inLastStretch = position > duration * 0.6 && remaining < 8 * 60_000L
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (inLastStretch && now - lastCreditsSampleAt >= CREDITS_SAMPLE_MS) {
+                        lastCreditsSampleAt = now
+                        val pixels = runCatching { frameSampler?.invoke() }.getOrNull()
+                        if (pixels != null && creditsTracker.add(CreditsDetector.looksLikeCredits(pixels))) {
+                            creditsTracker.reset()
+                            startUpNext()
+                        }
+                    } else if (!inLastStretch) {
+                        creditsTracker.reset()
+                    }
+                }
+
+                // Netflix-style: offer the next episode when the credits are likely starting, not only at
+                // the very end. There is no credits marker to read, so use the closing stretch of the
+                // episode (longer for full-length episodes, which have longer credits).
+                if (playing && duration > 0L && upNextJob?.isActive != true && !upNextDismissed &&
+                    !_state.value.loadingNext && _state.value.upNext == null && duration - position <= creditsWindowMs(duration)
+                ) {
+                    startUpNext()
+                }
 
                 // Persist progress every ~10s of playback.
                 if (playing && duration > 0L && ++tick % 20 == 0) {
@@ -701,3 +836,12 @@ class PlayerViewModel(
 
 /** How long the player waits for a source to verify before starting on the first listed one. */
 private const val AUTO_PICK_GRACE_MS = 8_000L
+
+/** Seconds the "Up next" countdown runs before the next episode starts by itself. */
+private const val UP_NEXT_SECONDS = 10
+
+/** How long before the end the "Up next" countdown begins: ~credits length. */
+private fun creditsWindowMs(durationMs: Long): Long = if (durationMs >= 20 * 60_000L) 45_000L else 25_000L
+
+/** How often the picture is checked for credits, once the episode is in its closing stretch. */
+private const val CREDITS_SAMPLE_MS = 2_000L

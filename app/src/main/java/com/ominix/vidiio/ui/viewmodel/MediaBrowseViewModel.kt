@@ -4,9 +4,14 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ominix.vidiio.data.model.Movie
+import com.ominix.vidiio.data.repository.BrowseFilter
 import com.ominix.vidiio.data.repository.BrowseKind
 import com.ominix.vidiio.data.repository.BrowseList
+import com.ominix.vidiio.data.repository.BrowseSort
+import com.ominix.vidiio.data.repository.Decade
+import com.ominix.vidiio.data.repository.Mood
 import com.ominix.vidiio.data.repository.MovieRepository
+import com.ominix.vidiio.data.repository.Provider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -26,9 +31,11 @@ data class BrowseState(
     val fresh: List<Movie>? = null,
     val soon: List<Movie>? = null,
     val topRated: List<Movie>? = null,
-    /** The selected genre and its results (null while loading). */
-    val genre: Genre? = null,
-    val genreResults: List<Movie>? = null,
+    /** Movies page only: the 100 best Halloween films, once loaded. */
+    val halloween: List<Movie>? = null,
+    /** What the viewer has narrowed the page to, and the matching titles (null while loading). */
+    val filter: BrowseFilter = BrowseFilter(),
+    val filterResults: List<Movie>? = null,
     val isRefreshing: Boolean = false,
     val failures: Int = 0,
 ) {
@@ -49,7 +56,7 @@ class MediaBrowseViewModel(
     val state: StateFlow<BrowseState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
-    private var genreJob: Job? = null
+    private var filterJob: Job? = null
 
     /** In-memory cache, so coming back to the page does not refetch it. */
     private val cache = HashMap<String, List<Movie>>()
@@ -71,10 +78,11 @@ class MediaBrowseViewModel(
                 launch { shelf(BrowseList.FRESH) { s, v -> s.copy(fresh = v) } }
                 launch { shelf(BrowseList.SOON) { s, v -> s.copy(soon = v) } }
                 launch { shelf(BrowseList.TOP_RATED) { s, v -> s.copy(topRated = v) } }
+                if (kind == BrowseKind.MOVIES) launch { loadHalloween() }
             }
             _state.update { it.copy(isRefreshing = false) }
         }
-        _state.value.genre?.let { selectGenre(it, force = true) }
+        if (!_state.value.filter.isEmpty) applyFilter(_state.value.filter, force = true)
     }
 
     /** Loads one shelf; a failure is counted, not thrown, so the other shelves still arrive. */
@@ -90,22 +98,52 @@ class MediaBrowseViewModel(
         }
     }
 
-    fun selectGenre(genre: Genre?, force: Boolean = false) {
-        genreJob?.cancel()
-        if (genre == null || (genre == _state.value.genre && !force && _state.value.genreResults != null)) {
-            _state.update { it.copy(genre = null, genreResults = null) }
+    /** The Halloween list is optional furniture: if it fails the page just doesn't show it. */
+    private suspend fun loadHalloween() {
+        try {
+            val films = cache.getOrPut("halloween") { repository.halloweenTop100() }
+            _state.update { it.copy(halloween = films.takeIf { list -> list.isNotEmpty() }) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Halloween list failed", e)
+        }
+    }
+
+    // ── Filters ──────────────────────────────────────────────────────────────
+
+    fun setGenre(genre: Genre?) = update { it.copy(genreId = genre?.id, mood = if (genre != null) null else it.mood) }
+
+    fun setMood(mood: Mood?) = update { it.copy(mood = mood, genreId = if (mood != null) null else it.genreId) }
+
+    fun setDecade(decade: Decade?) = update { it.copy(decade = decade) }
+
+    fun setProvider(provider: Provider?) = update { it.copy(provider = provider) }
+
+    fun setSort(sort: BrowseSort) = update { it.copy(sort = sort) }
+
+    fun clearFilters() = update { BrowseFilter(sort = it.sort) }
+
+    private fun update(change: (BrowseFilter) -> BrowseFilter) = applyFilter(change(_state.value.filter), force = false)
+
+    private fun applyFilter(filter: BrowseFilter, force: Boolean) {
+        filterJob?.cancel()
+        if (filter.isEmpty) {
+            _state.update { it.copy(filter = filter, filterResults = null) }
             return
         }
-        _state.update { it.copy(genre = genre, genreResults = null) }
-        genreJob = viewModelScope.launch {
+        _state.update { it.copy(filter = filter, filterResults = null) }
+        filterJob = viewModelScope.launch {
+            val key = "filter-${filter.genreExpr}-${filter.decade?.startYear}-${filter.provider?.id}-${filter.sort}"
             try {
-                val results = cache.getOrPut("genre-${genre.id}") { repository.browseGenre(kind, genre.id) }
-                _state.update { if (it.genre == genre) it.copy(genreResults = results) else it }
+                val results = if (force) repository.browseFiltered(kind, filter).also { cache[key] = it }
+                else cache.getOrPut(key) { repository.browseFiltered(kind, filter) }
+                _state.update { if (it.filter == filter) it.copy(filterResults = results) else it }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Genre load failed", e)
-                _state.update { if (it.genre == genre) it.copy(genreResults = emptyList()) else it }
+                Log.w(TAG, "Filter load failed", e)
+                _state.update { if (it.filter == filter) it.copy(filterResults = emptyList()) else it }
             }
         }
     }

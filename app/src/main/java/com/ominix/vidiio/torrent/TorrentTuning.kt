@@ -7,7 +7,7 @@ package com.ominix.vidiio.torrent
 object TorrentTuning {
 
     /** Memory is the limit on a streaming stick; a bigger read-ahead cache absorbs peer hiccups. */
-    fun cacheBytes(isLowMemory: Boolean): Long = if (isLowMemory) 96L shl 20 else 256L shl 20
+    fun cacheBytes(isLowMemory: Boolean): Long = if (isLowMemory) 48L shl 20 else 256L shl 20
 
     /**
      * Engine settings, merged over whatever the engine already has (a "set" replaces the whole
@@ -20,8 +20,8 @@ object TorrentTuning {
         // Fetch ahead of the playhead, so it doesn't stall waiting on the next piece.
         "ReaderReadAHead" to 95,
         // More simultaneous peers, and more DHT lookups to find them.
-        "ConnectionsLimit" to 300,
-        "DhtConnectionLimit" to 600,
+        "ConnectionsLimit" to if (isLowMemory) 120 else 300,
+        "DhtConnectionLimit" to if (isLowMemory) 250 else 600,
         // 0 = unlimited.
         "DownloadRateLimit" to 0,
         // Add our trackers to the ones the torrent already lists.
