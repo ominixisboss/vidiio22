@@ -220,7 +220,14 @@ fun MovieDetailContent(
         mutableIntStateOf(movie.seasons.indexOfFirst { it.seasonNumber == selectedEpisode?.seasonNumber }.coerceAtLeast(0))
     }
     var trailerMuted by remember(movie.id) { mutableStateOf(true) }
-    var trailerFailed by remember(movie.id) { mutableStateOf(false) }
+    // The inline trailer is a WebView, the heaviest thing on this page. On low-memory devices (1 GB TV
+    // sticks) the system kills it and the viewer sees a browser crash page, so offer the external
+    // Trailer button there instead of autoplaying.
+    val lowRamDevice = androidx.compose.ui.platform.LocalContext.current.let { c ->
+        (c.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)
+            ?.let { it.isLowRamDevice || it.memoryClass <= 192 } == true
+    }
+    var trailerFailed by remember(movie.id) { mutableStateOf(lowRamDevice) }
     var trailerFullscreen by remember(movie.id) { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val listState = rememberLazyListState()
@@ -672,18 +679,17 @@ fun EpisodeListItem(
         onClick = onClick,
         alpha = if (isSelected) 0.15f else 0.05f,
         borderAlpha = if (isSelected) 0.3f else 0.1f,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(width = 130.dp, height = 74.dp)
-                    .clip(RoundedCornerShape(24.dp))
+                    .size(width = 96.dp, height = 54.dp)
+                    .clip(RoundedCornerShape(10.dp))
                     .background(Color.DarkGray)
-                    .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
             ) {
                 if (episode.stillPath != null) {
                     AsyncImage(
@@ -705,13 +711,13 @@ fun EpisodeListItem(
                 )
                 Text(
                     text = "${episode.episodeNumber}",
-                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
                     color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = episode.name,

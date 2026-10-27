@@ -40,6 +40,11 @@ fun EmbedPlayer(url: String, onBack: () -> Unit, onError: (String) -> Unit) {
                 mediaPlaybackRequiresUserGesture = false
             }
             webViewClient = object : WebViewClient() {
+                override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+                    onError("The embedded player ran out of memory and closed. Try another source.")
+                    return true
+                }
+
                 override fun onReceivedError(
                     view: WebView?,
                     request: WebResourceRequest?,

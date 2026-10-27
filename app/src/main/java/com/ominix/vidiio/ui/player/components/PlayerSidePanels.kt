@@ -12,6 +12,12 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +33,11 @@ import com.ominix.vidiio.data.model.StreamSource
 import com.ominix.vidiio.data.repository.SourceHealth
 import com.ominix.vidiio.ui.components.SourceHealthBadge
 
+/**
+ * Episode picker for the player: a slim panel with a row of season chips and one compact line per
+ * episode (number, title, a marker on the one playing). No thumbnails or synopses - those are on the
+ * Details page; here the job is to get to another episode quickly.
+ */
 @Composable
 fun EpisodeSidebar(
     movie: Movie,
@@ -35,38 +46,62 @@ fun EpisodeSidebar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val seasons = movie.seasons.filter { it.episodes.isNotEmpty() }.sortedBy { it.seasonNumber }
+    var selectedSeason by remember(movie.id, currentEpisode?.seasonNumber) {
+        mutableIntStateOf(
+            seasons.firstOrNull { it.seasonNumber == currentEpisode?.seasonNumber }?.seasonNumber
+                ?: seasons.firstOrNull()?.seasonNumber ?: 0
+        )
+    }
+    val episodes = seasons.firstOrNull { it.seasonNumber == selectedSeason }?.episodes.orEmpty()
+        .sortedBy { it.episodeNumber }
+
     Surface(
         modifier = modifier
             .fillMaxHeight()
-            .width(320.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-        tonalElevation = 8.dp
+            .width(280.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "Episodes",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Close")
+                IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Close", modifier = Modifier.size(18.dp))
                 }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
 
-            val allEpisodes = movie.seasons.flatMap { it.episodes }
-            
-            LazyColumn {
-                items(allEpisodes) { episode ->
+            if (seasons.size > 1) {
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(seasons, key = { it.seasonNumber }) { season ->
+                        val chosen = season.seasonNumber == selectedSeason
+                        Text(
+                            text = season.name ?: "S${season.seasonNumber}",
+                            fontSize = 12.sp,
+                            fontWeight = if (chosen) FontWeight.Bold else FontWeight.Medium,
+                            color = if (chosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .tvClickable(onClick = { selectedSeason = season.seasonNumber }, shape = RoundedCornerShape(50))
+                                .background(if (chosen) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                items(episodes, key = { it.id }) { episode ->
                     EpisodeItem(
                         episode = episode,
-                        isSelected = episode == currentEpisode,
+                        isSelected = episode.id == currentEpisode?.id,
                         onClick = { onEpisodeSelect(episode) }
                     )
                 }
@@ -75,56 +110,40 @@ fun EpisodeSidebar(
     }
 }
 
+/** One compact line: number, title, and a marker when it is the episode playing. */
 @Composable
 fun EpisodeItem(
     episode: Episode,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    ListItem(
-        headlineContent = { 
-            Text(
-                "E${episode.episodeNumber}: ${episode.name}",
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            ) 
-        },
-        supportingContent = { 
-            Text("Season ${episode.seasonNumber}") 
-        },
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(80.dp, 45.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.Gray.copy(alpha = 0.3f))
-            ) {
-                if (episode.stillPath != null) {
-                    AsyncImage(
-                        model = episode.stillPath,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White)
-                    }
-                }
-            }
-        },
-        modifier = Modifier.tvClickable(onClick = onClick, shape = RoundedCornerShape(8.dp)),
-        colors = ListItemDefaults.colors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .tvClickable(onClick = onClick, shape = RoundedCornerShape(8.dp))
+            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else Color.Transparent)
+            .padding(horizontal = 8.dp, vertical = 7.dp)
+    ) {
+        Text(
+            text = "${episode.episodeNumber}",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.55f),
+            modifier = Modifier.width(26.dp)
         )
-    )
+        Text(
+            text = episode.name,
+            fontSize = 13.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        if (isSelected) {
+            Icon(Icons.Rounded.PlayArrow, contentDescription = "Playing", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
