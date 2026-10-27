@@ -19,6 +19,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -125,6 +127,7 @@ fun HomeScreen(
             )
         }
 
+        val heroScope = androidx.compose.runtime.rememberCoroutineScope()
         val isRefreshing by viewModel.isRefreshing.collectAsState()
 
         when (val state = uiState) {
@@ -151,11 +154,21 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(spec.rowGap)
                     ) {
                         if (heroMovies.isNotEmpty()) {
-                            item {
-                                if (spec.heroKind == HeroKind.CAROUSEL) {
-                                    HeroCarousel(heroMovies, spec, onNavigateToDetails)
-                                } else {
-                                    HeroStatic(heroMovies.first(), spec, onNavigateToDetails)
+                            item(key = "hero") {
+                                // Focus scrolling can stop short of the top; once the hero is focused, snap there.
+                                androidx.compose.foundation.layout.Box(
+                                    Modifier.onFocusChanged { focus ->
+                                        if (focus.hasFocus) heroScope.launch {
+                                            kotlinx.coroutines.delay(150)
+                                            scrollState.scrollToItem(0)
+                                        }
+                                    }
+                                ) {
+                                    if (spec.heroKind == HeroKind.CAROUSEL) {
+                                        HeroCarousel(heroMovies, spec, onNavigateToDetails)
+                                    } else {
+                                        HeroStatic(heroMovies.first(), spec, onNavigateToDetails)
+                                    }
                                 }
                             }
                         }
