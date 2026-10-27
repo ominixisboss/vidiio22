@@ -47,6 +47,7 @@ import com.ominix.vidiio.ui.browse.BrowseShortcuts
 import com.ominix.vidiio.ui.browse.LocalBrowseShortcuts
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.VideoLibrary
 import com.ominix.vidiio.data.repository.BrowseKind
 import com.ominix.vidiio.ui.tv.ProvideTvScrolling
 import com.ominix.vidiio.ui.tv.TvNavItem
@@ -312,6 +313,8 @@ fun VidiioApp() {
     } else {
         val windowSizeClass = adaptiveInfo.windowSizeClass
         when {
+            // A phone on its side is wide but short: a rail would run off the bottom, so keep the bar.
+            !windowSizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND) -> NavigationSuiteType.NavigationBar
             windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXPANDED_LOWER_BOUND) -> NavigationSuiteType.NavigationRail
             windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) -> NavigationSuiteType.NavigationRail
             else -> NavigationSuiteType.NavigationBar
@@ -336,7 +339,7 @@ fun VidiioApp() {
     )
 
     // The sections. The side menu (TV, tablets) lists them all; the phone's bottom bar has room
-    // for five, so My List / Downloads / Settings sit behind a Library shortcut there instead.
+    // for six: My List / Downloads / Settings sit behind the Library tab there instead.
     fun item(route: androidx.navigation3.runtime.NavKey, selected: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) =
         TvNavItem(selected = selected, icon = icon, label = label, onClick = { navigator.navigate(route) })
 
@@ -352,7 +355,9 @@ fun VidiioApp() {
         item(VidiioRoute.Downloads, top == VidiioRoute.Downloads, Icons.Rounded.Download, "Downloads"),
         item(VidiioRoute.Settings, top == VidiioRoute.Settings, Icons.Rounded.Settings, "Settings"),
     )
-    val barItems = listOf(home, movies, tv, anime, search)
+    val libraryTop = top == VidiioRoute.Library || top == VidiioRoute.Favorites || top == VidiioRoute.Downloads || top == VidiioRoute.Settings
+    val library = item(VidiioRoute.Library, libraryTop, Icons.Rounded.VideoLibrary, "Library")
+    val barItems = listOf(home, movies, tv, anime, search, library)
     val useBottomBar = layoutType == NavigationSuiteType.NavigationBar
 
     // Phones get search + library shortcuts on the pages' headers; TVs and tablets have the menu.
