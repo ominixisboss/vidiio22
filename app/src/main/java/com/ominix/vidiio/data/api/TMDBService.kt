@@ -76,6 +76,31 @@ interface TMDBService {
         @Query("vote_count.gte") voteCountGte: Int = 200
     ): TMDBResponse<TMDBMovie>
 
+    /** Discover with every filter the Movies page offers. Unset filters are simply not sent. */
+    @GET("discover/movie")
+    suspend fun discoverMoviesFiltered(
+        @Query("with_genres") withGenres: String? = null,
+        @Query("with_keywords") withKeywords: String? = null,
+        @Query("with_companies") withCompanies: String? = null,
+        @Query("primary_release_date.gte") releaseGte: String? = null,
+        @Query("primary_release_date.lte") releaseLte: String? = null,
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("vote_count.gte") voteCountGte: Int? = 100,
+        @Query("page") page: Int = 1
+    ): TMDBResponse<TMDBMovie>
+
+    /** The same for TV: networks instead of studios, first-air dates instead of release dates. */
+    @GET("discover/tv")
+    suspend fun discoverTvFiltered(
+        @Query("with_genres") withGenres: String? = null,
+        @Query("with_networks") withNetworks: String? = null,
+        @Query("first_air_date.gte") airedGte: String? = null,
+        @Query("first_air_date.lte") airedLte: String? = null,
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("vote_count.gte") voteCountGte: Int? = 50,
+        @Query("page") page: Int = 1
+    ): TMDBResponse<TMDBMovie>
+
     @GET("discover/tv")
     suspend fun discoverTV(
         @Query("with_genres") withGenres: String? = null,

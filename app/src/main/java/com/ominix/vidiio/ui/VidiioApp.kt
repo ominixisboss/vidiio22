@@ -121,6 +121,18 @@ fun VidiioApp() {
             MediaBrowseScreen(
                 viewModel = viewModel,
                 onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                onOpenHalloween = { navigator.navigate(VidiioRoute.Halloween) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        entry<VidiioRoute.Halloween> {
+            val viewModel: com.ominix.vidiio.ui.viewmodel.MediaBrowseViewModel = viewModel(
+                key = "browse_movies",
+                factory = VidiioViewModelFactories.browse(application, BrowseKind.MOVIES)
+            )
+            HalloweenScreen(
+                viewModel = viewModel,
+                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 modifier = Modifier.fillMaxSize()
             )
         }
