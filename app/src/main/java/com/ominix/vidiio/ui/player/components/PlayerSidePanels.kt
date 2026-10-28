@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -53,14 +54,22 @@ fun EpisodeSidebar(
                 ?: seasons.firstOrNull()?.seasonNumber ?: 0
         )
     }
+    val playingFocus = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
     val episodes = seasons.firstOrNull { it.seasonNumber == selectedSeason }?.episodes.orEmpty()
         .sortedBy { it.episodeNumber }
+    // Put the remote on the episode that is playing as soon as the panel opens, so it is never left on nothing.
+    androidx.compose.runtime.LaunchedEffect(selectedSeason, episodes.size) {
+        kotlinx.coroutines.delay(150)
+        runCatching { playingFocus.requestFocus() }
+    }
 
     Surface(
         modifier = modifier
             .fillMaxHeight()
             .width(280.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+        // Solid and dark with explicit light text: the theme surface can be light, and the video shows through a translucent one.
+        color = Color(0xFF14161B),
+        contentColor = Color.White
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -84,7 +93,7 @@ fun EpisodeSidebar(
                             text = season.name ?: "S${season.seasonNumber}",
                             fontSize = 12.sp,
                             fontWeight = if (chosen) FontWeight.Bold else FontWeight.Medium,
-                            color = if (chosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            color = Color.White,
                             maxLines = 1,
                             modifier = Modifier
                                 .tvClickable(onClick = { selectedSeason = season.seasonNumber }, shape = RoundedCornerShape(50))
@@ -102,7 +111,8 @@ fun EpisodeSidebar(
                     EpisodeItem(
                         episode = episode,
                         isSelected = episode.id == currentEpisode?.id,
-                        onClick = { onEpisodeSelect(episode) }
+                        onClick = { onEpisodeSelect(episode) },
+                        modifier = if (episode.id == currentEpisode?.id) Modifier.focusRequester(playingFocus) else Modifier
                     )
                 }
             }
@@ -115,11 +125,12 @@ fun EpisodeSidebar(
 fun EpisodeItem(
     episode: Episode,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .tvClickable(onClick = onClick, shape = RoundedCornerShape(8.dp))
             .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else Color.Transparent)
@@ -129,11 +140,12 @@ fun EpisodeItem(
             text = "${episode.episodeNumber}",
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.55f),
+            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
             modifier = Modifier.width(26.dp)
         )
         Text(
             text = episode.name,
+            color = Color.White,
             fontSize = 13.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1,
