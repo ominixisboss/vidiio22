@@ -55,6 +55,8 @@ fun DetailsScreen(
     viewModel: DetailsViewModel,
     onBack: () -> Unit,
     onPlay: (Movie, Episode?, StreamSource) -> Unit,
+    autoPlaySeason: Int? = null,
+    autoPlayEpisode: Int? = null,
     modifier: Modifier = Modifier
 ) {
     val sourceHealth by viewModel.sourceHealth.collectAsState()
@@ -137,6 +139,20 @@ fun DetailsScreen(
                                 autoPlayEpisodeId = null
                                 android.widget.Toast.makeText(toastContext, "No working stream found for this episode", android.widget.Toast.LENGTH_LONG).show()
                             }
+                        }
+                    }
+                    // Opened from the TV Guide with an episode in mind: pick it and play the best stream.
+                    var guideHandled by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(state.movie.seasons, guideHandled) {
+                        if (guideHandled || autoPlaySeason == null || autoPlayEpisode == null || state.movie.seasons.isEmpty()) return@LaunchedEffect
+                        guideHandled = true
+                        val target = state.movie.seasons.firstOrNull { it.seasonNumber == autoPlaySeason }
+                            ?.episodes?.firstOrNull { it.episodeNumber == autoPlayEpisode }
+                        if (target != null) {
+                            viewModel.selectEpisode(target)
+                            autoPlayEpisodeId = target.id
+                        } else {
+                            android.widget.Toast.makeText(toastContext, "That episode is not listed yet", android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
                     androidx.activity.compose.BackHandler(enabled = autoPlayEpisodeId != null) { autoPlayEpisodeId = null }

@@ -65,7 +65,7 @@ import java.util.Locale
 @Composable
 fun TvGuideScreen(
     viewModel: TvGuideViewModel,
-    onOpenMovie: (Movie) -> Unit,
+    onOpenShow: (Movie, Int?, Int?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
@@ -87,7 +87,7 @@ fun TvGuideScreen(
         scope.launch {
             val match = runCatching { viewModel.resolve(entry) }.getOrNull()
             opening = false
-            if (match != null) onOpenMovie(match)
+            if (match != null) onOpenShow(match, entry.season, entry.episode)
             else android.widget.Toast.makeText(context, "Could not find ${entry.showName}", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
