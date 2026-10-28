@@ -71,6 +71,8 @@ data class HomeStyleSpec(
 
 /** Navigation transition for switching between the top-level tabs. */
 fun HomeStyle.topLevelTransition(): ContentTransform = when (this) {
+    HomeStyle.FLIX ->
+        fadeIn(tween(200)) togetherWith fadeOut(tween(200))
     HomeStyle.VIDIIO ->
         fadeIn(tween(400)) + scaleIn(initialScale = 0.92f, animationSpec = tween(400)) togetherWith
             fadeOut(tween(400)) + scaleOut(targetScale = 0.92f, animationSpec = tween(400))
@@ -88,7 +90,7 @@ fun HomeStyle.topLevelTransition(): ContentTransform = when (this) {
 
 /** Navigation transition for opening a Details screen. */
 fun HomeStyle.detailTransition(): ContentTransform = when (this) {
-    HomeStyle.VIDIIO ->
+    HomeStyle.FLIX, HomeStyle.VIDIIO ->
         slideInHorizontally(tween(350)) { it } + fadeIn(tween(350)) togetherWith
             slideOutHorizontally(tween(350)) { -it } + fadeOut(tween(350))
     HomeStyle.NETFLIX ->
@@ -108,6 +110,27 @@ fun HomeStyle.detailTransition(): ContentTransform = when (this) {
  *   respects the user's separate Color Theme choice.
  */
 fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
+    // Streaming-guide layout (tab strip, dense rows of rated posters) in the Vidiio theme colours.
+    HomeStyle.FLIX -> HomeStyleSpec(
+        style = this,
+        label = "Flix",
+        accent = defaultAccent,
+        background = null,
+        heroKind = HeroKind.CAROUSEL,
+        heroHeight = 460.dp,
+        heroCenterText = true,
+        card = CardKind.PORTRAIT,
+        cardWidth = 118.dp,
+        cardCorner = 6.dp,
+        cardShowTitle = false,
+        ratingBadge = true,
+        rowGap = 14.dp,
+        rowHeaderSize = 20.sp,
+        rowHeaderWeight = FontWeight.Bold,
+        uppercaseHeaders = false,
+        showTop10 = false,
+        cardPressScale = 0.96f
+    )
     HomeStyle.VIDIIO -> HomeStyleSpec(
         style = this,
         label = "Vidiio",

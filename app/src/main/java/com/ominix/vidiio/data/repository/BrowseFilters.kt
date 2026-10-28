@@ -26,10 +26,12 @@ data class BrowseFilter(
     val mood: Mood? = null,
     val decade: Decade? = null,
     val provider: Provider? = null,
+    /** A streaming service (where it is available to watch), as opposed to a studio or network. */
+    val streamer: Provider? = null,
     val sort: BrowseSort = BrowseSort.POPULAR,
 ) {
     /** True when nothing narrows the list, so the page shows its normal shelves instead. */
-    val isEmpty: Boolean get() = genreId == null && mood == null && decade == null && provider == null
+    val isEmpty: Boolean get() = genreId == null && mood == null && decade == null && provider == null && streamer == null
 
     /** Genre as TMDB wants it: a specific genre wins over a mood's "any of". */
     val genreExpr: String? get() = genreId?.toString() ?: mood?.genreExpr
@@ -75,6 +77,13 @@ object BrowseOptions {
         Provider("Netflix", 213), Provider("HBO", 49), Provider("Disney+", 2739),
         Provider("Apple TV+", 2552), Provider("Prime Video", 1024), Provider("Hulu", 453),
         Provider("BBC", 4), Provider("AMC", 174), Provider("FX", 88), Provider("Paramount+", 4330),
+    )
+
+    /** Streaming services, TMDB watch-provider ids (US catalogue). */
+    val streamers = listOf(
+        Provider("Netflix", 8), Provider("Hulu", 15), Provider("Prime Video", 9),
+        Provider("Max", 1899), Provider("Disney+", 337), Provider("Apple TV+", 350),
+        Provider("Paramount+", 531), Provider("Peacock", 386), Provider("Showtime", 37), Provider("Starz", 43),
     )
 
     /** TMDB genres missing from the first version of the Movies page. */

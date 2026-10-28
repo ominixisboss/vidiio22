@@ -37,7 +37,7 @@ enum class ColorTheme {
 
 /** Home-screen layout preset. Restyles the hero, cards, rows and accent of the Home tab. */
 enum class HomeStyle {
-    VIDIIO, NETFLIX, HULU, PRIME, DISNEY
+    FLIX, VIDIIO, NETFLIX, HULU, PRIME, DISNEY
 }
 
 /** Preferred media player engine. Internal uses ExoPlayer; VLC uses external VLC app. */
@@ -88,7 +88,8 @@ class SettingsRepository(private val context: Context) {
         val MEDIA_PLAYER = stringPreferencesKey("media_player")
         val THEME = stringPreferencesKey("theme")
         val COLOR_THEME = stringPreferencesKey("color_theme")
-        val HOME_STYLE = stringPreferencesKey("home_style")
+        // "_v3": the Flix layout became the default; the old key held the previous default, so start fresh.
+        val HOME_STYLE = stringPreferencesKey("home_style_v3")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val AVOID_CAMERA_CUTOUT = booleanPreferencesKey("avoid_camera_cutout")
         val SOURCES = stringSetPreferencesKey("sources")
@@ -141,13 +142,13 @@ class SettingsRepository(private val context: Context) {
     }
 
     val homeStyleFlow: Flow<HomeStyle> = context.dataStore.data.map { preferences ->
-        val raw = preferences[PreferencesKeys.HOME_STYLE] ?: HomeStyle.VIDIIO.name
+        val raw = preferences[PreferencesKeys.HOME_STYLE] ?: HomeStyle.FLIX.name
         try {
             HomeStyle.valueOf(raw)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.w(TAG, "SettingsRepository failed", e)
-            HomeStyle.VIDIIO
+            HomeStyle.FLIX
         }
     }
 

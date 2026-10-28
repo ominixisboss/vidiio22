@@ -46,7 +46,7 @@ object CreditsDetector {
  * Turns a stream of per-frame verdicts into "the credits have started": most of the recent frames
  * must look like credits, so a dark scene or a fade does not trigger it.
  */
-class CreditsTracker(private val window: Int = 6, private val required: Int = 5) {
+class CreditsTracker(private val window: Int = 4, private val required: Int = 3) {
     private val recent = ArrayDeque<Boolean>()
 
     /** Feed one verdict; returns true once the credits are considered to be running. */

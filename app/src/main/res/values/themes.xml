@@ -1,4 +1,10 @@
 <resources>
 
-    <style name="Theme.Vidiio" parent="Theme.MaterialComponents.Light" />
+    <!-- The window is visible before Compose draws its first frame. On a slow device that is seconds
+         of whatever colour the window theme gives it, so make it the app's own dark background
+         instead of the default white. -->
+    <style name="Theme.Vidiio" parent="Theme.MaterialComponents.Light">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+    </style>
 </resources>

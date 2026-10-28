@@ -40,7 +40,7 @@ class HomeViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val homeStyle: StateFlow<HomeStyle> = settingsRepository.homeStyleFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeStyle.VIDIIO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeStyle.FLIX)
 
     val showVpnReminder: StateFlow<Boolean> = settingsRepository.showVpnReminderFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
@@ -59,6 +59,7 @@ class HomeViewModel(
 
     fun refresh(isPullToRefresh: Boolean = false) {
         viewModelScope.launch {
+            if (isPullToRefresh) movieRepository.invalidateCache()
             if (isPullToRefresh) {
                 _isRefreshing.value = true
             } else {

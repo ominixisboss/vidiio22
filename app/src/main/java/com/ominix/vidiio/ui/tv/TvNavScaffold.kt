@@ -58,7 +58,8 @@ data class TvNavItem(
  *  - It hides as soon as focus is in the page, i.e. as soon as you start browsing or scrolling.
  *  - Pressing Left when you are already at the left edge of the page brings it back, with
  *    focus on the current section.
- *  - Choosing a section hands focus to the new page and hides it again.
+ *  - Choosing a section hands focus to the new page and hides it again; choosing the section you
+ *    are already on, or pressing Right, closes it and returns to the page.
  *
  * The page is also given focus whenever it appears ([pageKey] changing), so there is always a
  * highlighted item and the remote always has somewhere to start from - without that, a
@@ -165,6 +166,11 @@ fun TvNavScaffold(
                         railOpen = true
                         focusRailOnOpen = true
                     }
+                    return@onKeyEvent true
+                }
+                // Right from the menu goes back to the page and tucks the menu away.
+                if (railEnabled && event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight && railOpen && railHasFocus) {
+                    leaveRailToPage()
                     return@onKeyEvent true
                 }
                 // Only sees Left when nothing in the page used it. We move focus ourselves so

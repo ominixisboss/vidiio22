@@ -37,6 +37,14 @@ object VidiioViewModelFactories {
         initializer { MediaBrowseViewModel(kind, app.movieRepository) }
     }
 
+    fun tvGuide(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
+        initializer { TvGuideViewModel(app.tvGuideService, app.movieRepository) }
+    }
+
+    fun collection(app: VidiioApplication, title: String, studioId: Int): ViewModelProvider.Factory = viewModelFactory {
+        initializer { CollectionViewModel(app.movieRepository, title, studioId) }
+    }
+
     fun anime(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
         initializer { AnimeViewModel(app.animeRepository) }
     }

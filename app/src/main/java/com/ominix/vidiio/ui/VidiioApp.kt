@@ -74,7 +74,7 @@ fun VidiioApp() {
     val settingsRepository = application.settingsRepository
 
     val homeStyle by settingsRepository.homeStyleFlow
-        .collectAsState(initial = com.ominix.vidiio.data.repository.HomeStyle.VIDIIO)
+        .collectAsState(initial = com.ominix.vidiio.data.repository.HomeStyle.FLIX)
 
     val mouseToggle by settingsRepository.mouseToggleFlow.collectAsState(initial = false)
 
@@ -107,6 +107,9 @@ fun VidiioApp() {
                 onOpenMovies = { navigator.navigate(VidiioRoute.Movies) },
                 onOpenTv = { navigator.navigate(VidiioRoute.TvShows) },
                 onOpenAnime = { navigator.navigate(VidiioRoute.Anime) },
+                onOpenGuide = { navigator.navigate(VidiioRoute.TvGuide) },
+                onOpenHalloween = { navigator.navigate(VidiioRoute.Halloween) },
+                onOpenCollection = { title, studio -> navigator.navigate(VidiioRoute.Collection(title, studio)) },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -123,6 +126,34 @@ fun VidiioApp() {
                 viewModel = viewModel,
                 onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 onOpenHalloween = { navigator.navigate(VidiioRoute.Halloween) },
+                onTab = { index ->
+                    when (index) {
+                        0 -> navigator.navigate(VidiioRoute.Home)
+                        1 -> navigator.navigate(VidiioRoute.Movies)
+                        2 -> navigator.navigate(VidiioRoute.TvShows)
+                        else -> navigator.navigate(VidiioRoute.TvGuide)
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        entry<VidiioRoute.TvGuide> {
+            val viewModel: com.ominix.vidiio.ui.viewmodel.TvGuideViewModel = viewModel(factory = VidiioViewModelFactories.tvGuide(application))
+            TvGuideScreen(
+                viewModel = viewModel,
+                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        entry<VidiioRoute.Collection> { key ->
+            val viewModel: com.ominix.vidiio.ui.viewmodel.CollectionViewModel = viewModel(
+                key = "collection_${key.studioId}",
+                factory = VidiioViewModelFactories.collection(application, key.title, key.studioId)
+            )
+            CollectionScreen(
+                title = key.title,
+                viewModel = viewModel,
+                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -149,6 +180,14 @@ fun VidiioApp() {
             MediaBrowseScreen(
                 viewModel = viewModel,
                 onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                onTab = { index ->
+                    when (index) {
+                        0 -> navigator.navigate(VidiioRoute.Home)
+                        1 -> navigator.navigate(VidiioRoute.Movies)
+                        2 -> navigator.navigate(VidiioRoute.TvShows)
+                        else -> navigator.navigate(VidiioRoute.TvGuide)
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }

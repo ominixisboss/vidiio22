@@ -82,6 +82,8 @@ interface TMDBService {
         @Query("with_genres") withGenres: String? = null,
         @Query("with_keywords") withKeywords: String? = null,
         @Query("with_companies") withCompanies: String? = null,
+        @Query("with_watch_providers") withWatchProviders: String? = null,
+        @Query("watch_region") watchRegion: String? = null,
         @Query("primary_release_date.gte") releaseGte: String? = null,
         @Query("primary_release_date.lte") releaseLte: String? = null,
         @Query("sort_by") sortBy: String = "popularity.desc",
@@ -94,12 +96,15 @@ interface TMDBService {
     suspend fun discoverTvFiltered(
         @Query("with_genres") withGenres: String? = null,
         @Query("with_networks") withNetworks: String? = null,
+        @Query("with_watch_providers") withWatchProviders: String? = null,
+        @Query("watch_region") watchRegion: String? = null,
         @Query("first_air_date.gte") airedGte: String? = null,
         @Query("first_air_date.lte") airedLte: String? = null,
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("vote_count.gte") voteCountGte: Int? = 50,
         @Query("page") page: Int = 1
     ): TMDBResponse<TMDBMovie>
+
 
     @GET("discover/tv")
     suspend fun discoverTV(

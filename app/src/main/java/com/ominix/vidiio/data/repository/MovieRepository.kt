@@ -73,7 +73,21 @@ class MovieRepository(
      * user's own addons offer. Everything else (genres, top rated, anime, One Pace, ...) lives on
      * the dedicated Movies, TV and Anime pages.
      */
-    suspend fun getHomeCategories(): List<Category> = coroutineScope {
+    /** Short-lived memory cache for the lists every screen opens with, so they are ready before the screen is. */
+    private val listCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Any>>()
+
+    fun invalidateCache() = listCache.clear()
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun <T : Any> cached(key: String, load: suspend () -> T): T {
+        val hit = listCache[key]
+        if (hit != null && System.currentTimeMillis() - hit.first < LIST_TTL_MS) return hit.second as T
+        return load().also { if (it !is List<*> || it.isNotEmpty()) listCache[key] = System.currentTimeMillis() to it }
+    }
+
+    suspend fun getHomeCategories(): List<Category> = cached("home") { loadHomeCategories() }
+
+    private suspend fun loadHomeCategories(): List<Category> = coroutineScope {
         try {
             val trendingMovies = async { tmdbService.getTrendingMovies().results.map { it.toMovie(MovieType.MOVIE) } }
             val popularMovies = async { tmdbService.getPopularMovies().results.map { it.toMovie(MovieType.MOVIE) } }
@@ -103,7 +117,9 @@ class MovieRepository(
     }
 
     /** One shelf on the Movies or TV page. */
-    suspend fun browse(kind: BrowseKind, list: BrowseList): List<Movie> {
+    suspend fun browse(kind: BrowseKind, list: BrowseList): List<Movie> = cached("browse-$kind-$list") { loadBrowse(kind, list) }
+
+    private suspend fun loadBrowse(kind: BrowseKind, list: BrowseList): List<Movie> {
         val type = if (kind == BrowseKind.MOVIES) MovieType.MOVIE else MovieType.TV_SHOW
         val response = when (kind) {
             BrowseKind.MOVIES -> when (list) {
@@ -165,16 +181,19 @@ class MovieRepository(
         val results = if (kind == BrowseKind.MOVIES) {
             tmdbService.discoverMoviesFiltered(
                 withGenres = filter.genreExpr, withCompanies = filter.provider?.id?.toString(),
+                withWatchProviders = filter.streamer?.id?.toString(), watchRegion = filter.streamer?.let { "US" },
                 releaseGte = from, releaseLte = to, sortBy = sort, voteCountGte = minVotes
             ).results.map { it.toMovie(MovieType.MOVIE) }
         } else {
             tmdbService.discoverTvFiltered(
                 withGenres = filter.genreExpr, withNetworks = filter.provider?.id?.toString(),
+                withWatchProviders = filter.streamer?.id?.toString(), watchRegion = filter.streamer?.let { "US" },
                 airedGte = from, airedLte = to, sortBy = sort, voteCountGte = minVotes
             ).results.map { it.toMovie(MovieType.TV_SHOW) }
         }
         return results.filter { it.posterUrl.isNotBlank() }
     }
+
 
     /** A genre shelf: TMDB discover, most popular first. */
     suspend fun browseGenre(kind: BrowseKind, genreId: Int): List<Movie> = when (kind) {
@@ -438,6 +457,7 @@ private const val TAG = "MovieRepository"
 /** TMDB keyword id for "halloween", and how many pages of it to read (20 films a page). */
 private const val HALLOWEEN_KEYWORD_ID = 3335
 private const val HALLOWEEN_PAGES = 12
+private const val LIST_TTL_MS = 5 * 60 * 1000L
 
 /**
  * Orders candidate Halloween films best-first by weighted rating and keeps the top 100. Pure, so it

@@ -273,6 +273,10 @@ class VidiioApplication : Application() {
 
     val sourceVerifier: SourceVerifier by lazy { SourceVerifier(playbackHttpClient) }
 
+    val tvGuideService: com.ominix.vidiio.data.guide.TvGuideService by lazy {
+        com.ominix.vidiio.data.guide.TvGuideService(okHttpClient)
+    }
+
     val animeRepository: AnimeRepository by lazy {
         AnimeRepository(AniListService(okHttpClient), movieRepository)
     }
@@ -306,6 +310,20 @@ class VidiioApplication : Application() {
         // One-time: fold the old dynamic-colour flag into ColorTheme. Cheap, and it must
         // happen before the first frame reads colorThemeFlow to avoid a visible flip.
         applicationScope.launch { settingsRepository.migrateDynamicThemeIfNeeded() }
+
+        // Warm the lists Home, Movies and TV open with while the splash plays, so they appear at once.
+        applicationScope.launch {
+            runCatching { movieRepository.getHomeCategories() }
+            for (kind in com.ominix.vidiio.data.repository.BrowseKind.entries) {
+                runCatching {
+                    kotlinx.coroutines.coroutineScope {
+                        com.ominix.vidiio.data.repository.BrowseList.entries.forEach { list ->
+                            launch { movieRepository.browse(kind, list) }
+                        }
+                    }
+                }
+            }
+        }
 
         applicationScope.launch {
             settingsRepository.assNativeStylingFlow.collect { assNativeStyling = it }
