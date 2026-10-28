@@ -176,6 +176,7 @@ fun HomeScreen(
                             }
                         }
                         FlixHomeContent(
+                            heroMovies = movies.trending.orEmpty().filter { !it.backdropUrl.isNullOrBlank() }.take(5),
                             shelves = shelves,
                             continueWatching = continueWatching,
                             spec = spec,
@@ -534,7 +535,8 @@ private fun HeroButtons(movie: Movie, spec: HomeStyleSpec, center: Boolean, onCl
             HomeStyle.HULU -> Color.Black
             HomeStyle.PRIME -> Color.White
             HomeStyle.DISNEY -> Color.White
-            HomeStyle.FLIX, HomeStyle.VIDIIO -> Color.White
+            HomeStyle.VIDIIO -> Color.White
+            HomeStyle.FLIX -> Color.Black
         }
         val playLabel = when (spec.style) {
             HomeStyle.HULU -> "START WATCHING"

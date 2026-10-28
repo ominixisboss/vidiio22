@@ -3,6 +3,7 @@ package com.ominix.vidiio.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,16 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.unit.sp
+import com.ominix.vidiio.ui.browse.BrowseHero
+import com.ominix.vidiio.ui.browse.HeroSpec
+import com.ominix.vidiio.ui.browse.FlixHeader
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.Locale
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -76,6 +87,7 @@ private class PageStyle(
     val moods: List<Mood>,
     val providers: List<Provider>,
     val providerLabel: String,
+    val typeLabel: String,
 )
 
 private fun styleFor(kind: BrowseKind) = when (kind) {
@@ -87,7 +99,7 @@ private fun styleFor(kind: BrowseKind) = when (kind) {
             BrowseList.SOON to "Coming Soon"
         ),
         genres = MOVIE_GENRES, moods = BrowseOptions.movieMoods,
-        providers = BrowseOptions.studios, providerLabel = "Studio"
+        providers = BrowseOptions.studios, providerLabel = "Studio", typeLabel = "Movie"
     )
     BrowseKind.TV -> PageStyle(
         palette = TvPalette, what = "TV shows",
@@ -97,7 +109,7 @@ private fun styleFor(kind: BrowseKind) = when (kind) {
             BrowseList.SOON to "Airing Today"
         ),
         genres = TV_GENRES, moods = BrowseOptions.tvMoods,
-        providers = BrowseOptions.networks, providerLabel = "Network"
+        providers = BrowseOptions.networks, providerLabel = "Network", typeLabel = "Series"
     )
 }
 
@@ -132,6 +144,7 @@ fun MediaBrowseScreen(
     }
 }
 
+
 @Composable
 private fun BrowseContent(
     style: PageStyle,
@@ -151,87 +164,63 @@ private fun BrowseContent(
         }
     } else state.filterResults
     val isMovies = viewModel.kind == BrowseKind.MOVIES
-    // The extra tile rows stay tucked away until asked for (or while something is filtered).
-    var showFilters by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
-    val filtersOpen = showFilters || !filter.isEmpty
+    val hero = state.trending.orEmpty().filter { !it.backdropUrl.isNullOrBlank() }.take(6)
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+
+    // The filters live at the bottom, so bring the results into view when one is picked.
+    val resultsIndex = (if (hero.isNotEmpty()) 1 else 0) + 1
+    LaunchedEffect(filter) {
+        if (!filter.isEmpty) gridState.animateScrollToItem(resultsIndex)
+    }
 
     LazyVerticalGrid(
+        state = gridState,
         columns = GridCells.Adaptive(110.dp),
-        modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(start = 0.dp, end = 0.dp, top = 14.dp, bottom = 48.dp),
+        modifier = Modifier.fillMaxSize().then(if (hero.isEmpty()) Modifier.statusBarsPadding() else Modifier),
+        contentPadding = PaddingValues(bottom = 48.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        if (hero.isNotEmpty()) full("hero") {
+            val specs = remember(hero) { hero.map { it.toHeroSpec(style.typeLabel) } }
+            BrowseHero(
+                palette = style.palette,
+                items = specs,
+                loadingKey = null,
+                onOpen = { index -> onOpen(hero[index]) },
+                onFocused = {
+                    // Wait out the focus scroll (which would leave the hero half off the top), then
+                    // snap to the very top.
+                    scope.launch {
+                        delay(150)
+                        gridState.scrollToItem(0)
+                    }
+                }
+            )
+        }
+
         full("browse") {
-            FlixCaption(if (isMovies) "Movies" else "TV Shows")
-            TileRow {
-                var i = 0
-                if (isMovies && state.halloween != null) {
-                    item(key = "halloween") { GradientTile("Top 100 Halloween Movies", 1, false, onOpenHalloween) }
-                    i++
-                }
-                items(style.lists, key = { it.first.name }) { (list, label) ->
-                    GradientTile(label, i + style.lists.indexOf(list to label), filter.isEmpty && state.list == list, { viewModel.setList(list) })
-                }
-                item(key = "more") {
-                    GradientTile(if (filtersOpen && filter.isEmpty) "Hide filters" else "More filters", 0, filtersOpen, { showFilters = !showFilters })
-                }
-                items(BrowseOptions.streamers, key = { "s${it.id}" }) { s ->
-                    GradientTile(
-                        "Popular on ${s.label}", BrowseOptions.streamers.indexOf(s) + 2,
-                        filter.streamer == s, { viewModel.setStreamer(if (filter.streamer == s) null else s) }
-                    )
-                }
-            }
-        }
-        if (filtersOpen) full("genre") {
-            FlixCaption("Genre")
-            TileRow {
-                items(style.genres, key = { it.id }) { g ->
-                    GradientTile(g.name, style.genres.indexOf(g), filter.genreId == g.id, {
-                        viewModel.setGenre(if (filter.genreId == g.id) null else g)
-                    })
-                }
-            }
-        }
-        if (filtersOpen) full("mood") {
-            FlixCaption("Mood")
-            TileRow {
-                items(style.moods, key = { it.label }) { m ->
-                    GradientTile(m.label, style.moods.indexOf(m) + 1, filter.mood == m, {
-                        viewModel.setMood(if (filter.mood == m) null else m)
-                    })
-                }
-            }
-        }
-        if (filtersOpen) full("decade") {
-            FlixCaption("Decade")
-            TileRow {
-                items(BrowseOptions.decades, key = { it.startYear }) { d ->
-                    GradientTile(d.label, BrowseOptions.decades.indexOf(d) + 2, filter.decade == d, {
-                        viewModel.setDecade(if (filter.decade == d) null else d)
-                    })
-                }
-            }
-        }
-        if (filtersOpen) full("provider") {
-            FlixCaption(style.providerLabel)
-            TileRow {
-                items(style.providers, key = { it.id }) { p ->
-                    GradientTile(p.label, style.providers.indexOf(p) + 3, filter.provider == p, {
-                        viewModel.setProvider(if (filter.provider == p) null else p)
-                    })
-                }
-            }
-        }
-        if (filtersOpen) full("sort") {
-            FlixCaption("Sort")
-            TileRow {
-                items(BrowseSort.entries.toList(), key = { it.name }) { s ->
-                    GradientTile(s.label, s.ordinal, filter.sort == s, { viewModel.setSort(s) })
-                }
-                if (!filter.isEmpty) {
-                    item(key = "clear") { GradientTile("Clear filters", 2, false, viewModel::clearFilters) }
+            Column(Modifier.padding(top = 4.dp)) {
+                FlixCaption(if (isMovies) "Movies" else "TV Shows")
+                TileRow {
+                    var i = 0
+                    if (isMovies && state.halloween != null) {
+                        item(key = "halloween") { GradientTile("Top 100 Halloween Movies", 1, false, onOpenHalloween) }
+                        i++
+                    }
+                    items(style.lists, key = { it.first.name }) { (list, label) ->
+                        GradientTile(label, i + style.lists.indexOf(list to label), filter.isEmpty && state.list == list, { viewModel.setList(list) })
+                    }
+                    items(BrowseOptions.streamers, key = { "s${it.id}" }) { s ->
+                        GradientTile(
+                            "Popular on ${s.label}", BrowseOptions.streamers.indexOf(s) + 2,
+                            filter.streamer == s, { viewModel.setStreamer(if (filter.streamer == s) null else s) }
+                        )
+                    }
+                    if (!filter.isEmpty) {
+                        item(key = "clear") { GradientTile("Clear filters", 2, false, viewModel::clearFilters) }
+                    }
                 }
             }
         }
@@ -256,10 +245,88 @@ private fun BrowseContent(
                 )
             }
         }
+
+        // Everything for narrowing the list sits together at the bottom.
+        full("filters-title") {
+            Column(Modifier.padding(top = 20.dp)) {
+                FlixHeader("Find something")
+                Text(
+                    "Mix genre, mood, decade and ${style.providerLabel.lowercase(Locale.US)}",
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(start = 14.dp, top = 2.dp)
+                )
+            }
+        }
+        full("genre") {
+            FlixCaption("Genre")
+            TileRow {
+                items(style.genres, key = { it.id }) { g ->
+                    GradientTile(g.name, style.genres.indexOf(g), filter.genreId == g.id, {
+                        viewModel.setGenre(if (filter.genreId == g.id) null else g)
+                    })
+                }
+            }
+        }
+        full("mood") {
+            FlixCaption("Mood")
+            TileRow {
+                items(style.moods, key = { it.label }) { m ->
+                    GradientTile(m.label, style.moods.indexOf(m) + 1, filter.mood == m, {
+                        viewModel.setMood(if (filter.mood == m) null else m)
+                    })
+                }
+            }
+        }
+        full("decade") {
+            FlixCaption("Decade")
+            TileRow {
+                items(BrowseOptions.decades, key = { it.startYear }) { d ->
+                    GradientTile(d.label, BrowseOptions.decades.indexOf(d) + 2, filter.decade == d, {
+                        viewModel.setDecade(if (filter.decade == d) null else d)
+                    })
+                }
+            }
+        }
+        full("provider") {
+            FlixCaption(style.providerLabel)
+            TileRow {
+                items(style.providers, key = { it.id }) { p ->
+                    GradientTile(p.label, style.providers.indexOf(p) + 3, filter.provider == p, {
+                        viewModel.setProvider(if (filter.provider == p) null else p)
+                    })
+                }
+            }
+        }
+        full("sort") {
+            FlixCaption("Sort")
+            TileRow {
+                items(BrowseSort.entries.toList(), key = { it.name }) { s ->
+                    GradientTile(s.label, s.ordinal, filter.sort == s, { viewModel.setSort(s) })
+                }
+                if (!filter.isEmpty) {
+                    item(key = "clear2") { GradientTile("Clear filters", 2, false, viewModel::clearFilters) }
+                }
+            }
+        }
     }
 }
 
-/** A grid item spanning the full width, for the tile rows above the posters. */
+private fun Movie.toHeroSpec(typeLabel: String) = HeroSpec(
+    key = "$source-$id",
+    title = title,
+    imageUrl = backdropUrl ?: posterUrl,
+    badge = "TRENDING",
+    tag = null,
+    meta = listOfNotNull(
+        rating?.takeIf { it > 0.0 }?.let { "★ " + String.format(Locale.US, "%.1f", it) },
+        typeLabel,
+        year?.toString(),
+    ).joinToString("  •  "),
+    blurb = synopsis.orEmpty().trim(),
+)
+
+/** A grid item spanning the full width, for the tile rows between the posters. */
 private fun LazyGridScope.full(key: String, content: @Composable () -> Unit) {
     item(key = key, span = { GridItemSpan(maxLineSpan) }) { androidx.compose.foundation.layout.Column { content() } }
 }

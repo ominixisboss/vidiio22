@@ -22,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +62,7 @@ private val MovieLists = listOf(
  */
 @Composable
 fun FlixHomeContent(
+    heroMovies: List<Movie>,
     shelves: List<FlixShelf>,
     continueWatching: List<WatchProgress>,
     spec: HomeStyleSpec,
@@ -73,18 +76,38 @@ fun FlixHomeContent(
     onOpenHalloween: () -> Unit,
     onOpenCollection: (String, Int) -> Unit,
 ) {
+    val heroScope = androidx.compose.runtime.rememberCoroutineScope()
     val shortcuts = LocalBrowseShortcuts.current?.takeIf { !LocalIsTv.current }
+    // The hero arrives after the first frame; keep the page at the very top when it does, so the slider shows.
+    androidx.compose.runtime.LaunchedEffect(heroMovies.isNotEmpty()) {
+        if (heroMovies.isNotEmpty()) {
+            kotlinx.coroutines.delay(200)
+            listState.scrollToItem(0)
+        }
+    }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().statusBarsPadding(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(spec.rowGap)
         ) {
+            if (heroMovies.isNotEmpty()) item(key = "hero") {
+                // Focus scrolling can stop short of the top; once the slider is focused, snap there.
+                Box(
+                    Modifier.onFocusChanged { focus ->
+                        if (focus.hasFocus) heroScope.launch {
+                            kotlinx.coroutines.delay(150)
+                            listState.scrollToItem(0)
+                        }
+                    }
+                ) { HeroCarousel(heroMovies, spec, onOpen) }
+            }
+
             item(key = "tabs") {
                 Column {
                     // Phones overlay search / library shortcuts on the top right; leave them room.
-                    if (shortcuts != null) Box(Modifier.height(44.dp))
+
                     FlixTabs(
                         selected = 0,
                         labels = listOf("Featured", "Movies", "TV Shows", "TV Guide"),
