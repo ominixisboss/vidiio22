@@ -36,6 +36,8 @@ data class BrowseState(
     /** What the viewer has narrowed the page to, and the matching titles (null while loading). */
     val filter: BrowseFilter = BrowseFilter(),
     val filterResults: List<Movie>? = null,
+    /** Which ready-made list the page shows while no filter is set. */
+    val list: BrowseList = BrowseList.TRENDING,
     val isRefreshing: Boolean = false,
     val failures: Int = 0,
 ) {
@@ -120,6 +122,14 @@ class MediaBrowseViewModel(
 
     fun setProvider(provider: Provider?) = update { it.copy(provider = provider) }
 
+    fun setStreamer(streamer: Provider?) = update { it.copy(streamer = streamer) }
+
+    /** Picks a ready-made list (Trending, Top rated, ...) and drops any filters. */
+    fun setList(list: BrowseList) {
+        _state.update { it.copy(list = list) }
+        clearFilters()
+    }
+
     fun setSort(sort: BrowseSort) = update { it.copy(sort = sort) }
 
     fun clearFilters() = update { BrowseFilter(sort = it.sort) }
@@ -134,7 +144,7 @@ class MediaBrowseViewModel(
         }
         _state.update { it.copy(filter = filter, filterResults = null) }
         filterJob = viewModelScope.launch {
-            val key = "filter-${filter.genreExpr}-${filter.decade?.startYear}-${filter.provider?.id}-${filter.sort}"
+            val key = "filter-${filter.genreExpr}-${filter.decade?.startYear}-${filter.provider?.id}-${filter.streamer?.id}-${filter.sort}"
             try {
                 val results = if (force) repository.browseFiltered(kind, filter).also { cache[key] = it }
                 else cache.getOrPut(key) { repository.browseFiltered(kind, filter) }

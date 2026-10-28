@@ -36,6 +36,14 @@ sealed interface VidiioRoute : NavKey {
         val label = "TV Shows"
     }
 
+    /** What is airing on a given day, with a date strip. */
+    @Serializable
+    data object TvGuide : VidiioRoute
+
+    /** A studio's best films (Marvel, Pixar, ...), opened from the Top MovieLists row on Home. */
+    @Serializable
+    data class Collection(val title: String, val studioId: Int) : VidiioRoute
+
     /** The ranked Top 100 Halloween movies; opened from the Movies page. */
     @Serializable
     data object Halloween : VidiioRoute

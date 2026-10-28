@@ -44,7 +44,7 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     val homeStyle: StateFlow<HomeStyle> = settingsRepository.homeStyleFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeStyle.VIDIIO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeStyle.FLIX)
 
     val avoidCameraCutout: StateFlow<Boolean> = settingsRepository.avoidCameraCutoutFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)

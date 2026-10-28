@@ -81,6 +81,9 @@ fun HomeScreen(
     onOpenMovies: () -> Unit = {},
     onOpenTv: () -> Unit = {},
     onOpenAnime: () -> Unit = {},
+    onOpenGuide: () -> Unit = {},
+    onOpenHalloween: () -> Unit = {},
+    onOpenCollection: (String, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -147,7 +150,46 @@ fun HomeScreen(
                     onRefresh = { viewModel.refresh(isPullToRefresh = true) },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    LazyColumn(
+                    if (spec.style == HomeStyle.FLIX) {
+                        val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as com.ominix.vidiio.VidiioApplication
+                        val moviesVm: com.ominix.vidiio.ui.viewmodel.MediaBrowseViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                            key = "browse_movies",
+                            factory = com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactories.browse(app, com.ominix.vidiio.data.repository.BrowseKind.MOVIES)
+                        )
+                        val tvVm: com.ominix.vidiio.ui.viewmodel.MediaBrowseViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                            key = "browse_tv",
+                            factory = com.ominix.vidiio.ui.viewmodel.VidiioViewModelFactories.browse(app, com.ominix.vidiio.data.repository.BrowseKind.TV)
+                        )
+                        val movies by moviesVm.state.collectAsState()
+                        val tv by tvVm.state.collectAsState()
+                        // Shelves the Flix layout already draws itself; what is left of the home catalogues follows.
+                        val covered = setOf("Trending Movies", "Popular Movies", TOP10_LABEL)
+                        val shelves = remember(movies, tv, rows) {
+                            buildList {
+                                add(FlixShelf("Today's Hot Movies", movies.trending.orEmpty()))
+                                add(FlixShelf("Top Rated Movies", movies.topRated.orEmpty()))
+                                add(FlixShelf("Latest Uploaded Movies", movies.fresh.orEmpty()))
+                                add(FlixShelf("Latest TV Updates", tv.soon.orEmpty().ifEmpty { tv.fresh.orEmpty() }, todayRibbon = true))
+                                add(FlixShelf("Popular TV Shows", tv.popular.orEmpty()))
+                                rows.filter { it.name !in covered && it.name != "Popular TV" }
+                                    .forEach { add(FlixShelf(it.name, it.movies)) }
+                            }
+                        }
+                        FlixHomeContent(
+                            shelves = shelves,
+                            continueWatching = continueWatching,
+                            spec = spec,
+                            listState = scrollState,
+                            onOpen = onNavigateToDetails,
+                            onResume = onResumeWatching,
+                            onRemove = { viewModel.removeContinueWatching(it) },
+                            onOpenMovies = onOpenMovies,
+                            onOpenTv = onOpenTv,
+                            onOpenGuide = onOpenGuide,
+                            onOpenHalloween = onOpenHalloween,
+                            onOpenCollection = onOpenCollection,
+                        )
+                    } else LazyColumn(
                         state = scrollState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 32.dp),
@@ -467,7 +509,7 @@ private fun HeroTagBadge(spec: HomeStyleSpec) {
             }
             Spacer(Modifier.height(8.dp))
         }
-        HomeStyle.VIDIIO -> Unit
+        HomeStyle.FLIX, HomeStyle.VIDIIO -> Unit
     }
 }
 
@@ -485,14 +527,14 @@ private fun HeroButtons(movie: Movie, spec: HomeStyleSpec, center: Boolean, onCl
             HomeStyle.HULU -> Color(0xFF1CE783)
             HomeStyle.PRIME -> Color(0xFF00A8E1)
             HomeStyle.DISNEY -> Color(0xFF0063E5)
-            HomeStyle.VIDIIO -> spec.accent
+            HomeStyle.FLIX, HomeStyle.VIDIIO -> spec.accent
         }
         val playText = when (spec.style) {
             HomeStyle.NETFLIX -> Color.Black
             HomeStyle.HULU -> Color.Black
             HomeStyle.PRIME -> Color.White
             HomeStyle.DISNEY -> Color.White
-            HomeStyle.VIDIIO -> Color.White
+            HomeStyle.FLIX, HomeStyle.VIDIIO -> Color.White
         }
         val playLabel = when (spec.style) {
             HomeStyle.HULU -> "START WATCHING"
