@@ -9,20 +9,40 @@
 -->
 <network-security-config>
     <!--
-      Two public roots are bundled as a fallback to the system store, for old devices (older
-      Fire TV sticks and Android TVs) whose certificate store predates them and fail with
-      "Trust anchor for certification path not found":
-        - isrg_root_x1: Let's Encrypt (image.tmdb.org, fedew04.github.io). Absent before 7.1.1.
-        - gts_root_r4:  Google Trust Services (Torrentio, the subtitle addons, knaben, ...).
-      Both are the roots' public certificates, SHA-256 verified against the issuers' published
-      values (ISRG Root X1 96:BC:EC:06..., GTS Root R4 34:9D:FA:40...). They only ever add
-      trust for those two CAs; the system store is still consulted first and in full.
+      The major public root CAs are bundled as a fallback to the system store, so older Fire TV
+      sticks and Android TVs whose certificate store predates them do not fail with "Trust anchor
+      for certification path not found": ISRG (Let's Encrypt), Google Trust Services, DigiCert,
+      Amazon, USERTrust/Sectigo and GlobalSign roots, which between them sign nearly every site
+      the app talks to. They are the roots' public certificates, taken from the Mozilla root
+      program's bundle (ISRG Root X1 and GTS Root R4 also checked against the issuers' published
+      SHA-256 values). They only add trust for those CAs; the system store is still consulted
+      first and in full. A TV with a wrong clock fails the same way, and no certificate fixes that.
     -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/amazon_root_1" />
+            <certificates src="@raw/amazon_root_2" />
+            <certificates src="@raw/amazon_root_3" />
+            <certificates src="@raw/amazon_root_4" />
+            <certificates src="@raw/digicert_global_g2" />
+            <certificates src="@raw/digicert_global_g3" />
+            <certificates src="@raw/digicert_tls_ecc_g5" />
+            <certificates src="@raw/digicert_tls_rsa_g5" />
+            <certificates src="@raw/globalsign_e46" />
+            <certificates src="@raw/globalsign_r3" />
+            <certificates src="@raw/globalsign_r46" />
+            <certificates src="@raw/gts_root_r1" />
+            <certificates src="@raw/gts_root_r3" />
             <certificates src="@raw/gts_root_r4" />
+            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/isrg_root_x2" />
+            <certificates src="@raw/sectigo_e46" />
+            <certificates src="@raw/sectigo_r46" />
+            <certificates src="@raw/starfield_services_g2" />
+            <certificates src="@raw/usertrust_ecc" />
+            <certificates src="@raw/usertrust_rsa" />
+
         </trust-anchors>
     </base-config>
 
@@ -43,8 +63,28 @@
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
-            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/amazon_root_1" />
+            <certificates src="@raw/amazon_root_2" />
+            <certificates src="@raw/amazon_root_3" />
+            <certificates src="@raw/amazon_root_4" />
+            <certificates src="@raw/digicert_global_g2" />
+            <certificates src="@raw/digicert_global_g3" />
+            <certificates src="@raw/digicert_tls_ecc_g5" />
+            <certificates src="@raw/digicert_tls_rsa_g5" />
+            <certificates src="@raw/globalsign_e46" />
+            <certificates src="@raw/globalsign_r3" />
+            <certificates src="@raw/globalsign_r46" />
+            <certificates src="@raw/gts_root_r1" />
+            <certificates src="@raw/gts_root_r3" />
             <certificates src="@raw/gts_root_r4" />
+            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/isrg_root_x2" />
+            <certificates src="@raw/sectigo_e46" />
+            <certificates src="@raw/sectigo_r46" />
+            <certificates src="@raw/starfield_services_g2" />
+            <certificates src="@raw/usertrust_ecc" />
+            <certificates src="@raw/usertrust_rsa" />
+
         </trust-anchors>
     </debug-overrides>
 </network-security-config>
