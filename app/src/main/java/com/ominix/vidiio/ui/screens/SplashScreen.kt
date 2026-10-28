@@ -19,7 +19,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
     LaunchedEffect(Unit) {
-        delay(3000) // 3 seconds splash
+        delay(1200) // short splash; Home data is prefetched while it shows
         onSplashFinished()
     }
 

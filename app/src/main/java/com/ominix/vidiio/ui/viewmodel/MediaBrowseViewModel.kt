@@ -71,7 +71,10 @@ class MediaBrowseViewModel(
 
     private fun load(force: Boolean) {
         loadJob?.cancel()
-        if (force) cache.clear()
+        if (force) {
+            cache.clear()
+            repository.invalidateCache()
+        }
         _state.update { it.copy(isRefreshing = force, failures = 0) }
         loadJob = viewModelScope.launch {
             coroutineScope {

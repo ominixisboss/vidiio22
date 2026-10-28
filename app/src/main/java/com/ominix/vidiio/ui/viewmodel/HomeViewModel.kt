@@ -59,6 +59,7 @@ class HomeViewModel(
 
     fun refresh(isPullToRefresh: Boolean = false) {
         viewModelScope.launch {
+            if (isPullToRefresh) movieRepository.invalidateCache()
             if (isPullToRefresh) {
                 _isRefreshing.value = true
             } else {

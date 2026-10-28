@@ -1,5 +1,6 @@
 package com.ominix.vidiio.ui.player
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,5 +39,13 @@ class CreditsDetectorTest {
         var started = false
         verdicts.forEach { started = t.add(it) }
         assertTrue(started)
+    }
+
+    @Test fun `fallback window scales with the episode and stays within bounds`() {
+        val min = 60_000L
+        assertEquals(60_000L, com.ominix.vidiio.ui.player.creditsWindowMs(20 * min))
+        assertEquals(144_000L, com.ominix.vidiio.ui.player.creditsWindowMs(48 * min))
+        assertEquals(150_000L, com.ominix.vidiio.ui.player.creditsWindowMs(120 * min))
+        assertEquals(20_000L, com.ominix.vidiio.ui.player.creditsWindowMs(5 * min))
     }
 }

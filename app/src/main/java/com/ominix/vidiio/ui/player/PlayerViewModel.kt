@@ -495,7 +495,7 @@ class PlayerViewModel(
                     !_state.value.loadingNext && _state.value.upNext == null
                 ) {
                     val remaining = duration - position
-                    val inLastStretch = position > duration * 0.6 && remaining < 8 * 60_000L
+                    val inLastStretch = position > duration * 0.6 && remaining < 12 * 60_000L
                     val now = android.os.SystemClock.elapsedRealtime()
                     if (inLastStretch && now - lastCreditsSampleAt >= CREDITS_SAMPLE_MS) {
                         lastCreditsSampleAt = now
@@ -840,8 +840,9 @@ private const val AUTO_PICK_GRACE_MS = 8_000L
 /** Seconds the "Up next" countdown runs before the next episode starts by itself. */
 private const val UP_NEXT_SECONDS = 10
 
-/** How long before the end the "Up next" countdown begins: ~credits length. */
-private fun creditsWindowMs(durationMs: Long): Long = if (durationMs >= 20 * 60_000L) 45_000L else 25_000L
+/** How long before the end the "Up next" countdown begins when the picture gave no sign: ~5% of the episode, 30s to 2.5 min. */
+internal fun creditsWindowMs(durationMs: Long): Long =
+    (durationMs / 20).coerceIn(if (durationMs >= 20 * 60_000L) 30_000L else 20_000L, 150_000L)
 
 /** How often the picture is checked for credits, once the episode is in its closing stretch. */
-private const val CREDITS_SAMPLE_MS = 2_000L
+private const val CREDITS_SAMPLE_MS = 1_000L
