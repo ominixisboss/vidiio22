@@ -141,7 +141,9 @@ fun VidiioApp() {
             val viewModel: com.ominix.vidiio.ui.viewmodel.TvGuideViewModel = viewModel(factory = VidiioViewModelFactories.tvGuide(application))
             TvGuideScreen(
                 viewModel = viewModel,
-                onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                onOpenShow = { movie, season, episode ->
+                    navigator.navigate(VidiioRoute.Details(movie, season, episode))
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -285,6 +287,8 @@ fun VidiioApp() {
             )
             DetailsScreen(
                 viewModel = viewModel,
+                autoPlaySeason = key.autoPlaySeason,
+                autoPlayEpisode = key.autoPlayEpisode,
                 onBack = { navigator.goBack() },
                 onPlay = { movie, episode, source -> 
                     navigator.navigate(VidiioRoute.Player(movie, episode?.id, source)) 

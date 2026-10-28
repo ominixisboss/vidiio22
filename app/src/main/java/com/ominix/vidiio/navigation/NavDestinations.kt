@@ -87,7 +87,12 @@ sealed interface VidiioRoute : NavKey {
     }
 
     @Serializable
-    data class Details(val movie: com.ominix.vidiio.data.model.Movie) : VidiioRoute
+    data class Details(
+        val movie: com.ominix.vidiio.data.model.Movie,
+        /** Set by the TV Guide: open straight into this episode and start the best stream. */
+        val autoPlaySeason: Int? = null,
+        val autoPlayEpisode: Int? = null,
+    ) : VidiioRoute
 
     @Serializable
     data class Player(
