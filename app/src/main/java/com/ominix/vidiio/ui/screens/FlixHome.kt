@@ -130,7 +130,7 @@ fun FlixHomeContent(
 
             shelves.forEachIndexed { index, shelf ->
                 if (shelf.movies.isEmpty()) return@forEachIndexed
-                item(key = "shelf-${shelf.title}") { PosterShelf(shelf, onOpen) }
+                item(key = "shelf-$index-${shelf.title}") { PosterShelf(shelf, onOpen) }
                 // The curated lists sit after the first two shelves, like a streaming guide.
                 if (index == 1) item(key = "lists") { MovieListsRow(onOpenHalloween, onOpenCollection) }
             }

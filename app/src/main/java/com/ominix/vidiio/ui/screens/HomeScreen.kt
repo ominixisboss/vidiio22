@@ -171,7 +171,7 @@ fun HomeScreen(
                                 add(FlixShelf("Latest Uploaded Movies", movies.fresh.orEmpty()))
                                 add(FlixShelf("Latest TV Updates", tv.soon.orEmpty().ifEmpty { tv.fresh.orEmpty() }, todayRibbon = true))
                                 add(FlixShelf("Popular TV Shows", tv.popular.orEmpty()))
-                                rows.filter { it.name !in covered && it.name != "Popular TV" }
+                                rows.filter { it.name !in covered && it.name != "Popular TV" && it.name != "Popular TV Shows" }
                                     .forEach { add(FlixShelf(it.name, it.movies)) }
                             }
                         }
