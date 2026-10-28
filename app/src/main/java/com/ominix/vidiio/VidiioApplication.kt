@@ -273,6 +273,10 @@ class VidiioApplication : Application() {
 
     val sourceVerifier: SourceVerifier by lazy { SourceVerifier(playbackHttpClient) }
 
+    val tvGuideService: com.ominix.vidiio.data.guide.TvGuideService by lazy {
+        com.ominix.vidiio.data.guide.TvGuideService(okHttpClient)
+    }
+
     val animeRepository: AnimeRepository by lazy {
         AnimeRepository(AniListService(okHttpClient), movieRepository)
     }

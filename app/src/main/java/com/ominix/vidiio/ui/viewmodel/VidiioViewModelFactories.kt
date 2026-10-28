@@ -38,7 +38,7 @@ object VidiioViewModelFactories {
     }
 
     fun tvGuide(app: VidiioApplication): ViewModelProvider.Factory = viewModelFactory {
-        initializer { TvGuideViewModel(app.movieRepository) }
+        initializer { TvGuideViewModel(app.tvGuideService, app.movieRepository) }
     }
 
     fun collection(app: VidiioApplication, title: String, studioId: Int): ViewModelProvider.Factory = viewModelFactory {

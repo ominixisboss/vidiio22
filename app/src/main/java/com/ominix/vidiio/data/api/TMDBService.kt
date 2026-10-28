@@ -105,17 +105,6 @@ interface TMDBService {
         @Query("page") page: Int = 1
     ): TMDBResponse<TMDBMovie>
 
-    /** Shows with an episode airing in a date range: the TV Guide. */
-    @GET("discover/tv")
-    suspend fun discoverTvAiring(
-        @Query("air_date.gte") airGte: String,
-        @Query("air_date.lte") airLte: String,
-        @Query("timezone") timezone: String,
-        @Query("sort_by") sortBy: String = "popularity.desc",
-        @Query("with_original_language") language: String? = "en",
-        @Query("vote_count.gte") voteCountGte: Int? = 0,
-        @Query("page") page: Int = 1
-    ): TMDBResponse<TMDBMovie>
 
     @GET("discover/tv")
     suspend fun discoverTV(

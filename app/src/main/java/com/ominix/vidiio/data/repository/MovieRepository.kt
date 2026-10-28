@@ -178,13 +178,6 @@ class MovieRepository(
         return results.filter { it.posterUrl.isNotBlank() }
     }
 
-    /** The TV Guide: shows with an episode airing on [date], most popular first. */
-    suspend fun tvGuide(date: java.time.LocalDate): List<Movie> {
-        val day = date.toString()
-        val zone = java.time.ZoneId.systemDefault().id
-        return tmdbService.discoverTvAiring(airGte = day, airLte = day, timezone = zone)
-            .results.map { it.toMovie(MovieType.TV_SHOW) }.filter { it.posterUrl.isNotBlank() }
-    }
 
     /** A genre shelf: TMDB discover, most popular first. */
     suspend fun browseGenre(kind: BrowseKind, genreId: Int): List<Movie> = when (kind) {

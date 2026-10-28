@@ -75,13 +75,16 @@ fun SettingsScreen(
     val proxyUser by viewModel.proxyUser.collectAsState()
     val proxyPass by viewModel.proxyPass.collectAsState()
 
-    var isAppearanceExpanded by rememberSaveable { mutableStateOf(false) }
-    var isPlaybackExpanded by rememberSaveable { mutableStateOf(false) }
-    var isSubtitlesExpanded by rememberSaveable { mutableStateOf(false) }
-    var isPrivacyExpanded by rememberSaveable { mutableStateOf(false) }
-    var isSourcesExpanded by rememberSaveable { mutableStateOf(false) }
-    var isAddonsExpanded by rememberSaveable { mutableStateOf(false) }
-    var isAboutExpanded by rememberSaveable { mutableStateOf(false) }
+
+
+
+
+
+
+
+
+    // One section open at a time keeps the page short, so the remote never has far to scroll.
+    var openSection by rememberSaveable { mutableStateOf<String?>(null) }
 
     var showProxyDialog by rememberSaveable { mutableStateOf(false) }
     var showAddAddonDialog by rememberSaveable { mutableStateOf(false) }
@@ -129,14 +132,14 @@ fun SettingsScreen(
                     title = "Appearance",
                     summary = colorTheme.name.lowercase().replaceFirstChar { it.titlecase() } + " · " + homeStyle.spec(MaterialTheme.colorScheme.primary).label,
                     icon = Icons.Rounded.Palette,
-                    expanded = isAppearanceExpanded,
-                    onExpandedChange = { isAppearanceExpanded = it }
+                    expanded = openSection == "appearance",
+                    onExpandedChange = { openSection = if (it) "appearance" else null }
                 ) {
                     PreferenceItem(
                         title = "Color Theme",
                         summary = colorTheme.name.lowercase().replaceFirstChar { it.titlecase() },
                         icon = Icons.Rounded.Palette,
-                        onClick = { }
+                        onClick = null
                     )
                     ColorThemeSelectionRow(
                         currentColorTheme = colorTheme,
@@ -147,7 +150,7 @@ fun SettingsScreen(
                         title = "Home Layout",
                         summary = homeStyle.spec(MaterialTheme.colorScheme.primary).label + " — restyles the Home tab",
                         icon = Icons.Rounded.Dashboard,
-                        onClick = { }
+                        onClick = null
                     )
                     HomeStyleSelectionRow(
                         current = homeStyle,
@@ -173,8 +176,8 @@ fun SettingsScreen(
                         MediaPlayerChoice.VLC -> "VLC Player"
                     }) + " · $playbackQuality",
                     icon = Icons.Rounded.PlayCircle,
-                    expanded = isPlaybackExpanded,
-                    onExpandedChange = { isPlaybackExpanded = it }
+                    expanded = openSection == "playback",
+                    onExpandedChange = { openSection = if (it) "playback" else null }
                 ) {
                     PreferenceItem(
                         title = "Preferred Media Player",
@@ -183,7 +186,7 @@ fun SettingsScreen(
                             MediaPlayerChoice.VLC -> if (isVlcInstalled) "VLC Media Player" else "VLC Media Player (Not Installed)"
                         },
                         icon = Icons.Rounded.Tv,
-                        onClick = {}
+                        onClick = null
                     )
                     MediaPlayerSelectionRow(
                         currentChoice = mediaPlayer,
@@ -196,7 +199,7 @@ fun SettingsScreen(
                         title = "Default Quality",
                         summary = playbackQuality,
                         icon = Icons.Rounded.HighQuality,
-                        onClick = {}
+                        onClick = null
                     )
                     QualitySelectionRow(
                         currentQuality = playbackQuality,
@@ -235,8 +238,8 @@ fun SettingsScreen(
                     summary = subtitleLanguages.joinToString(", ") { it.uppercase() } +
                         if (!subdlApiKey.isNullOrEmpty()) " · SubDL Connected" else "",
                     icon = Icons.Rounded.Subtitles,
-                    expanded = isSubtitlesExpanded,
-                    onExpandedChange = { isSubtitlesExpanded = it }
+                    expanded = openSection == "subtitles",
+                    onExpandedChange = { openSection = if (it) "subtitles" else null }
                 ) {
                     SwitchPreferenceItem(
                         title = "Subtitles",
@@ -299,8 +302,8 @@ fun SettingsScreen(
                         else -> "${proxyType.name} · $proxyHost:$proxyPort"
                     },
                     icon = Icons.Rounded.Shield,
-                    expanded = isPrivacyExpanded,
-                    onExpandedChange = { isPrivacyExpanded = it }
+                    expanded = openSection == "privacy",
+                    onExpandedChange = { openSection = if (it) "privacy" else null }
                 ) {
                     SwitchPreferenceItem(
                         title = "Proxy (VPN)",
@@ -331,8 +334,8 @@ fun SettingsScreen(
                     title = "Sources",
                     summary = "${selectedSources.size} of 9 scrapers enabled",
                     icon = Icons.Rounded.Public,
-                    expanded = isSourcesExpanded,
-                    onExpandedChange = { isSourcesExpanded = it }
+                    expanded = openSection == "sources",
+                    onExpandedChange = { openSection = if (it) "sources" else null }
                 ) {
                     val sources = listOf(
                         "vidsrc" to "VidSrc",
@@ -364,8 +367,8 @@ fun SettingsScreen(
                     title = "Stremio Addons",
                     summary = "${stremioAddons.size} addons installed",
                     icon = Icons.Rounded.Extension,
-                    expanded = isAddonsExpanded,
-                    onExpandedChange = { isAddonsExpanded = it }
+                    expanded = openSection == "addons",
+                    onExpandedChange = { openSection = if (it) "addons" else null }
                 ) {
                     stremioAddons.forEach { addonUrl ->
                         ListItem(
@@ -394,8 +397,8 @@ fun SettingsScreen(
                     title = "About Vidiio",
                     summary = "Version ${BuildConfig.VERSION_NAME}",
                     icon = Icons.Rounded.Info,
-                    expanded = isAboutExpanded,
-                    onExpandedChange = { isAboutExpanded = it }
+                    expanded = openSection == "about",
+                    onExpandedChange = { openSection = if (it) "about" else null }
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SelectionContainer {
@@ -598,6 +601,13 @@ fun ExpandableSettingsSection(
 ) {
     val shape = RoundedCornerShape(24.dp)
     val contentFocusRequester = remember { FocusRequester() }
+    val headerFocusRequester = remember { FocusRequester() }
+
+    // Back closes the open section and puts focus back on its header, instead of leaving Settings.
+    androidx.activity.compose.BackHandler(enabled = expanded) {
+        onExpandedChange(false)
+        runCatching { headerFocusRequester.requestFocus() }
+    }
 
     LaunchedEffect(expanded) {
         if (expanded) {
@@ -614,6 +624,7 @@ fun ExpandableSettingsSection(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .focusRequester(headerFocusRequester)
                 .tvClickable(onClick = { onExpandedChange(!expanded) }, shape = shape, focusScale = 1.02f),
             shape = shape,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
@@ -835,7 +846,7 @@ fun PreferenceItem(
     title: String,
     summary: String,
     icon: ImageVector,
-    onClick: () -> Unit
+    onClick: (() -> Unit)? = null
 ) {
     ListItem(
         headlineContent = { Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold) },
@@ -850,7 +861,7 @@ fun PreferenceItem(
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
             }
         },
-        modifier = Modifier.tvClickable(onClick = onClick, shape = RoundedCornerShape(12.dp), focusScale = 1.02f),
+        modifier = if (onClick != null) Modifier.tvClickable(onClick = onClick, shape = RoundedCornerShape(12.dp), focusScale = 1.02f) else Modifier,
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
     )
 }
