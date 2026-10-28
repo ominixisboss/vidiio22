@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.ominix.vidiio.ui.browse.BrowseHero
 import com.ominix.vidiio.ui.browse.HeroSpec
 import com.ominix.vidiio.ui.browse.FlixHeader
+import com.ominix.vidiio.ui.browse.FlixTabs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -124,6 +125,7 @@ fun MediaBrowseScreen(
     viewModel: MediaBrowseViewModel,
     onOpenMovie: (Movie) -> Unit,
     onOpenHalloween: () -> Unit = {},
+    onTab: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
@@ -138,7 +140,7 @@ fun MediaBrowseScreen(
                 onRefresh = viewModel::refresh,
                 modifier = Modifier.fillMaxSize()
             ) {
-                BrowseContent(style, state, viewModel, onOpenMovie, onOpenHalloween)
+                BrowseContent(style, state, viewModel, onOpenMovie, onOpenHalloween, onTab)
             }
         }
     }
@@ -152,6 +154,7 @@ private fun BrowseContent(
     viewModel: MediaBrowseViewModel,
     onOpen: (Movie) -> Unit,
     onOpenHalloween: () -> Unit,
+    onTab: (Int) -> Unit,
 ) {
     val filter = state.filter
     val results: List<Movie>? = if (filter.isEmpty) {
@@ -164,12 +167,11 @@ private fun BrowseContent(
         }
     } else state.filterResults
     val isMovies = viewModel.kind == BrowseKind.MOVIES
-    val hero = state.trending.orEmpty().filter { !it.backdropUrl.isNullOrBlank() }.take(6)
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
     // The filters live at the bottom, so bring the results into view when one is picked.
-    val resultsIndex = (if (hero.isNotEmpty()) 1 else 0) + 1
+    val resultsIndex = 2
     LaunchedEffect(filter) {
         if (!filter.isEmpty) gridState.animateScrollToItem(resultsIndex)
     }
@@ -177,26 +179,16 @@ private fun BrowseContent(
     LazyVerticalGrid(
         state = gridState,
         columns = GridCells.Adaptive(110.dp),
-        modifier = Modifier.fillMaxSize().then(if (hero.isEmpty()) Modifier.statusBarsPadding() else Modifier),
+        modifier = Modifier.fillMaxSize().statusBarsPadding(),
         contentPadding = PaddingValues(bottom = 48.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (hero.isNotEmpty()) full("hero") {
-            val specs = remember(hero) { hero.map { it.toHeroSpec(style.typeLabel) } }
-            BrowseHero(
-                palette = style.palette,
-                items = specs,
-                loadingKey = null,
-                onOpen = { index -> onOpen(hero[index]) },
-                onFocused = {
-                    // Wait out the focus scroll (which would leave the hero half off the top), then
-                    // snap to the very top.
-                    scope.launch {
-                        delay(150)
-                        gridState.scrollToItem(0)
-                    }
-                }
+        full("tabs") {
+            FlixTabs(
+                selected = if (isMovies) 1 else 2,
+                labels = listOf("Featured", "Movies", "TV Shows", "TV Guide"),
+                onSelect = onTab
             )
         }
 

@@ -39,16 +39,12 @@ import com.ominix.vidiio.data.model.Movie
 import com.ominix.vidiio.ui.components.tvClickable
 import java.util.Locale
 
-/** The streaming-guide look: warm yellow on charcoal, gradient category tiles, rated posters. */
-val FlixAccent = Color(0xFFFFD21F)
-val FlixBackground = Color(0xFF1C1C1C)
+/** The streaming-guide layout, in the app theme's own colours: gradient category tiles, rated posters. */
+val FlixAccent: Color
+    @Composable get() = MaterialTheme.colorScheme.primary
+val FlixBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.background
 
-private val TileGradients = listOf(
-    listOf(Color(0xFF3B2BB0), Color(0xFF8E5CE0)), // indigo to violet
-    listOf(Color(0xFFF2A413), Color(0xFFEF6B1C)), // amber to orange
-    listOf(Color(0xFFF2506B), Color(0xFF8E0F24)), // rose to crimson
-    listOf(Color(0xFF2A2FC0), Color(0xFF4F9BFF)), // royal to sky
-)
 
 /** A rounded gradient category tile. [index] picks the colour so neighbours differ. */
 @Composable
@@ -59,7 +55,7 @@ fun GradientTile(text: String, index: Int, selected: Boolean, onClick: () -> Uni
             .width(width)
             .height(64.dp)
             .tvClickable(onClick = onClick, shape = shape)
-            .background(Brush.linearGradient(TileGradients[index % TileGradients.size]), shape)
+            .background(Brush.linearGradient(tileGradient(index)), shape)
             .then(if (selected) Modifier.border(3.dp, Color.White, shape) else Modifier)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         contentAlignment = Alignment.CenterStart
@@ -186,5 +182,21 @@ fun FlixTabs(selected: Int, labels: List<String>, onSelect: (Int) -> Unit) {
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+    }
+}
+
+/** Tile colours drawn from the theme: the accent, its deeper shade, and the theme's dark neutrals. */
+@Composable
+private fun tileGradient(index: Int): List<Color> {
+    val accent = MaterialTheme.colorScheme.primary
+    val deep = Color(
+        red = accent.red * 0.45f, green = accent.green * 0.45f, blue = accent.blue * 0.45f, alpha = 1f
+    )
+    val surface = MaterialTheme.colorScheme.surfaceVariant
+    return when (index % 4) {
+        0 -> listOf(accent, deep)
+        1 -> listOf(surface, surface.copy(alpha = 0.55f))
+        2 -> listOf(deep, accent.copy(alpha = 0.75f))
+        else -> listOf(surface.copy(alpha = 0.85f), deep)
     }
 }

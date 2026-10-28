@@ -126,6 +126,14 @@ fun VidiioApp() {
                 viewModel = viewModel,
                 onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 onOpenHalloween = { navigator.navigate(VidiioRoute.Halloween) },
+                onTab = { index ->
+                    when (index) {
+                        0 -> navigator.navigate(VidiioRoute.Home)
+                        1 -> navigator.navigate(VidiioRoute.Movies)
+                        2 -> navigator.navigate(VidiioRoute.TvShows)
+                        else -> navigator.navigate(VidiioRoute.TvGuide)
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -172,6 +180,14 @@ fun VidiioApp() {
             MediaBrowseScreen(
                 viewModel = viewModel,
                 onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
+                onTab = { index ->
+                    when (index) {
+                        0 -> navigator.navigate(VidiioRoute.Home)
+                        1 -> navigator.navigate(VidiioRoute.Movies)
+                        2 -> navigator.navigate(VidiioRoute.TvShows)
+                        else -> navigator.navigate(VidiioRoute.TvGuide)
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }

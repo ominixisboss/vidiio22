@@ -110,12 +110,12 @@ fun HomeStyle.detailTransition(): ContentTransform = when (this) {
  *   respects the user's separate Color Theme choice.
  */
 fun HomeStyle.spec(defaultAccent: Color): HomeStyleSpec = when (this) {
-    // Dense streaming-guide look: tab strip, yellow accent, rows of rated posters, no hero.
+    // Streaming-guide layout (tab strip, dense rows of rated posters) in the Vidiio theme colours.
     HomeStyle.FLIX -> HomeStyleSpec(
         style = this,
         label = "Flix",
-        accent = Color(0xFFFFD21F),
-        background = Color(0xFF1C1C1C),
+        accent = defaultAccent,
+        background = null,
         heroKind = HeroKind.CAROUSEL,
         heroHeight = 460.dp,
         heroCenterText = true,

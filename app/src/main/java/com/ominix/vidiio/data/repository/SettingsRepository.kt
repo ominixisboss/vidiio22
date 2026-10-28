@@ -88,8 +88,8 @@ class SettingsRepository(private val context: Context) {
         val MEDIA_PLAYER = stringPreferencesKey("media_player")
         val THEME = stringPreferencesKey("theme")
         val COLOR_THEME = stringPreferencesKey("color_theme")
-        // "_v2": the Flix layout became the default; the old key held the previous default, so start fresh.
-        val HOME_STYLE = stringPreferencesKey("home_style_v2")
+        // "_v3": the Flix layout became the default; the old key held the previous default, so start fresh.
+        val HOME_STYLE = stringPreferencesKey("home_style_v3")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val AVOID_CAMERA_CUTOUT = booleanPreferencesKey("avoid_camera_cutout")
         val SOURCES = stringSetPreferencesKey("sources")

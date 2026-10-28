@@ -99,7 +99,7 @@ fun HomeScreen(
     val background = spec.background ?: MaterialTheme.colorScheme.background
 
     Box(modifier = modifier.fillMaxSize().background(background)) {
-        if (spec.style == HomeStyle.VIDIIO) {
+        if (spec.style == HomeStyle.VIDIIO || spec.style == HomeStyle.FLIX) {
             Box(
                 modifier = Modifier
                     .size(360.dp)
@@ -231,7 +231,7 @@ fun HomeScreen(
                             }
                         }
                         item(key = "categories") {
-                            CategoryLinks(spec = spec, onOpenMovies = onOpenMovies, onOpenTv = onOpenTv, onOpenAnime = onOpenAnime)
+                            CategoryLinks(spec = spec, onOpenMovies = onOpenMovies, onOpenTv = onOpenTv, onOpenAnime = onOpenAnime, onOpenGuide = onOpenGuide)
                         }
                         if (continueWatching.isNotEmpty()) {
                             item {
@@ -536,7 +536,7 @@ private fun HeroButtons(movie: Movie, spec: HomeStyleSpec, center: Boolean, onCl
             HomeStyle.PRIME -> Color.White
             HomeStyle.DISNEY -> Color.White
             HomeStyle.VIDIIO -> Color.White
-            HomeStyle.FLIX -> Color.Black
+            HomeStyle.FLIX -> Color.White
         }
         val playLabel = when (spec.style) {
             HomeStyle.HULU -> "START WATCHING"
@@ -1038,30 +1038,18 @@ private fun CategoryLinks(
     onOpenMovies: () -> Unit,
     onOpenTv: () -> Unit,
     onOpenAnime: () -> Unit,
+    onOpenGuide: () -> Unit,
 ) {
-    val chips = listOf(
-        Triple("All", true, {}),
-        Triple("Movies", false, onOpenMovies),
-        Triple("TV Shows", false, onOpenTv),
-        Triple("Anime", false, onOpenAnime),
-    )
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(chips) { (label, isSelected, onClick) ->
-            val shape = RoundedCornerShape(50)
-            Text(
-                text = label,
-                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onBackground,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .tvClickable(onClick = onClick, shape = shape)
-                    .background(if (isSelected) spec.accent else Color.White.copy(alpha = 0.08f))
-                    .border(1.dp, if (isSelected) spec.accent else Color.White.copy(alpha = 0.18f), shape)
-                    .padding(horizontal = 18.dp, vertical = 9.dp)
-            )
+    // The same strip the Flix layout uses, so every Home style shares one main menu.
+    com.ominix.vidiio.ui.browse.FlixTabs(
+        selected = 0,
+        labels = listOf("Featured", "Movies", "TV Shows", "TV Guide"),
+        onSelect = { index ->
+            when (index) {
+                1 -> onOpenMovies()
+                2 -> onOpenTv()
+                3 -> onOpenGuide()
+            }
         }
-    }
+    )
 }
