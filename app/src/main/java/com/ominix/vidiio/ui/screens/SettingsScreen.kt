@@ -332,19 +332,12 @@ fun SettingsScreen(
             item {
                 ExpandableSettingsSection(
                     title = "Sources",
-                    summary = "${selectedSources.size} of 9 scrapers enabled",
+                    summary = "${selectedSources.count { it == "knaben" || it == "tg" }} of 2 scrapers enabled",
                     icon = Icons.Rounded.Public,
                     expanded = openSection == "sources",
                     onExpandedChange = { openSection = if (it) "sources" else null }
                 ) {
                     val sources = listOf(
-                        "vidsrc" to "VidSrc",
-                        "videasy" to "VidEasy",
-                        "vadapav" to "Vadapav",
-                        "vuflix" to "Vuflix",
-                        "cinejoy" to "Cinejoy",
-                        "movy" to "Movy",
-                        "a111477" to "A111477",
                         "knaben" to "Knaben",
                         "tg" to "TorrentGalaxy"
                     )

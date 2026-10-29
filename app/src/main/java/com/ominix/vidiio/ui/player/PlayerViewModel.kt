@@ -64,6 +64,8 @@ data class PlayerUiState(
     val durationMs: Long = 0L,
     val bufferedPositionMs: Long = 0L,
     val errorMessage: String? = null,
+    /** Host of an addon whose stream turned out to be a "sign in" placeholder clip, shown until dismissed. */
+    val signInHost: String? = null,
 
     /** The episode that will start by itself when this one ends, and seconds left to cancel. */
     val upNext: com.ominix.vidiio.data.model.Episode? = null,
@@ -120,7 +122,7 @@ data class PlayerUiState(
 class PlayerViewModel(
     application: Application,
     private val settingsRepository: SettingsRepository,
-    movieRepository: MovieRepository,
+    private val movieRepository: MovieRepository,
     downloadRepository: DownloadRepository,
     downloadManager: DownloadManager,
     subdlService: SubdlService,
@@ -170,6 +172,39 @@ class PlayerViewModel(
 
     private var upNextJob: Job? = null
 
+    /** True once the next episode has been looked up for this one, so it happens once per episode. */
+    private var nextPrefetched = false
+
+    /**
+     * While an episode plays, find the next one's sources and join its best torrent's swarm, so the Up Next
+     * countdown (or a tap on the episode list) starts it right away. The scrape also fills the source cache,
+     * so the next episode's list is there instantly.
+     */
+    private fun prefetchNextEpisode() {
+        if (nextPrefetched) return
+        val show = session.movie.value ?: return
+        val next = com.ominix.vidiio.data.repository.nextEpisodeAfter(show, session.selectedEpisode.value) ?: return
+        nextPrefetched = true
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                var best: StreamSource? = null
+                kotlinx.coroutines.withTimeoutOrNull(25_000L) {
+                    movieRepository.getStreamSources(show, next).collect { source ->
+                        val good = source.url.startsWith("magnet:") && (source.seeders ?: 0) >= 5 &&
+                            com.ominix.vidiio.data.repository.SourceLanguage.isLikelyEnglish(source.serverName) &&
+                            !com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(source.serverName)
+                        if (good && (best == null || (source.seeders ?: 0) > (best?.seeders ?: 0))) best = source
+                    }
+                }
+                val pick = best ?: return@runCatching
+                val engine = (getApplication<Application>() as VidiioApplication).torrServerEngine
+                if (engine.ensureStarted()) {
+                    engine.getApi()?.addTorrent(com.ominix.vidiio.torrent.TorrentTuning.withTrackers(pick.url))
+                }
+            }
+        }
+    }
+
     /**
      * Set by the screen: returns a [CreditsDetector.WIDTH] x [CreditsDetector.HEIGHT] copy of the current
      * video frame, or null if one cannot be had right now (no surface yet, DRM, ...).
@@ -215,14 +250,23 @@ class PlayerViewModel(
     private fun startEpisode(next: Episode) {
         if (next.id == session.selectedEpisode.value?.id && _state.value.selectedSource != null) return
         creditsTracker.reset()
+        nextPrefetched = false
         upNextDismissed = false
         upNextJob?.cancel()
         skippedUrls.clear()
+        // The saved resume point belongs to the episode that was playing, not to the one being switched to:
+        // without this the new episode seeks to the old one's timestamp as soon as it loads.
+        resumePositionMs = 0L
+        didResume = true
         torrentPrepareRetries = 0
         // Drop the finished video: otherwise the player still reports a position at the end of it and the
         // credits check below would immediately offer the episode after this one, and so on.
         player.stop()
         player.clearMediaItems()
+        // Empty the session's source list FIRST. The picker below reacts to that list, and if the old episode's
+        // sources are still in it when the selected source is cleared, it re-picks one of them and the new
+        // episode plays the old one.
+        session.selectEpisode(next)
         // Clearing the source lets the source-picker below choose the best working English stream for the
         // new episode as soon as its links have been found and checked.
         _state.update {
@@ -231,7 +275,6 @@ class PlayerViewModel(
                 selectedSubtitleUrl = null, positionMs = 0L, durationMs = 0L, errorMessage = null
             )
         }
-        session.selectEpisode(next)
     }
     fun downloadSource(source: StreamSource) = session.downloadSource(source)
     fun getDownloadStatus(url: String): Flow<DownloadStatus?> = session.getDownloadStatus(url)
@@ -479,6 +522,23 @@ class PlayerViewModel(
                 val position = player.currentPosition
                 val duration = if (player.duration > 0) player.duration else 0L
 
+                // Some addons answer an unauthorised request with a short "sign in at <site>" clip instead of the
+                // film. A real film or episode is never under a minute, so an addon stream that short is one of
+                // those: skip it, tell the viewer where to sign in, and move on to the next source.
+                if (duration in 1L..PLACEHOLDER_MAX_MS && player.playbackState == Player.STATE_READY) {
+                    val current = _state.value.selectedSource
+                    if (current != null && current.sourceId == "stremio" && !current.url.startsWith("magnet:") &&
+                        !skippedUrls.contains(current.url)
+                    ) {
+                        skippedUrls += current.url
+                        val host = runCatching { java.net.URI(current.url).host }.getOrNull()
+                        _state.update { it.copy(signInHost = host) }
+                        val next = session.streamSources.value.firstOrNull { it.url != current.url && !skippedUrls.contains(it.url) &&
+                            !com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) }
+                        if (next != null) selectSource(next)
+                    }
+                }
+
                 // Resume from saved Continue Watching position, once, when ready.
                 if (!didResume && resumePositionMs > 3000L && duration > 0L &&
                     player.playbackState == Player.STATE_READY
@@ -488,6 +548,9 @@ class PlayerViewModel(
                 }
 
                 val playing = player.isPlaying
+
+                // Halfway through, get the next episode ready in the background.
+                if (playing && duration > 0L && position > duration * 0.35) prefetchNextEpisode()
 
                 // Read the picture: rolling credits (dark frame, light text, held for a few seconds) start
                 // the countdown as soon as they appear, far earlier than the clock-based window below.
@@ -818,6 +881,7 @@ class PlayerViewModel(
 
     fun showError(message: String) = _state.update { it.copy(errorMessage = message, isTorrentLoading = false) }
     fun clearError() = _state.update { it.copy(errorMessage = null) }
+    fun dismissSignIn() = _state.update { it.copy(signInHost = null) }
 
     fun retry() {
         _state.update { it.copy(errorMessage = null, isTorrentLoading = false) }
@@ -846,3 +910,6 @@ internal fun creditsWindowMs(durationMs: Long): Long =
 
 /** How often the picture is checked for credits, once the episode is in its closing stretch. */
 private const val CREDITS_SAMPLE_MS = 1_000L
+
+/** An addon stream shorter than this is a placeholder clip, not the film. */
+private const val PLACEHOLDER_MAX_MS = 75_000L

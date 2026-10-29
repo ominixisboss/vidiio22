@@ -101,4 +101,18 @@ class SourceLanguageTest {
         val health = mapOf(unknown.url to SourceHealth(SourceStatus.UNKNOWN))
         assertEquals(unknown, pickStreamToPlay(listOf(unknown), health, searching = false, giveUp = false))
     }
+
+    @Test
+    fun `a working direct link beats a working torrent`() {
+        val torrent = src("Show S01E01 1080p").copy(url = "magnet:?xt=urn:btih:abc")
+        val direct = src("Show S01E01 720p").copy(url = "https://cdn.example/ep1.mp4")
+        assertEquals(direct, pickStreamToPlay(listOf(torrent, direct), working(torrent, direct), searching = true, giveUp = false))
+    }
+
+    @Test
+    fun `a working english torrent beats a non-english direct link`() {
+        val torrent = src("Show S01E01 1080p").copy(url = "magnet:?xt=urn:btih:abc")
+        val directFr = src("Show S01E01 FRENCH 1080p").copy(url = "https://cdn.example/fr.mp4")
+        assertEquals(torrent, pickStreamToPlay(listOf(directFr, torrent), working(directFr, torrent), searching = true, giveUp = false))
+    }
 }

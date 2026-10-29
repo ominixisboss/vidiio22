@@ -129,6 +129,8 @@ class MediaSession(
                 .filter { showDead || health[it.url]?.status != SourceStatus.DEAD }
                 .sortedWith(
                     compareBy<StreamSource> { (health[it.url]?.status ?: SourceStatus.CHECKING).ordinal }
+                        // Direct links before torrents: they start without waiting for peers.
+                        .thenBy { it.url.startsWith("magnet:") }
                         // English before other languages, within the same trust level.
                         .thenBy { com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) }
                         .thenBy { !com.ominix.vidiio.data.repository.SourceLanguage.isDub(it.serverName) }
@@ -255,6 +257,9 @@ class MediaSession(
                 withTimeoutOrNull(SCRAPE_TIMEOUT_MS) {
                     movieRepository.getStreamSources(movie, episode)
                         .collect { source ->
+                            // A result for another episode (a late arrival from the previous one, or an addon that
+                            // answers with the wrong file) must never reach the picker.
+                            if (_selectedEpisode.value?.id != episode?.id || isOtherEpisode(source, episode)) return@collect
                             _allFoundSources.update { (it + source).distinctBy { s -> s.url } }
                             probe(source)
                         }
@@ -265,7 +270,18 @@ class MediaSession(
         }
     }
 
+    /** True when the source names a different episode than the one wanted (e.g. a file called ...S29E01... for E2). */
+    private fun isOtherEpisode(source: StreamSource, episode: Episode?): Boolean {
+        if (episode == null) return false
+        val name = source.fileName ?: return false
+        val parsed = com.ominix.vidiio.data.scraper.TorrentTitleParser().parse(name.substringAfterLast('/'))
+        val e = parsed.episode ?: return false
+        val s = parsed.season
+        return e != episode.episodeNumber || (s != null && s != episode.seasonNumber)
+    }
+
     fun selectEpisode(episode: Episode) {
+        scrapingJob?.cancel()
         prefetched = false
         cancelProbes()
         _sourceHealth.value = emptyMap()
