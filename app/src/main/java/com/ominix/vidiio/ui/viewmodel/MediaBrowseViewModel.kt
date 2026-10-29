@@ -43,6 +43,8 @@ data class BrowseState(
     /** A streaming service picked from the tile row, and its trending titles (null while loading). */
     val service: StreamingService? = null,
     val serviceResults: List<Movie>? = null,
+    /** Trending titles per streaming service id, for the shelf layout. */
+    val serviceShelves: Map<String, List<Movie>> = emptyMap(),
     val isRefreshing: Boolean = false,
     val failures: Int = 0,
 ) {
@@ -89,6 +91,7 @@ class MediaBrowseViewModel(
                 launch { shelf(BrowseList.SOON) { s, v -> s.copy(soon = v) } }
                 launch { shelf(BrowseList.TOP_RATED) { s, v -> s.copy(topRated = v) } }
                 if (kind == BrowseKind.MOVIES) launch { loadHalloween() }
+                BrowseOptions.services.forEach { s -> launch { loadServiceShelf(s) } }
             }
             _state.update { it.copy(isRefreshing = false) }
         }
@@ -106,6 +109,12 @@ class MediaBrowseViewModel(
             Log.w(TAG, "Browse shelf $list failed", e)
             _state.update { it.copy(failures = it.failures + 1) }
         }
+    }
+
+    /** One shelf per streaming service. Optional furniture, like the Halloween list. */
+    private suspend fun loadServiceShelf(service: StreamingService) {
+        val titles = runCatching { repository.streamingCatalog(kind, service.id) }.getOrDefault(emptyList())
+        if (titles.isNotEmpty()) _state.update { it.copy(serviceShelves = it.serviceShelves + (service.id to titles)) }
     }
 
     /** The Halloween list is optional furniture: if it fails the page just doesn't show it. */
