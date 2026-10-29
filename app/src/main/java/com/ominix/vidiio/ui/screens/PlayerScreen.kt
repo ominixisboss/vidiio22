@@ -436,6 +436,33 @@ fun PlayerScreen(
             )
         }
 
+        state.resumePromptMs?.let { at ->
+            val resumeFocus = remember { FocusRequester() }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                delay(150)
+                runCatching { resumeFocus.requestFocus() }
+            }
+            val total = (at / 1000).toInt()
+            val label = if (total >= 3600) "%d:%02d:%02d".format(total / 3600, total % 3600 / 60, total % 60)
+            else "%d:%02d".format(total / 60, total % 60)
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = playerViewModel::resumeFromSaved,
+                title = { androidx.compose.material3.Text("Continue watching?") },
+                text = { androidx.compose.material3.Text("You stopped at $label. Pick up from there, or start from the beginning?") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = playerViewModel::resumeFromSaved,
+                        modifier = Modifier.focusRequester(resumeFocus)
+                    ) { androidx.compose.material3.Text("Resume $label") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = playerViewModel::startOver) {
+                        androidx.compose.material3.Text("Start over")
+                    }
+                }
+            )
+        }
+
         state.signInHost?.let { host ->
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = playerViewModel::dismissSignIn,
