@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -62,6 +63,7 @@ import com.ominix.vidiio.ui.browse.TvPalette
 import com.ominix.vidiio.ui.viewmodel.BrowseState
 import com.ominix.vidiio.ui.viewmodel.Genre
 import com.ominix.vidiio.ui.viewmodel.MediaBrowseViewModel
+import androidx.compose.ui.focus.onFocusChanged
 
 private val MOVIE_GENRES = listOf(
     Genre(28, "Action"), Genre(12, "Adventure"), Genre(16, "Animation"), Genre(35, "Comedy"),
@@ -126,12 +128,15 @@ fun MediaBrowseScreen(
     onOpenMovie: (Movie) -> Unit,
     onOpenHalloween: () -> Unit = {},
     onTab: (Int) -> Unit = {},
+    /** Flix gets the tile-and-grid page; every other Home style gets shelves, like its Home. */
+    homeStyle: com.ominix.vidiio.data.repository.HomeStyle = com.ominix.vidiio.data.repository.HomeStyle.FLIX,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
     val style = remember(viewModel.kind) { styleFor(viewModel.kind) }
+    var showFilters by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
 
-    Box(modifier = modifier.fillMaxSize().background(FlixBackground)) {
+    Box(modifier = modifier.fillMaxSize().background(if (homeStyle == com.ominix.vidiio.data.repository.HomeStyle.FLIX || showFilters) FlixBackground else homeStyle.spec(androidx.compose.material3.MaterialTheme.colorScheme.primary).background ?: androidx.compose.material3.MaterialTheme.colorScheme.background)) {
         when {
             state.isLoadingEverything -> BrowseSkeleton()
             state.hasNothing -> BrowseError(style.palette, style.what, onRetry = viewModel::refresh)
@@ -140,7 +145,11 @@ fun MediaBrowseScreen(
                 onRefresh = viewModel::refresh,
                 modifier = Modifier.fillMaxSize()
             ) {
-                BrowseContent(style, state, viewModel, onOpenMovie, onOpenHalloween, onTab)
+                if (homeStyle != com.ominix.vidiio.data.repository.HomeStyle.FLIX && !showFilters) {
+                    ShelfBrowseContent(style, state, homeStyle, onOpenMovie, onOpenHalloween, onTab, { showFilters = true }, viewModel.kind == BrowseKind.MOVIES)
+                } else {
+                    BrowseContent(style, state, viewModel, onOpenMovie, onOpenHalloween, onTab)
+                }
             }
         }
     }
@@ -321,4 +330,72 @@ private fun Movie.toHeroSpec(typeLabel: String) = HeroSpec(
 /** A grid item spanning the full width, for the tile rows between the posters. */
 private fun LazyGridScope.full(key: String, content: @Composable () -> Unit) {
     item(key = key, span = { GridItemSpan(maxLineSpan) }) { androidx.compose.foundation.layout.Column { content() } }
+}
+
+/**
+ * The Movies / TV page in the shelf layout used by the Vidiio and other classic Home styles: a slider on top,
+ * then a horizontal shelf per list (including a "Trending on <service>" shelf for each streaming catalogue),
+ * with one tile at the bottom that opens the full filter grid.
+ */
+@Composable
+private fun ShelfBrowseContent(
+    style: PageStyle,
+    state: BrowseState,
+    homeStyle: com.ominix.vidiio.data.repository.HomeStyle,
+    onOpen: (Movie) -> Unit,
+    onOpenHalloween: () -> Unit,
+    onTab: (Int) -> Unit,
+    onShowFilters: () -> Unit,
+    isMovies: Boolean,
+) {
+    val spec = remember(homeStyle) { homeStyle }.let { hs ->
+        val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+        remember(hs, accent) { hs.spec(accent) }
+    }
+    val hero = state.trending.orEmpty().filter { !it.backdropUrl.isNullOrBlank() }.take(5)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 40.dp),
+        verticalArrangement = Arrangement.spacedBy(spec.rowGap)
+    ) {
+        if (hero.isNotEmpty()) item(key = "hero") {
+            androidx.compose.foundation.layout.Box(
+                Modifier.onFocusChanged { focus ->
+                    if (focus.hasFocus) scope.launch {
+                        delay(150)
+                        listState.scrollToItem(0)
+                    }
+                }
+            ) { HeroCarousel(hero, spec, onOpen) }
+        }
+        item(key = "tabs") {
+            FlixTabs(selected = if (isMovies) 1 else 2, labels = listOf("Featured", "Movies", "TV Shows", "TV Guide"), onSelect = onTab)
+        }
+        if (isMovies && state.halloween != null) item(key = "halloween") {
+            CategorySection("Top 100 Halloween Movies", state.halloween.take(20), spec, onOpen)
+        }
+        style.lists.forEach { (list, label) ->
+            val movies = when (list) {
+                BrowseList.TRENDING -> state.trending
+                BrowseList.POPULAR -> state.popular
+                BrowseList.TOP_RATED -> state.topRated
+                BrowseList.FRESH -> state.fresh
+                BrowseList.SOON -> state.soon
+            }.orEmpty()
+            if (movies.isNotEmpty()) item(key = "list-$label") { CategorySection(label, movies, spec, onOpen) }
+        }
+        BrowseOptions.services.forEach { svc ->
+            val titles = state.serviceShelves[svc.id].orEmpty()
+            if (titles.isNotEmpty()) item(key = "svc-${svc.id}") { CategorySection("Trending on ${svc.label}", titles, spec, onOpen) }
+        }
+        item(key = "filters") {
+            androidx.compose.foundation.layout.Box(Modifier.padding(horizontal = 14.dp)) {
+                GradientTile("Filter by genre, mood, decade...", 2, false, onShowFilters, width = 240.dp)
+            }
+        }
+    }
 }

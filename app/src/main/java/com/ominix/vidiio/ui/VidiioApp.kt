@@ -124,6 +124,7 @@ fun VidiioApp() {
             )
             MediaBrowseScreen(
                 viewModel = viewModel,
+                homeStyle = homeStyle,
                 onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 onOpenHalloween = { navigator.navigate(VidiioRoute.Halloween) },
                 onTab = { index ->
@@ -181,6 +182,7 @@ fun VidiioApp() {
             )
             MediaBrowseScreen(
                 viewModel = viewModel,
+                homeStyle = homeStyle,
                 onOpenMovie = { movie -> navigator.navigate(VidiioRoute.Details(movie)) },
                 onTab = { index ->
                     when (index) {

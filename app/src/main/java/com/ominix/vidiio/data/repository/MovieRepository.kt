@@ -133,7 +133,14 @@ class MovieRepository(
         cached("svc-$kind-$serviceId") {
             val type = if (kind == BrowseKind.MOVIES) "movie" else "series"
             addonManager.streamingCatalog(type, serviceId)
-                .map { it.toMovie(if (kind == BrowseKind.MOVIES) MovieType.MOVIE else MovieType.TV_SHOW) }
+                // Hand these over as ordinary TMDB titles when the addon names the TMDB id: the Details page then
+                // has seasons, episodes and the full set of links for them. (The catalogue addon itself has no
+                // episode lists or streams.)
+                .map { meta ->
+                    val type = if (kind == BrowseKind.MOVIES) MovieType.MOVIE else MovieType.TV_SHOW
+                    val base = meta.toMovie(type)
+                    meta.tmdbId?.let { base.copy(id = it.toString(), source = "tmdb", imdbId = meta.id.takeIf { id -> id.startsWith("tt") }) } ?: base
+                }
                 .filter { it.posterUrl.isNotBlank() }
         }
 
