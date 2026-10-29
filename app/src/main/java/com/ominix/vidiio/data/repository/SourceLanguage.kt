@@ -52,7 +52,12 @@ fun pickStreamToPlay(
     giveUp: Boolean,
 ): StreamSource? {
     fun status(s: StreamSource) = health[s.url]?.status
-    val working = sources.filter { status(it) == SourceStatus.WORKING }
+    // A verified direct link starts in seconds; a torrent has to find peers first. So any working direct link
+    // that passes the checks below beats every torrent, however well seeded (the sort is stable, so the existing
+    // order is kept within direct links and within torrents).
+    fun isDirect(s: StreamSource) = !s.url.startsWith("magnet:")
+    val workingAll = sources.filter { status(it) == SourceStatus.WORKING }
+    val working = workingAll.sortedBy { !isDirect(it) }
 
     // Best first choice: works, English, and light enough for a TV stick to decode.
     working.firstOrNull { SourceLanguage.isLikelyEnglish(it.serverName) && !SourceHeaviness.isHeavy(it.serverName) }?.let { return it }

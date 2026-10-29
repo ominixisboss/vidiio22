@@ -129,6 +129,8 @@ class MediaSession(
                 .filter { showDead || health[it.url]?.status != SourceStatus.DEAD }
                 .sortedWith(
                     compareBy<StreamSource> { (health[it.url]?.status ?: SourceStatus.CHECKING).ordinal }
+                        // Direct links before torrents: they start without waiting for peers.
+                        .thenBy { it.url.startsWith("magnet:") }
                         // English before other languages, within the same trust level.
                         .thenBy { com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) }
                         .thenBy { !com.ominix.vidiio.data.repository.SourceLanguage.isDub(it.serverName) }
