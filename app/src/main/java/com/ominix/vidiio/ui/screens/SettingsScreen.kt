@@ -642,7 +642,7 @@ fun ExpandableSettingsSection(
 
     LaunchedEffect(expanded) {
         if (expanded) {
-            delay(120)
+            delay(30)
             runCatching { contentFocusRequester.requestFocus() }
         }
     }
@@ -702,11 +702,9 @@ fun ExpandableSettingsSection(
                     )
                 }
 
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
+                // No expand/collapse animation: re-measuring a tall section every frame is what made opening a
+                // menu stutter on a TV stick. It simply appears.
+                if (expanded) {
                     Column(modifier = Modifier.focusRequester(contentFocusRequester)) {
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),
