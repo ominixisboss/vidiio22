@@ -6,6 +6,39 @@ downloads, styled ASS/SSA subtitles, Chromecast and Android TV.
 
 Built with Compose, Media3 and Room. `minSdk` 24.
 
+## Installing the app
+
+Download the file for your device from the [latest release](https://github.com/ominixisboss/vidiio22/releases/latest)
+(phone, Android TV and Fire TV are the same universal build under three names). On Fire TV, allow
+**Settings → My Fire TV → Developer options → Install unknown apps** for the app you use to download it.
+
+## Adding more sources (Stremio addons)
+
+Vidiio finds streams through Stremio addons. Add one under **Settings → Stremio Addons → Add Stremio Addon**
+and paste the addon's `manifest.json` link.
+
+### Setting up PenguPlay (pengu.uk)
+
+PenguPlay is an optional addon that returns direct links. It needs an account, and the link it gives you
+contains a private token, so treat that link like a password.
+
+1. Open <https://pengu.uk/> in a browser (phone or computer) and sign in.
+2. Pick the providers and qualities you want and copy your addon link. It ends in `/manifest.json`.
+3. In Vidiio go to **Settings → Stremio Addons → Add Stremio Addon**, paste the link and press **Add**.
+   The list shows only the site name (`pengu.uk`), never your token.
+4. Optional: turn on **Prioritize Pengu links** in the same section to list and auto-play PenguPlay streams first.
+
+Notes:
+
+- **Never share or post your link.** Anyone with it can use your account. If it leaks, generate a new one on
+  pengu.uk and remove the old addon in Vidiio (open the addon and press OK to remove it).
+- If a stream plays a short video saying to sign in, your link is not recognised: sign in at pengu.uk, check your
+  account, or generate a new link. Vidiio detects these placeholder clips, skips them and tells you where to sign in.
+- Many PenguPlay streams are very large 4K files. Small devices such as Fire TV sticks cannot decode them; pick
+  a 1080p or 720p source in the source list.
+- On a TV, typing a long link with the remote is slow. Use a USB keyboard, or an ADB-connected keyboard
+  (for example scrcpy) to type or paste it.
+
 ## Building
 
 You need Android Studio (or a JDK 25 toolchain) and the Android SDK for API 37.
