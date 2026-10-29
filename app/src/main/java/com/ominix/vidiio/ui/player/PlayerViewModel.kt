@@ -218,11 +218,19 @@ class PlayerViewModel(
         upNextDismissed = false
         upNextJob?.cancel()
         skippedUrls.clear()
+        // The saved resume point belongs to the episode that was playing, not to the one being switched to:
+        // without this the new episode seeks to the old one's timestamp as soon as it loads.
+        resumePositionMs = 0L
+        didResume = true
         torrentPrepareRetries = 0
         // Drop the finished video: otherwise the player still reports a position at the end of it and the
         // credits check below would immediately offer the episode after this one, and so on.
         player.stop()
         player.clearMediaItems()
+        // Empty the session's source list FIRST. The picker below reacts to that list, and if the old episode's
+        // sources are still in it when the selected source is cleared, it re-picks one of them and the new
+        // episode plays the old one.
+        session.selectEpisode(next)
         // Clearing the source lets the source-picker below choose the best working English stream for the
         // new episode as soon as its links have been found and checked.
         _state.update {
@@ -231,7 +239,6 @@ class PlayerViewModel(
                 selectedSubtitleUrl = null, positionMs = 0L, durationMs = 0L, errorMessage = null
             )
         }
-        session.selectEpisode(next)
     }
     fun downloadSource(source: StreamSource) = session.downloadSource(source)
     fun getDownloadStatus(url: String): Flow<DownloadStatus?> = session.getDownloadStatus(url)
