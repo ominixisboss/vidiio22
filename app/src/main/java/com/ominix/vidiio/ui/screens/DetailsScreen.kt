@@ -583,13 +583,6 @@ fun SourceSelectorBottomSheet(
             )
             
             val sources = listOf(
-                "vidsrc" to "VidSrc",
-                "videasy" to "VidEasy",
-                "vadapav" to "Vadapav",
-                "vuflix" to "Vuflix",
-                "cinejoy" to "Cinejoy",
-                "movy" to "Movy",
-                "a111477" to "A111477",
                 "knaben" to "Knaben",
                 "tg" to "TorrentGalaxy"
             )

@@ -193,7 +193,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val sourcesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
-        preferences[PreferencesKeys.SOURCES] ?: setOf("vidsrc", "videasy", "vadapav", "vuflix", "cinejoy", "movy", "a111477", "knaben", "tg")
+        preferences[PreferencesKeys.SOURCES] ?: setOf("knaben", "tg")
     }
 
     val stremioAddonsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->

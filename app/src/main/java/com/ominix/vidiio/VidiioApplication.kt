@@ -285,17 +285,11 @@ class VidiioApplication : Application() {
         MovieRepository(
             tmdbRetrofit.create(TMDBService::class.java),
             listOf(
-                CinejoyScraper(okHttpClient),
-                MovyScraper(okHttpClient),
-                A111477Scraper(okHttpClient),
-                VidSrcScraper(okHttpClient),
-                VidEasyScraper(okHttpClient),
                 KnabenScraper(okHttpClient),
                 TorrentGalaxyScraper(okHttpClient),
                 OneThreeThreeSevenXScraper(okHttpClient),
                 YtsScraper(okHttpClient),
-                VadapavScraper(okHttpClient),
-                VuflixScraper(okHttpClient)
+
             ),
             settingsRepository,
             addonManager,
