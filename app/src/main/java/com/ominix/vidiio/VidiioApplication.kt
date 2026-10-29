@@ -172,7 +172,11 @@ class VidiioApplication : Application() {
     }
 
     /** Shared base: proxy handling and timeouts. No logging, no DNS override. */
+    /** System trust first, then the bundled public roots; see [BundledRootsTrust]. */
+    private val trust by lazy { com.ominix.vidiio.data.http.BundledRootsTrust.create(this) }
+
     private fun baseClientBuilder(): OkHttpClient.Builder = OkHttpClient.Builder()
+        .sslSocketFactory(trust.first.socketFactory, trust.second)
         .proxySelector(proxySelector)
         .addInterceptor(proxyGateInterceptor)
         // A certificate failure used to surface as a bare "trust anchor not found". Say which site it was
