@@ -13,7 +13,7 @@
       sticks and Android TVs whose certificate store predates them do not fail with "Trust anchor
       for certification path not found": ISRG (Let's Encrypt), Google Trust Services, DigiCert,
       Amazon, USERTrust/Sectigo and GlobalSign roots, which between them sign nearly every site
-      the app talks to. They are the roots' public certificates, taken from the Mozilla root
+      the app talks to. They are the roots' public certificates (binary DER files, so no text or line-ending quirks on old devices), taken from the Mozilla root
       program's bundle (ISRG Root X1 and GTS Root R4 also checked against the issuers' published
       SHA-256 values). They only add trust for those CAs; the system store is still consulted
       first and in full. A TV with a wrong clock fails the same way, and no certificate fixes that.
