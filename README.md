@@ -19,10 +19,12 @@ and paste the addon's `manifest.json` link.
 
 ### Setting up PenguPlay (pengu.uk)
 
+**Website: <https://pengu.uk/>**. Anyone can set it up themselves there.
+
 PenguPlay is an optional addon that returns direct links. It needs an account, and the link it gives you
 contains a private token, so treat that link like a password.
 
-1. Open <https://pengu.uk/> in a browser (phone or computer) and sign in.
+1. Go to **[https://pengu.uk/](https://pengu.uk/)** in a browser (phone or computer) and sign in.
 2. Pick the providers and qualities you want and copy your addon link. It ends in `/manifest.json`.
 3. In Vidiio go to **Settings → Stremio Addons → Add Stremio Addon**, paste the link and press **Add**.
    The list shows only the site name (`pengu.uk`), never your token.
