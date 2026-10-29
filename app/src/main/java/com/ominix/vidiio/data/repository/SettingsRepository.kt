@@ -104,6 +104,7 @@ class SettingsRepository(private val context: Context) {
         val DYNAMIC_THEME_MIGRATED = booleanPreferencesKey("dynamic_theme_migrated")
         val ASS_NATIVE_STYLING = booleanPreferencesKey("ass_native_styling")
         val MOUSE_TOGGLE = booleanPreferencesKey("mouse_toggle")
+        val PRIORITIZE_PENGU = booleanPreferencesKey("prioritize_pengu")
         val SHOW_VPN_REMINDER = booleanPreferencesKey("show_vpn_reminder")
         val PROXY_ENABLED = booleanPreferencesKey("proxy_enabled")
         val PROXY_TYPE = stringPreferencesKey("proxy_type")
@@ -179,6 +180,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun setMouseToggle(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.MOUSE_TOGGLE] = enabled
+        }
+    }
+
+    /** List and auto-pick streams from the PenguPlay addon (pengu.uk) ahead of other sources. */
+    val prioritizePenguFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.PRIORITIZE_PENGU] ?: false
+    }
+
+    suspend fun setPrioritizePengu(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PRIORITIZE_PENGU] = enabled
         }
     }
 

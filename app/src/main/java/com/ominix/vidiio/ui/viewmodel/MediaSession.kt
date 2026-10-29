@@ -124,11 +124,13 @@ class MediaSession(
      * appear when [showUnavailable] is on, at the bottom.
      */
     val streamSources: StateFlow<List<StreamSource>> =
-        combine(enabledSources, _sourceHealth, _showUnavailable) { sources, health, showDead ->
+        combine(enabledSources, _sourceHealth, _showUnavailable, settingsRepository.prioritizePenguFlow) { sources, health, showDead, pengu ->
             sources
                 .filter { showDead || health[it.url]?.status != SourceStatus.DEAD }
                 .sortedWith(
                     compareBy<StreamSource> { (health[it.url]?.status ?: SourceStatus.CHECKING).ordinal }
+                        // PenguPlay streams first, when the viewer asked for that.
+                        .thenBy { !(pengu && isPengu(it)) }
                         // Direct links before torrents: they start without waiting for peers.
                         .thenBy { it.url.startsWith("magnet:") }
                         // English before other languages, within the same trust level.
@@ -141,6 +143,8 @@ class MediaSession(
                         .thenBy { health[it.url]?.latencyMs ?: Long.MAX_VALUE }
                 )
         }.stateIn(scope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun isPengu(s: StreamSource) = runCatching { java.net.URI(s.url).host }.getOrNull()?.let { it == "pengu.uk" || it.endsWith(".pengu.uk") } == true
 
     private var scrapingJob: Job? = null
     private val probeJobs = mutableListOf<Job>()
