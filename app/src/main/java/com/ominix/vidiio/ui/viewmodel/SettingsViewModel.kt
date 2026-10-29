@@ -49,6 +49,9 @@ class SettingsViewModel(
     val avoidCameraCutout: StateFlow<Boolean> = settingsRepository.avoidCameraCutoutFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val prioritizePengu: StateFlow<Boolean> = settingsRepository.prioritizePenguFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     val mouseToggle: StateFlow<Boolean> = settingsRepository.mouseToggleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -156,6 +159,10 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsRepository.setAvoidCameraCutout(enabled)
         }
+    }
+
+    fun setPrioritizePengu(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setPrioritizePengu(enabled) }
     }
 
     fun setMouseToggle(enabled: Boolean) {

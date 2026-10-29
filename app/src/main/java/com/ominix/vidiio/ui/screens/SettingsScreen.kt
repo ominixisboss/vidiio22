@@ -61,6 +61,7 @@ fun SettingsScreen(
     val homeStyle by viewModel.homeStyle.collectAsState()
     val avoidCameraCutout by viewModel.avoidCameraCutout.collectAsState()
     val mouseToggle by viewModel.mouseToggle.collectAsState()
+    val prioritizePengu by viewModel.prioritizePengu.collectAsState()
     val selectedSources by viewModel.selectedSources.collectAsState()
     val stremioAddons by viewModel.stremioAddons.collectAsState()
     val subdlApiKey by viewModel.subdlApiKey.collectAsState()
@@ -88,6 +89,8 @@ fun SettingsScreen(
 
     var showProxyDialog by rememberSaveable { mutableStateOf(false) }
     var showAddAddonDialog by rememberSaveable { mutableStateOf(false) }
+    var addonToRemove by remember { mutableStateOf<String?>(null) }
+    var focusAddAfterRemoval by remember { mutableStateOf(false) }
     var addonUrlToAdd by rememberSaveable { mutableStateOf("") }
     var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
     var apiKeyToSet by rememberSaveable { mutableStateOf("") }
@@ -363,24 +366,35 @@ fun SettingsScreen(
                     expanded = openSection == "addons",
                     onExpandedChange = { openSection = if (it) "addons" else null }
                 ) {
+                    SwitchPreferenceItem(
+                        title = "Prioritize Pengu links",
+                        summary = "List and auto-play PenguPlay streams first",
+                        icon = Icons.Rounded.Extension,
+                        checked = prioritizePengu,
+                        onCheckedChange = { viewModel.setPrioritizePengu(it) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    val addFocus = remember { FocusRequester() }
                     stremioAddons.forEach { addonUrl ->
-                        ListItem(
-                            headlineContent = { Text(addonUrl, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            trailingContent = {
-                                IconButton(onClick = { viewModel.removeStremioAddon(addonUrl) }) {
-                                    Icon(Icons.Rounded.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.primary)
-                                }
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                        )
+                        AddonRow(addonUrl = addonUrl, onRemove = { addonToRemove = addonUrl })
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     }
-                    PreferenceItem(
-                        title = "Add Stremio Addon",
-                        summary = "Enter manifest URL",
-                        icon = Icons.Rounded.Add,
-                        onClick = { showAddAddonDialog = true }
-                    )
+                    // Keeps the remote on the list after a removal, instead of dropping focus to nothing.
+                    androidx.compose.runtime.LaunchedEffect(stremioAddons.size) {
+                        if (focusAddAfterRemoval) {
+                            focusAddAfterRemoval = false
+                            delay(150)
+                            runCatching { addFocus.requestFocus() }
+                        }
+                    }
+                    Box(Modifier.focusRequester(addFocus)) {
+                        PreferenceItem(
+                            title = "Add Stremio Addon",
+                            summary = "Enter manifest URL",
+                            icon = Icons.Rounded.Add,
+                            onClick = { showAddAddonDialog = true }
+                        )
+                    }
                 }
             }
 
@@ -434,6 +448,30 @@ fun SettingsScreen(
     }
 
     // Dialogs preserved
+    addonToRemove?.let { url ->
+        val removeFocus = remember { FocusRequester() }
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            delay(150)
+            runCatching { removeFocus.requestFocus() }
+        }
+        AlertDialog(
+            onDismissRequest = { addonToRemove = null },
+            title = { Text("Remove this addon?") },
+            text = { Text(addonLabel(url)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.removeStremioAddon(url)
+                        addonToRemove = null
+                        focusAddAfterRemoval = true
+                    },
+                    modifier = Modifier.focusRequester(removeFocus)
+                ) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { addonToRemove = null }) { Text("Keep") } }
+        )
+    }
+
     if (showAddAddonDialog) {
         AlertDialog(
             onDismissRequest = { showAddAddonDialog = false },
@@ -604,7 +642,7 @@ fun ExpandableSettingsSection(
 
     LaunchedEffect(expanded) {
         if (expanded) {
-            delay(120)
+            delay(30)
             runCatching { contentFocusRequester.requestFocus() }
         }
     }
@@ -664,11 +702,9 @@ fun ExpandableSettingsSection(
                     )
                 }
 
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
+                // No expand/collapse animation: re-measuring a tall section every frame is what made opening a
+                // menu stutter on a TV stick. It simply appears.
+                if (expanded) {
                     Column(modifier = Modifier.focusRequester(contentFocusRequester)) {
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),
@@ -1213,3 +1249,30 @@ private val SUBTITLE_BACKGROUNDS = listOf(
     "Dim" to 0x80000000L,
     "Solid" to 0xFF000000L
 )
+
+/** A short, safe name for an addon link: its site. The path often holds the user's settings or a private token. */
+private fun addonLabel(url: String): String =
+    runCatching { java.net.URI(url).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: url.take(40)
+
+/**
+ * One installed addon: a single focus stop for the remote (OK asks to remove it), showing the site only -
+ * the full link can run to hundreds of characters and may contain a private token.
+ */
+@Composable
+private fun AddonRow(addonUrl: String, onRemove: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .tvClickable(onClick = onRemove, shape = shape, focusScale = 1.02f)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(addonLabel(addonUrl), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+            Text("Press OK to remove", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        }
+        Icon(Icons.Rounded.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.primary)
+    }
+}
