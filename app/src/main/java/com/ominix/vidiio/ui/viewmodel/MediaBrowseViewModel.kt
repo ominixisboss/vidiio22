@@ -12,6 +12,8 @@ import com.ominix.vidiio.data.repository.Decade
 import com.ominix.vidiio.data.repository.Mood
 import com.ominix.vidiio.data.repository.MovieRepository
 import com.ominix.vidiio.data.repository.Provider
+import com.ominix.vidiio.data.repository.StreamingService
+import com.ominix.vidiio.data.repository.BrowseOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -38,6 +40,9 @@ data class BrowseState(
     val filterResults: List<Movie>? = null,
     /** Which ready-made list the page shows while no filter is set. */
     val list: BrowseList = BrowseList.TRENDING,
+    /** A streaming service picked from the tile row, and its trending titles (null while loading). */
+    val service: StreamingService? = null,
+    val serviceResults: List<Movie>? = null,
     val isRefreshing: Boolean = false,
     val failures: Int = 0,
 ) {
@@ -125,7 +130,16 @@ class MediaBrowseViewModel(
 
     fun setProvider(provider: Provider?) = update { it.copy(provider = provider) }
 
-    fun setStreamer(streamer: Provider?) = update { it.copy(streamer = streamer) }
+    /** Lists a streaming service's trending titles; picking it again (or any filter) goes back. */
+    fun setService(service: StreamingService?) {
+        filterJob?.cancel()
+        _state.update { it.copy(service = service, serviceResults = null, filter = BrowseFilter(sort = it.filter.sort), filterResults = null) }
+        if (service == null) return
+        filterJob = viewModelScope.launch {
+            val movies = runCatching { repository.streamingCatalog(kind, service.id) }.getOrDefault(emptyList())
+            _state.update { if (it.service == service) it.copy(serviceResults = movies) else it }
+        }
+    }
 
     /** Picks a ready-made list (Trending, Top rated, ...) and drops any filters. */
     fun setList(list: BrowseList) {
@@ -137,7 +151,11 @@ class MediaBrowseViewModel(
 
     fun clearFilters() = update { BrowseFilter(sort = it.sort) }
 
-    private fun update(change: (BrowseFilter) -> BrowseFilter) = applyFilter(change(_state.value.filter), force = false)
+    private fun update(change: (BrowseFilter) -> BrowseFilter) {
+        // Choosing a filter leaves any streaming-service list.
+        if (_state.value.service != null) _state.update { it.copy(service = null, serviceResults = null) }
+        applyFilter(change(_state.value.filter), force = false)
+    }
 
     private fun applyFilter(filter: BrowseFilter, force: Boolean) {
         filterJob?.cancel()
@@ -147,7 +165,7 @@ class MediaBrowseViewModel(
         }
         _state.update { it.copy(filter = filter, filterResults = null) }
         filterJob = viewModelScope.launch {
-            val key = "filter-${filter.genreExpr}-${filter.decade?.startYear}-${filter.provider?.id}-${filter.streamer?.id}-${filter.sort}"
+            val key = "filter-${filter.genreExpr}-${filter.decade?.startYear}-${filter.provider?.id}-${filter.sort}"
             try {
                 val results = if (force) repository.browseFiltered(kind, filter).also { cache[key] = it }
                 else cache.getOrPut(key) { repository.browseFiltered(kind, filter) }

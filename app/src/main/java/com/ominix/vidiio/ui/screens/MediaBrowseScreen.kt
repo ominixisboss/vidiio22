@@ -157,7 +157,7 @@ private fun BrowseContent(
     onTab: (Int) -> Unit,
 ) {
     val filter = state.filter
-    val results: List<Movie>? = if (filter.isEmpty) {
+    val results: List<Movie>? = if (state.service != null) state.serviceResults else if (filter.isEmpty) {
         when (state.list) {
             BrowseList.TRENDING -> state.trending
             BrowseList.POPULAR -> state.popular
@@ -202,15 +202,15 @@ private fun BrowseContent(
                         i++
                     }
                     items(style.lists, key = { it.first.name }) { (list, label) ->
-                        GradientTile(label, i + style.lists.indexOf(list to label), filter.isEmpty && state.list == list, { viewModel.setList(list) })
+                        GradientTile(label, i + style.lists.indexOf(list to label), filter.isEmpty && state.service == null && state.list == list, { viewModel.setList(list) })
                     }
-                    items(BrowseOptions.streamers, key = { "s${it.id}" }) { s ->
+                    items(BrowseOptions.services, key = { "s${it.id}" }) { s ->
                         GradientTile(
-                            "Popular on ${s.label}", BrowseOptions.streamers.indexOf(s) + 2,
-                            filter.streamer == s, { viewModel.setStreamer(if (filter.streamer == s) null else s) }
+                            "Trending on ${s.label}", BrowseOptions.services.indexOf(s) + 2,
+                            state.service == s, { viewModel.setService(if (state.service == s) null else s) }
                         )
                     }
-                    if (!filter.isEmpty) {
+                    if (!filter.isEmpty || state.service != null) {
                         item(key = "clear") { GradientTile("Clear filters", 2, false, viewModel::clearFilters) }
                     }
                 }
@@ -296,7 +296,7 @@ private fun BrowseContent(
                 items(BrowseSort.entries.toList(), key = { it.name }) { s ->
                     GradientTile(s.label, s.ordinal, filter.sort == s, { viewModel.setSort(s) })
                 }
-                if (!filter.isEmpty) {
+                if (!filter.isEmpty || state.service != null) {
                     item(key = "clear2") { GradientTile("Clear filters", 2, false, viewModel::clearFilters) }
                 }
             }
