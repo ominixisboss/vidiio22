@@ -78,7 +78,9 @@ data class StremioMeta(
     val description: String? = null,
     val releaseInfo: String? = null,
     val imdbRating: String? = null,
-    val genres: List<String>? = null
+    val genres: List<String>? = null,
+    /** TMDB id, when the addon supplies one (the Streaming Catalogs addon does). */
+    @Json(name = "moviedb_id") val tmdbId: Int? = null
 )
 
 @JsonClass(generateAdapter = true)
