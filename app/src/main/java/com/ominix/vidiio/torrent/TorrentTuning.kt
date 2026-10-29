@@ -16,17 +16,20 @@ object TorrentTuning {
     fun settings(isLowMemory: Boolean): Map<String, Any> = mapOf(
         "CacheSize" to cacheBytes(isLowMemory),
         // Start playing once this much of the cache is filled, not after a long preload.
-        "PreloadCache" to 8,
+        "PreloadCache" to 4,
         // Fetch ahead of the playhead, so it doesn't stall waiting on the next piece.
         "ReaderReadAHead" to 95,
         // More simultaneous peers, and more DHT lookups to find them.
-        "ConnectionsLimit" to if (isLowMemory) 120 else 300,
-        "DhtConnectionLimit" to if (isLowMemory) 250 else 600,
+        "ConnectionsLimit" to if (isLowMemory) 150 else 400,
+        "DhtConnectionLimit" to if (isLowMemory) 300 else 800,
         // 0 = unlimited.
         "DownloadRateLimit" to 0,
         // Add our trackers to the ones the torrent already lists.
         "RetrackersMode" to 1,
-        "TorrentDisconnectTimeout" to 30,
+        "TorrentDisconnectTimeout" to 20,
+        // Peers over IPv6 and uTP widen the pool, and every extra peer shortens the wait for the first pieces.
+        "EnableIPv6" to true,
+        "DisableUTP" to false,
         "DisableUPNP" to false,
         "ForceEncrypt" to false,
     )
@@ -48,6 +51,16 @@ object TorrentTuning {
         "udp://tracker.theoks.net:6969/announce",
         "udp://wepzone.net:6969/announce",
         "https://tracker.tamersunion.org:443/announce",
+        "udp://tracker.bittor.pw:1337/announce",
+        "udp://tracker.openbittorrent.com:6969/announce",
+        "udp://p4p.arenabg.com:1337/announce",
+        "udp://9.rarbg.com:2810/announce",
+        "udp://tracker.ds.is:6969/announce",
+        "udp://retracker.lanta-net.ru:2710/announce",
+        "udp://tracker-udp.gbitt.info:80/announce",
+        "https://tracker.gbitt.info:443/announce",
+        "udp://ipv4.tracker.harry.lu:80/announce",
+        "udp://tracker.zerobytes.xyz:1337/announce",
     )
 
     /** Adds [TRACKERS] to a magnet link, skipping any it already lists. Other links pass through. */

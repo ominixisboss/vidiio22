@@ -313,7 +313,23 @@ class MovieRepository(
         }
     }
 
-    fun getStreamSources(movie: Movie, episode: Episode? = null): Flow<StreamSource> = channelFlow {
+    /** Sources found for an episode, kept briefly so coming back to it (or the next-episode prefetch) is instant. */
+    private val sourceCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<StreamSource>>>()
+
+    fun getStreamSources(movie: Movie, episode: Episode? = null): Flow<StreamSource> = kotlinx.coroutines.flow.flow {
+        val key = "${movie.id}:${episode?.seasonNumber}:${episode?.episodeNumber}"
+        val hit = sourceCache[key]
+        if (hit != null && System.currentTimeMillis() - hit.first < SOURCE_TTL_MS) {
+            hit.second.forEach { emit(it) }
+            return@flow
+        }
+        val found = mutableListOf<StreamSource>()
+        loadStreamSources(movie, episode).collect { found += it; emit(it) }
+        // Only a complete run is worth keeping; a cancelled one falls out above without reaching here.
+        if (found.isNotEmpty()) sourceCache[key] = System.currentTimeMillis() to found.toList()
+    }
+
+    private fun loadStreamSources(movie: Movie, episode: Episode? = null): Flow<StreamSource> = channelFlow {
         val enabledScrapers = getEnabledScrapers()
 
         // Several scrapers need the IMDb id (Stremio addons) or match better with it.
@@ -458,6 +474,7 @@ private const val TAG = "MovieRepository"
 private const val HALLOWEEN_KEYWORD_ID = 3335
 private const val HALLOWEEN_PAGES = 12
 private const val LIST_TTL_MS = 5 * 60 * 1000L
+private const val SOURCE_TTL_MS = 10 * 60 * 1000L
 
 /**
  * Orders candidate Halloween films best-first by weighted rating and keeps the top 100. Pure, so it

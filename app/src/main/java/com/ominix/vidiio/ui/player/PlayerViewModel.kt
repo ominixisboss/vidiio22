@@ -120,7 +120,7 @@ data class PlayerUiState(
 class PlayerViewModel(
     application: Application,
     private val settingsRepository: SettingsRepository,
-    movieRepository: MovieRepository,
+    private val movieRepository: MovieRepository,
     downloadRepository: DownloadRepository,
     downloadManager: DownloadManager,
     subdlService: SubdlService,
@@ -170,6 +170,39 @@ class PlayerViewModel(
 
     private var upNextJob: Job? = null
 
+    /** True once the next episode has been looked up for this one, so it happens once per episode. */
+    private var nextPrefetched = false
+
+    /**
+     * While an episode plays, find the next one's sources and join its best torrent's swarm, so the Up Next
+     * countdown (or a tap on the episode list) starts it right away. The scrape also fills the source cache,
+     * so the next episode's list is there instantly.
+     */
+    private fun prefetchNextEpisode() {
+        if (nextPrefetched) return
+        val show = session.movie.value ?: return
+        val next = com.ominix.vidiio.data.repository.nextEpisodeAfter(show, session.selectedEpisode.value) ?: return
+        nextPrefetched = true
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                var best: StreamSource? = null
+                kotlinx.coroutines.withTimeoutOrNull(25_000L) {
+                    movieRepository.getStreamSources(show, next).collect { source ->
+                        val good = source.url.startsWith("magnet:") && (source.seeders ?: 0) >= 5 &&
+                            com.ominix.vidiio.data.repository.SourceLanguage.isLikelyEnglish(source.serverName) &&
+                            !com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(source.serverName)
+                        if (good && (best == null || (source.seeders ?: 0) > (best?.seeders ?: 0))) best = source
+                    }
+                }
+                val pick = best ?: return@runCatching
+                val engine = (getApplication<Application>() as VidiioApplication).torrServerEngine
+                if (engine.ensureStarted()) {
+                    engine.getApi()?.addTorrent(com.ominix.vidiio.torrent.TorrentTuning.withTrackers(pick.url))
+                }
+            }
+        }
+    }
+
     /**
      * Set by the screen: returns a [CreditsDetector.WIDTH] x [CreditsDetector.HEIGHT] copy of the current
      * video frame, or null if one cannot be had right now (no surface yet, DRM, ...).
@@ -215,6 +248,7 @@ class PlayerViewModel(
     private fun startEpisode(next: Episode) {
         if (next.id == session.selectedEpisode.value?.id && _state.value.selectedSource != null) return
         creditsTracker.reset()
+        nextPrefetched = false
         upNextDismissed = false
         upNextJob?.cancel()
         skippedUrls.clear()
@@ -495,6 +529,9 @@ class PlayerViewModel(
                 }
 
                 val playing = player.isPlaying
+
+                // Halfway through, get the next episode ready in the background.
+                if (playing && duration > 0L && position > duration * 0.35) prefetchNextEpisode()
 
                 // Read the picture: rolling credits (dark frame, light text, held for a few seconds) start
                 // the countdown as soon as they appear, far earlier than the clock-based window below.
