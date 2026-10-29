@@ -66,6 +66,8 @@ data class PlayerUiState(
     val errorMessage: String? = null,
     /** Host of an addon whose stream turned out to be a "sign in" placeholder clip, shown until dismissed. */
     val signInHost: String? = null,
+    /** Set when something already watched is reopened: the saved point, for the Resume / Start over prompt. */
+    val resumePromptMs: Long? = null,
 
     /** The episode that will start by itself when this one ends, and seconds left to cancel. */
     val upNext: com.ominix.vidiio.data.model.Episode? = null,
@@ -539,12 +541,15 @@ class PlayerViewModel(
                     }
                 }
 
-                // Resume from saved Continue Watching position, once, when ready.
-                if (!didResume && resumePositionMs > 3000L && duration > 0L &&
-                    player.playbackState == Player.STATE_READY
-                ) {
-                    player.seekTo(resumePositionMs)
+                // Something already watched is being reopened: ask whether to carry on or start over, rather
+                // than silently jumping. The video waits (paused) until the viewer chooses.
+                if (!didResume && resumePositionMs > 0L && duration > 0L && player.playbackState == Player.STATE_READY) {
                     didResume = true
+                    val nearEnd = resumePositionMs >= duration - 60_000L
+                    if (resumePositionMs >= RESUME_PROMPT_MIN_MS && !nearEnd) {
+                        player.pause()
+                        _state.update { it.copy(resumePromptMs = resumePositionMs) }
+                    }
                 }
 
                 val playing = player.isPlaying
@@ -883,6 +888,21 @@ class PlayerViewModel(
     fun clearError() = _state.update { it.copy(errorMessage = null) }
     fun dismissSignIn() = _state.update { it.copy(signInHost = null) }
 
+    /** Carry on from where the viewer left off. */
+    fun resumeFromSaved() {
+        val at = _state.value.resumePromptMs ?: return
+        _state.update { it.copy(resumePromptMs = null) }
+        player.seekTo(at)
+        player.play()
+    }
+
+    /** Play from the beginning instead. */
+    fun startOver() {
+        _state.update { it.copy(resumePromptMs = null) }
+        player.seekTo(0L)
+        player.play()
+    }
+
     fun retry() {
         _state.update { it.copy(errorMessage = null, isTorrentLoading = false) }
         _retryTrigger.update { it + 1 }
@@ -913,3 +933,6 @@ private const val CREDITS_SAMPLE_MS = 1_000L
 
 /** An addon stream shorter than this is a placeholder clip, not the film. */
 private const val PLACEHOLDER_MAX_MS = 75_000L
+
+/** Saved progress shorter than this is not worth asking about; playback just starts from the beginning. */
+private const val RESUME_PROMPT_MIN_MS = 30_000L
