@@ -436,6 +436,23 @@ fun PlayerScreen(
             )
         }
 
+        state.signInHost?.let { host ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = playerViewModel::dismissSignIn,
+                title = { androidx.compose.material3.Text("Sign in required") },
+                text = {
+                    androidx.compose.material3.Text(
+                        "$host played a \"sign in\" clip instead of the video. Open https://$host/ on your phone or " +
+                            "computer and sign in with the account that made your addon link. " +
+                            "Meanwhile another source is being used."
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = playerViewModel::dismissSignIn) { androidx.compose.material3.Text("OK") }
+                }
+            )
+        }
+
         state.errorMessage?.let { message ->
             PlaybackErrorDialog(
                 message = message,

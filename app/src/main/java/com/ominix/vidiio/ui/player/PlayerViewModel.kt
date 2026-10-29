@@ -64,6 +64,8 @@ data class PlayerUiState(
     val durationMs: Long = 0L,
     val bufferedPositionMs: Long = 0L,
     val errorMessage: String? = null,
+    /** Host of an addon whose stream turned out to be a "sign in" placeholder clip, shown until dismissed. */
+    val signInHost: String? = null,
 
     /** The episode that will start by itself when this one ends, and seconds left to cancel. */
     val upNext: com.ominix.vidiio.data.model.Episode? = null,
@@ -520,6 +522,23 @@ class PlayerViewModel(
                 val position = player.currentPosition
                 val duration = if (player.duration > 0) player.duration else 0L
 
+                // Some addons answer an unauthorised request with a short "sign in at <site>" clip instead of the
+                // film. A real film or episode is never under a minute, so an addon stream that short is one of
+                // those: skip it, tell the viewer where to sign in, and move on to the next source.
+                if (duration in 1L..PLACEHOLDER_MAX_MS && player.playbackState == Player.STATE_READY) {
+                    val current = _state.value.selectedSource
+                    if (current != null && current.sourceId == "stremio" && !current.url.startsWith("magnet:") &&
+                        !skippedUrls.contains(current.url)
+                    ) {
+                        skippedUrls += current.url
+                        val host = runCatching { java.net.URI(current.url).host }.getOrNull()
+                        _state.update { it.copy(signInHost = host) }
+                        val next = session.streamSources.value.firstOrNull { it.url != current.url && !skippedUrls.contains(it.url) &&
+                            !com.ominix.vidiio.data.repository.SourceHeaviness.isHeavy(it.serverName) }
+                        if (next != null) selectSource(next)
+                    }
+                }
+
                 // Resume from saved Continue Watching position, once, when ready.
                 if (!didResume && resumePositionMs > 3000L && duration > 0L &&
                     player.playbackState == Player.STATE_READY
@@ -862,6 +881,7 @@ class PlayerViewModel(
 
     fun showError(message: String) = _state.update { it.copy(errorMessage = message, isTorrentLoading = false) }
     fun clearError() = _state.update { it.copy(errorMessage = null) }
+    fun dismissSignIn() = _state.update { it.copy(signInHost = null) }
 
     fun retry() {
         _state.update { it.copy(errorMessage = null, isTorrentLoading = false) }
@@ -890,3 +910,6 @@ internal fun creditsWindowMs(durationMs: Long): Long =
 
 /** How often the picture is checked for credits, once the episode is in its closing stretch. */
 private const val CREDITS_SAMPLE_MS = 1_000L
+
+/** An addon stream shorter than this is a placeholder clip, not the film. */
+private const val PLACEHOLDER_MAX_MS = 75_000L
