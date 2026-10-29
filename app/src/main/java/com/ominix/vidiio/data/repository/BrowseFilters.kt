@@ -20,18 +20,19 @@ data class Mood(val label: String, val genreIds: List<Int>) {
 /** A studio (movies) or a network / streamer (TV), by TMDB id. */
 data class Provider(val label: String, val id: Int)
 
+/** A streaming service whose trending titles the Movies and TV pages can list. */
+data class StreamingService(val label: String, val id: String)
+
 /** Everything the Movies and TV pages can filter by at once. Null means "don't filter on this". */
 data class BrowseFilter(
     val genreId: Int? = null,
     val mood: Mood? = null,
     val decade: Decade? = null,
     val provider: Provider? = null,
-    /** A streaming service (where it is available to watch), as opposed to a studio or network. */
-    val streamer: Provider? = null,
     val sort: BrowseSort = BrowseSort.POPULAR,
 ) {
     /** True when nothing narrows the list, so the page shows its normal shelves instead. */
-    val isEmpty: Boolean get() = genreId == null && mood == null && decade == null && provider == null && streamer == null
+    val isEmpty: Boolean get() = genreId == null && mood == null && decade == null && provider == null
 
     /** Genre as TMDB wants it: a specific genre wins over a mood's "any of". */
     val genreExpr: String? get() = genreId?.toString() ?: mood?.genreExpr
@@ -79,11 +80,10 @@ object BrowseOptions {
         Provider("BBC", 4), Provider("AMC", 174), Provider("FX", 88), Provider("Paramount+", 4330),
     )
 
-    /** Streaming services, TMDB watch-provider ids (US catalogue). */
-    val streamers = listOf(
-        Provider("Netflix", 8), Provider("Hulu", 15), Provider("Prime Video", 9),
-        Provider("Max", 1899), Provider("Disney+", 337), Provider("Apple TV+", 350),
-        Provider("Paramount+", 531), Provider("Peacock", 386), Provider("Showtime", 37), Provider("Starz", 43),
+    /** Streaming services, as catalogue ids of the Streaming Catalogs addon (trending titles on each service). */
+    val services = listOf(
+        StreamingService("Netflix", "nfx"), StreamingService("HBO Max", "hbm"), StreamingService("Disney+", "dnp"),
+        StreamingService("Prime Video", "amp"), StreamingService("Apple TV+", "atp"),
     )
 
     /** TMDB genres missing from the first version of the Movies page. */

@@ -36,7 +36,10 @@ class AddonManager(
         allAddonUrls().map { url ->
             async {
                 val m = manifestCache[url] ?: try {
-                    stremioService.getManifest(url).also { manifestCache[url] = it }
+                    // One slow addon must not hold up the rest (or the Home screen): give each a few seconds.
+                    kotlinx.coroutines.withTimeoutOrNull(MANIFEST_TIMEOUT_MS) {
+                        stremioService.getManifest(url).also { manifestCache[url] = it }
+                    }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.e("AddonManager", "Error fetching manifest from $url", e); null
@@ -117,6 +120,17 @@ class AddonManager(
         }.awaitAll().firstOrNull { it != null }
     }
 
+    /** Titles from one catalogue of the built-in Streaming Catalogs addon (Netflix, HBO Max, ...). Empty on failure. */
+    suspend fun streamingCatalog(type: String, serviceId: String): List<StremioMeta> = try {
+        kotlinx.coroutines.withTimeoutOrNull(CATALOG_TIMEOUT_MS) {
+            stremioService.getCatalog("$STREAMING_CATALOGS_BASE/catalog/$type/$serviceId.json").metas
+        } ?: emptyList()
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Log.w("AddonManager", "Streaming catalogue $serviceId failed", e)
+        emptyList()
+    }
+
     suspend fun getCatalogs(): List<Pair<String, List<StremioMeta>>> = coroutineScope {
         getInstalledAddons()
             .filter { it.url !in BUILTIN_ADDON_URLS && !it.manifest.catalogs.isNullOrEmpty() }
@@ -125,7 +139,7 @@ class AddonManager(
                     async {
                         try {
                             val url = "${addon.baseUrl}catalog/${catalog.type}/${catalog.id}.json"
-                            (catalog.name ?: addon.manifest.name) to stremioService.getCatalog(url).metas
+                            (catalog.name ?: addon.manifest.name) to (kotlinx.coroutines.withTimeoutOrNull(CATALOG_TIMEOUT_MS) { stremioService.getCatalog(url).metas } ?: emptyList())
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             Log.e("AddonManager", "Error fetching catalog ${catalog.name}", e); null
@@ -144,7 +158,7 @@ class AddonManager(
                     async {
                         runCatching {
                             val url = "${addon.baseUrl}catalog/${catalog.type}/${catalog.id}.json"
-                            (catalog.name ?: addon.manifest.name) to stremioService.getCatalog(url).metas
+                            (catalog.name ?: addon.manifest.name) to (kotlinx.coroutines.withTimeoutOrNull(CATALOG_TIMEOUT_MS) { stremioService.getCatalog(url).metas } ?: emptyList())
                         }.getOrNull()
                     }
                 }
@@ -159,6 +173,12 @@ class AddonManager(
     }
 
     companion object {
+        /** The Streaming Catalogs addon (Netflix, HBO Max, Disney+, Prime Video, Apple TV+ trending lists). */
+        private const val MANIFEST_TIMEOUT_MS = 4_000L
+        private const val CATALOG_TIMEOUT_MS = 8_000L
+
+        const val STREAMING_CATALOGS_BASE = "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club"
+
         /** Permanently bundled addons the user can't remove. */
         val BUILTIN_ADDON_URLS = listOf(
             "https://fedew04.github.io/OnePaceStremio/manifest.json",

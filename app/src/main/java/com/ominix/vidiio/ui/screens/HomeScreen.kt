@@ -171,7 +171,8 @@ fun HomeScreen(
                                 add(FlixShelf("Latest Uploaded Movies", movies.fresh.orEmpty()))
                                 add(FlixShelf("Latest TV Updates", tv.soon.orEmpty().ifEmpty { tv.fresh.orEmpty() }, todayRibbon = true))
                                 add(FlixShelf("Popular TV Shows", tv.popular.orEmpty()))
-                                rows.filter { it.name !in covered && it.name != "Popular TV" && it.name != "Popular TV Shows" }
+                                rows.filter { row -> row.name !in covered && row.name != "Popular TV" && row.name != "Popular TV Shows" &&
+                                    com.ominix.vidiio.data.repository.BrowseOptions.services.none { svc -> row.name.split(" ").filter { it.isNotBlank() }.joinToString(" ").equals(svc.label, ignoreCase = true) } }
                                     .forEach { add(FlixShelf(it.name, it.movies)) }
                             }
                         }

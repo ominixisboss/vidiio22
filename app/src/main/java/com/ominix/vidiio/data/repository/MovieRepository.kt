@@ -107,7 +107,19 @@ class MovieRepository(
                 Category("Trending Anime", trendingAnime.await()),
                 Category("Popular Movies", popularMovies.await()),
             )
-            categories.addAll(stremioCatalogs.await())
+            // One shelf per streaming service: its trending films and series, interleaved.
+            val service = com.ominix.vidiio.data.repository.BrowseOptions.services.map { svc ->
+                async {
+                    val films = runCatching { streamingCatalog(BrowseKind.MOVIES, svc.id) }.getOrDefault(emptyList())
+                    val shows = runCatching { streamingCatalog(BrowseKind.TV, svc.id) }.getOrDefault(emptyList())
+                    val mixed = (0 until maxOf(films.size, shows.size)).flatMap { i -> listOfNotNull(films.getOrNull(i), shows.getOrNull(i)) }.take(24)
+                    Category("Trending on ${svc.label}", mixed)
+                }
+            }.awaitAll().filter { it.movies.isNotEmpty() }
+            categories.addAll(service)
+            // A user-installed copy of the Streaming Catalogs addon would repeat the shelves above; skip its rows.
+            val serviceNames = com.ominix.vidiio.data.repository.BrowseOptions.services.map { it.label.lowercase() }
+            categories.addAll(stremioCatalogs.await().filter { c -> c.name.split(" ").filter { it.isNotBlank() }.joinToString(" ").lowercase() !in serviceNames })
             categories
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -115,6 +127,15 @@ class MovieRepository(
             emptyList()
         }
     }
+
+    /** Trending titles on one streaming service, for the Movies (movie) or TV (series) page. */
+    suspend fun streamingCatalog(kind: BrowseKind, serviceId: String): List<Movie> =
+        cached("svc-$kind-$serviceId") {
+            val type = if (kind == BrowseKind.MOVIES) "movie" else "series"
+            addonManager.streamingCatalog(type, serviceId)
+                .map { it.toMovie(if (kind == BrowseKind.MOVIES) MovieType.MOVIE else MovieType.TV_SHOW) }
+                .filter { it.posterUrl.isNotBlank() }
+        }
 
     /** One shelf on the Movies or TV page. */
     suspend fun browse(kind: BrowseKind, list: BrowseList): List<Movie> = cached("browse-$kind-$list") { loadBrowse(kind, list) }
@@ -181,13 +202,11 @@ class MovieRepository(
         val results = if (kind == BrowseKind.MOVIES) {
             tmdbService.discoverMoviesFiltered(
                 withGenres = filter.genreExpr, withCompanies = filter.provider?.id?.toString(),
-                withWatchProviders = filter.streamer?.id?.toString(), watchRegion = filter.streamer?.let { "US" },
                 releaseGte = from, releaseLte = to, sortBy = sort, voteCountGte = minVotes
             ).results.map { it.toMovie(MovieType.MOVIE) }
         } else {
             tmdbService.discoverTvFiltered(
                 withGenres = filter.genreExpr, withNetworks = filter.provider?.id?.toString(),
-                withWatchProviders = filter.streamer?.id?.toString(), watchRegion = filter.streamer?.let { "US" },
                 airedGte = from, airedLte = to, sortBy = sort, voteCountGte = minVotes
             ).results.map { it.toMovie(MovieType.TV_SHOW) }
         }
