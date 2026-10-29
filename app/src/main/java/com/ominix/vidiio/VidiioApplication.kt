@@ -175,6 +175,21 @@ class VidiioApplication : Application() {
     private fun baseClientBuilder(): OkHttpClient.Builder = OkHttpClient.Builder()
         .proxySelector(proxySelector)
         .addInterceptor(proxyGateInterceptor)
+        // A certificate failure used to surface as a bare "trust anchor not found". Say which site it was
+        // and what usually causes it, so a report from an old TV or stick says what to fix.
+        .addInterceptor { chain ->
+            try {
+                chain.proceed(chain.request())
+            } catch (e: javax.net.ssl.SSLException) {
+                val cause = generateSequence<Throwable>(e) { it.cause }
+                val certProblem = cause.any { it is java.security.cert.CertificateException || it is java.security.cert.CertPathValidatorException }
+                if (!certProblem) throw e
+                throw java.io.IOException(
+                    "Secure connection to ${chain.request().url.host} failed (certificate not trusted). " +
+                        "Check that this device's date and time are correct (set them to automatic).", e
+                )
+            }
+        }
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(35, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
